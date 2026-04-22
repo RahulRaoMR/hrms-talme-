@@ -40,11 +40,12 @@ npm run start
 
 ## Corporate Controls Included
 
-- Real Prisma database models for users, ATS candidates, VMS vendors, payroll invoices, and audit logs.
+- Real Prisma database models for users, employees, leave, attendance, vendor workers, documents, approvals, settings, ATS candidates, VMS vendors, payroll invoices, and audit logs.
 - Credentials authentication with active/inactive user control.
 - Role-based page access for Enterprise Admin, Operations Manager, Finance Approver, and Recruiter.
 - CRUD tables with search, filter, sorting, pagination, bulk delete, CSV import/export, and approval actions.
 - Audit logging for create, update, delete, import, approve, and bulk delete flows.
+- Employee self-service, vendor portal, approval inbox, compliance vault, company policy settings, and executive reports.
 
 ## Production Hardening Checklist
 

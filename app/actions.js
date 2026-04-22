@@ -11,6 +11,12 @@ async function refreshSuite() {
   revalidatePath("/ats");
   revalidatePath("/vms");
   revalidatePath("/payroll");
+  revalidatePath("/approvals");
+  revalidatePath("/reports");
+  revalidatePath("/documents");
+  revalidatePath("/settings");
+  revalidatePath("/employee-portal");
+  revalidatePath("/vendor-portal");
   revalidatePath("/users");
   revalidatePath("/activity");
 }
