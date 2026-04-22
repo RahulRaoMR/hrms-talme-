@@ -1,0 +1,111 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import BarChart from "@/components/bar-chart";
+import Drawer from "@/components/drawer";
+import FilterChips from "@/components/filter-chips";
+import SuiteShell from "@/components/suite-shell";
+import DashboardHero from "@/components/features/dashboard/dashboard-hero";
+import DashboardSummary from "@/components/features/dashboard/dashboard-summary";
+import { dashboardChartSets, dashboardMetrics } from "@/lib/demo-data";
+
+export default function DashboardPageClient() {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [range, setRange] = useState("30D");
+  const [metrics, setMetrics] = useState(dashboardMetrics);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBootstrap() {
+      try {
+        const response = await fetch("/api/bootstrap");
+        const payload = await response.json();
+        if (!cancelled && payload.metrics) {
+          setMetrics(payload.metrics);
+        }
+      } catch {
+        if (!cancelled) {
+          setMetrics(dashboardMetrics);
+        }
+      }
+    }
+
+    loadBootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const chartSet = dashboardChartSets[range];
+
+  return (
+    <SuiteShell
+      eyebrow="Executive Dashboard"
+      title="Unified Workforce Command"
+      primaryHref="/ats"
+      primaryLabel="Open ATS"
+      actions={
+        <button
+          className="ghost-button"
+          onClick={() => setDrawerOpen(true)}
+          type="button"
+        >
+          Open Insights
+        </button>
+      }
+    >
+      <DashboardHero metrics={metrics} />
+      <DashboardSummary />
+
+      <section className="page-section split-grid">
+        <article className="panel chart-filter-panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Executive Time Range</p>
+              <h3>Adjust KPI horizon</h3>
+            </div>
+          </div>
+          <FilterChips options={["30D", "QTD", "YTD"]} value={range} onChange={setRange} />
+        </article>
+        <BarChart
+          eyebrow="Hiring Velocity"
+          title="Weekly role closure trend"
+          summary={chartSet.hiring.summary}
+          items={chartSet.hiring.items}
+        />
+        <BarChart
+          eyebrow="Vendor Health"
+          title="Service category performance"
+          summary={chartSet.vendor.summary}
+          items={chartSet.vendor.items}
+        />
+      </section>
+
+      <Drawer
+        open={drawerOpen}
+        eyebrow="Executive Insight"
+        title="Priority Brief"
+        onClose={() => setDrawerOpen(false)}
+      >
+        <div className="process-card">
+          <strong>ATS</strong>
+          <small>Direct ATS candidates are converting faster than partner-sourced roles this week.</small>
+        </div>
+        <div className="process-card">
+          <strong>HRMS</strong>
+          <small>Attendance sheet closure is on track, with Plant 2 still carrying two exceptions.</small>
+        </div>
+        <div className="process-card">
+          <strong>VMS</strong>
+          <small>Security vendor compliance needs follow-up before invoice release.</small>
+        </div>
+        <div className="process-card">
+          <strong>Payroll</strong>
+          <small>Salary file can move once attendance and tax review are both confirmed.</small>
+        </div>
+      </Drawer>
+    </SuiteShell>
+  );
+}
