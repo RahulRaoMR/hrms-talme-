@@ -7,6 +7,8 @@ import FilterChips from "@/components/filter-chips";
 import SuiteShell from "@/components/suite-shell";
 import DashboardHero from "@/components/features/dashboard/dashboard-hero";
 import DashboardSummary from "@/components/features/dashboard/dashboard-summary";
+import RunboardPanel from "@/components/features/payroll/runboard-panel";
+import AdminPanel from "@/components/features/admin/admin-panel";
 import { dashboardChartSets, dashboardMetrics } from "@/lib/demo-data";
 
 export default function DashboardPageClient() {
@@ -57,6 +59,11 @@ export default function DashboardPageClient() {
       }
     >
       <DashboardHero metrics={metrics} />
+      
+      <section className="page-section">
+        <RunboardPanel />
+      </section>
+
       <DashboardSummary />
 
       <section className="page-section split-grid">
@@ -81,6 +88,10 @@ export default function DashboardPageClient() {
           summary={chartSet.vendor.summary}
           items={chartSet.vendor.items}
         />
+      </section>
+
+      <section className="page-section">
+        <AdminPanel />
       </section>
 
       <Drawer

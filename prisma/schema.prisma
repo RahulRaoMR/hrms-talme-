@@ -63,3 +63,24 @@ model AuditLog {
   detail    String
   createdAt DateTime @default(now())
 }
+
+model Employee {
+  id        String    @id @default(cuid())
+  name      String
+  salary    Float
+  payrolls  Payroll[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Payroll {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  bonus      Float    @default(0)
+  deduction  Float    @default(0)
+  month      String
+  status     String   @default("Pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

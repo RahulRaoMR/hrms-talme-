@@ -1,21 +1,10 @@
+import RunboardPanel from "./runboard-panel";
+
 export default function PayrollOverview() {
   return (
     <>
       <section className="page-section panel-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Runboard</p>
-              <h3>Payroll stages</h3>
-            </div>
-          </div>
-          <div className="runboard">
-            <div className="flow-card"><strong>1</strong><small>Attendance Locked</small></div>
-            <div className="flow-card"><strong>2</strong><small>Earnings &amp; Deductions</small></div>
-            <div className="flow-card"><strong>3</strong><small>Payroll Tax Validation</small></div>
-            <div className="flow-card"><strong>4</strong><small>Bank File Release</small></div>
-          </div>
-        </article>
+        <RunboardPanel />
         <article className="panel">
           <div className="panel-head">
             <div>

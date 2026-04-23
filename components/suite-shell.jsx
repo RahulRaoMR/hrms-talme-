@@ -70,7 +70,10 @@ export default function SuiteShell({
             >
               <span>{item.index}</span>
               <div>
-                <strong>{item.label}</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <strong>{item.label}</strong>
+                  {item.badge && <span className="nav-badge">{item.badge}</span>}
+                </div>
                 <small>{item.meta}</small>
               </div>
             </Link>

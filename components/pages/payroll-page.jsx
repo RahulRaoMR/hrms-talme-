@@ -336,14 +336,14 @@ export default function PayrollPageClient() {
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Disbursement Controls</p>
-              <h3>Operational focus</h3>
+              <p className="eyebrow">Salary Payment</p>
+              <h3>Release readiness</h3>
             </div>
           </div>
-          <div className="signal-row">
-            <span className="teal">Salary release confidence strong</span>
-            <span className="gold">2 invoices need finance action</span>
-            <span>Statutory lock stable</span>
+          <div className="doc-stack">
+            <div className="doc-line"><span>Worker Bank Validation</span><strong>98.7%</strong></div>
+            <div className="doc-line"><span>Payment Advice</span><strong>Queued</strong></div>
+            <div className="doc-line"><span>Post-Payment Reconciliation</span><strong>Scheduled</strong></div>
           </div>
         </article>
       </section>

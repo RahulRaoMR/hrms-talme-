@@ -397,6 +397,16 @@ textarea {
   border-color: rgba(214, 176, 106, 0.22);
 }
 
+.nav-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .workspace-topbar,
 .panel-head,
 .chart-head {
@@ -521,7 +531,47 @@ small {
 }
 
 .pill-card,
-.flow-card,
+.flow-card {
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--panel-soft);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flow-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(214, 176, 106, 0.3);
+  transform: translateY(-2px);
+}
+
+.flow-card.active-stage {
+  background: linear-gradient(135deg, rgba(214, 176, 106, 0.12), rgba(119, 216, 203, 0.08));
+  border-color: var(--gold);
+  box-shadow: 0 8px 30px rgba(214, 176, 106, 0.15);
+}
+
+.flow-card.active-stage strong {
+  color: var(--gold-2);
+}
+
+.flow-card.completed-stage strong {
+  color: var(--teal);
+}
+
+.stage-check {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: var(--teal);
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+
 .process-card,
 .score-card {
   padding: 16px;
