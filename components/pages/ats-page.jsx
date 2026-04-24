@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import {
   approveCandidateAction,
@@ -240,6 +241,9 @@ export default function AtsPageClient() {
                 </td>
                 <td>
                   <div className="row-actions">
+                    <Link className="mini-button" href={`/candidates/${candidate.id}`}>
+                      View
+                    </Link>
                     <button
                       className="mini-button"
                       onClick={() => {

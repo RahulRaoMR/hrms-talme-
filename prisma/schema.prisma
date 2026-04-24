@@ -147,6 +147,35 @@ model CompanySetting {
   updatedAt DateTime @updatedAt
 }
 
+model UploadedAsset {
+  id        String   @id @default(cuid())
+  module    String
+  owner     String
+  label     String
+  fileName  String
+  fileUrl   String
+  mimeType  String
+  sizeLabel String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  subject   String
+  audience  String
+  recipients String   @default("")
+  channel   String
+  message   String
+  status    String
+  tone      String
+  providerResult String?
+  providerError  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   actor     String

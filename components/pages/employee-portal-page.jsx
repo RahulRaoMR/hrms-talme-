@@ -42,6 +42,16 @@ export default function EmployeePortalPageClient({ data }) {
             <div className="score-card"><strong>{attendance?.present || 0}</strong><small>Present days</small></div>
             <div className="score-card"><strong>{attendance?.overtime || 0}</strong><small>OT hours</small></div>
           </div>
+          <div className="landing-actions">
+            <a
+              className="primary-button"
+              href={`/api/pdf/payslip?employee=${encodeURIComponent(employee?.name || "Employee")}&month=April%202026&band=${encodeURIComponent(employee?.salaryBand || "INR 0")}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Download Payslip PDF
+            </a>
+          </div>
         </article>
       </section>
 
@@ -75,6 +85,16 @@ export default function EmployeePortalPageClient({ data }) {
               <div className="doc-line" key={document.id}>
                 <span>{document.docType}</span>
                 <strong>{document.status}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="doc-stack">
+            {data.assets?.map((asset) => (
+              <div className="doc-line" key={asset.id}>
+                <span>{asset.label}</span>
+                <a href={asset.fileUrl} target="_blank" rel="noreferrer">
+                  Open
+                </a>
               </div>
             ))}
           </div>

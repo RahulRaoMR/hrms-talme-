@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import {
   approveInvoiceAction,
@@ -207,6 +208,9 @@ export default function PayrollPageClient() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      <Link className="mini-button" href={`/invoices/${invoice.id}`}>
+                        View
+                      </Link>
                       <button
                         className="mini-button"
                         onClick={() => {

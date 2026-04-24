@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import {
   approveVendorAction,
@@ -235,6 +236,9 @@ export default function VmsPageClient() {
                 </td>
                 <td>
                   <div className="row-actions">
+                    <Link className="mini-button" href={`/vendors/${vendor.id}`}>
+                      View
+                    </Link>
                     <button
                       className="mini-button"
                       onClick={() => {

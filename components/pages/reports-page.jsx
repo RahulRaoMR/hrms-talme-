@@ -57,28 +57,92 @@ export default function ReportsPageClient({ data }) {
       <section className="page-section split-grid">
         <BarChart
           eyebrow="Headcount Trend"
-          title="Workforce strength"
-          summary="96%"
-          items={[
-            { label: "HR", value: "18", height: 54 },
-            { label: "Ops", value: "42", height: 82 },
-            { label: "Payroll", value: "12", height: 46 },
-            { label: "Security", value: "31", height: 70 },
-            { label: "Vendor", value: "88", height: 92 }
-          ]}
+          title="Department-wise workforce"
+          summary={String(data.scorecards[0]?.value || "0")}
+          items={data.charts.departments}
         />
         <BarChart
-          eyebrow="Compliance Risk"
-          title="Open control points"
-          summary="Low"
-          items={[
-            { label: "KYC", value: "2", height: 35 },
-            { label: "PF", value: "1", height: 24 },
-            { label: "ESI", value: "1", height: 22 },
-            { label: "Bank", value: "1", height: 30 },
-            { label: "Invoice", value: "2", height: 42 }
-          ]}
+          eyebrow="Sourcing Mix"
+          title="ATS source performance"
+          summary={String(data.charts.sourcing.reduce((acc, item) => acc + Number(item.value), 0))}
+          items={data.charts.sourcing}
         />
+      </section>
+
+      <section className="page-section split-grid">
+        <BarChart
+          eyebrow="Invoice Status"
+          title="Payroll and vendor finance queue"
+          summary={String(data.charts.invoices.reduce((acc, item) => acc + Number(item.value), 0))}
+          items={data.charts.invoices}
+        />
+        <article className="panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Exports</p>
+              <h3>PDF and audit-ready packs</h3>
+            </div>
+          </div>
+          <div className="landing-actions">
+            <a
+              className="primary-button"
+              href="/api/pdf/payslip?employee=Manish%20Gupta&month=April%202026&band=INR%209.6L"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Payslip PDF
+            </a>
+            <a
+              className="ghost-button"
+              href="/api/pdf/invoice?vendor=StaffCore%20India&invoiceNo=INV-4388&amount=INR%2042,40,000&status=Approved"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Invoice PDF
+            </a>
+            <a
+              className="ghost-button"
+              href="/api/pdf/offer?candidate=Neha%20Sharma&role=HRBP&location=Pune%20Plant&status=Draft"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Offer PDF
+            </a>
+          </div>
+          <div className="doc-stack">
+            <div className="doc-line"><span>Generated PDFs use live query parameters</span><strong>Ready</strong></div>
+            <div className="doc-line"><span>Suitable for payslips, offers, invoice summaries</span><strong>Corporate format</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section className="page-section panel-grid">
+        <article className="panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Compliance Risk</p>
+              <h3>Open control points</h3>
+            </div>
+          </div>
+          <div className="doc-stack">
+            <div className="doc-line"><span>Document risks</span><strong>{data.scorecards[4]?.value}</strong></div>
+            <div className="doc-line"><span>Approval queue</span><strong>{data.scorecards[5]?.value}</strong></div>
+            <div className="doc-line"><span>Notifications delivered</span><strong>{data.scorecards[6]?.value}</strong></div>
+          </div>
+        </article>
+        <article className="panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Analytics Status</p>
+              <h3>Database-driven charts</h3>
+            </div>
+          </div>
+          <div className="signal-row">
+            <span className="teal">Headcount chart uses employee records</span>
+            <span>Source chart uses ATS candidate data</span>
+            <span className="gold">Invoice chart uses finance queue data</span>
+          </div>
+        </article>
       </section>
     </SuiteShell>
   );

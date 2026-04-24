@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
+import { deliverNotification } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import { ensureSeedData } from "@/lib/seed-db";
+import { deleteUploadedFile } from "@/lib/storage";
 
 async function refreshSuite() {
   revalidatePath("/dashboard");
@@ -17,6 +19,7 @@ async function refreshSuite() {
   revalidatePath("/settings");
   revalidatePath("/employee-portal");
   revalidatePath("/vendor-portal");
+  revalidatePath("/search");
   revalidatePath("/users");
   revalidatePath("/activity");
 }
@@ -399,6 +402,428 @@ export async function deleteUserAction(id) {
   });
 
   await writeAudit("DELETE", "User", id, `Deleted user ${user?.email || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createEmployeeAction(payload) {
+  const employee = await prisma.employee.create({
+    data: {
+      employeeId: payload.employeeId,
+      name: payload.name,
+      department: payload.department,
+      location: payload.location,
+      manager: payload.manager,
+      grade: payload.grade,
+      joiningDate: payload.joiningDate,
+      salaryBand: payload.salaryBand,
+      bankStatus: payload.bankStatus,
+      status: payload.status,
+      tone: payload.tone || "gold"
+    }
+  });
+
+  await writeAudit("CREATE", "Employee", employee.id, `Created employee ${employee.name}`);
+  await refreshSuite();
+  return employee;
+}
+
+export async function updateEmployeeAction(id, payload) {
+  const employee = await prisma.employee.update({
+    where: { id },
+    data: {
+      employeeId: payload.employeeId,
+      name: payload.name,
+      department: payload.department,
+      location: payload.location,
+      manager: payload.manager,
+      grade: payload.grade,
+      joiningDate: payload.joiningDate,
+      salaryBand: payload.salaryBand,
+      bankStatus: payload.bankStatus,
+      status: payload.status,
+      tone: payload.tone
+    }
+  });
+
+  await writeAudit("UPDATE", "Employee", employee.id, `Updated employee ${employee.name}`);
+  await refreshSuite();
+  return employee;
+}
+
+export async function deleteEmployeeAction(id) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  await prisma.employee.delete({ where: { id } });
+
+  await writeAudit("DELETE", "Employee", id, `Deleted employee ${employee?.name || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createLeaveRequestAction(payload) {
+  const leave = await prisma.leaveRequest.create({
+    data: {
+      employee: payload.employee,
+      leaveType: payload.leaveType,
+      dates: payload.dates,
+      balance: payload.balance,
+      approver: payload.approver,
+      status: payload.status,
+      tone: payload.tone || "gold"
+    }
+  });
+
+  await writeAudit("CREATE", "LeaveRequest", leave.id, `Created leave request for ${leave.employee}`);
+  await refreshSuite();
+  return leave;
+}
+
+export async function updateLeaveRequestAction(id, payload) {
+  const leave = await prisma.leaveRequest.update({
+    where: { id },
+    data: {
+      employee: payload.employee,
+      leaveType: payload.leaveType,
+      dates: payload.dates,
+      balance: payload.balance,
+      approver: payload.approver,
+      status: payload.status,
+      tone: payload.tone
+    }
+  });
+
+  await writeAudit("UPDATE", "LeaveRequest", leave.id, `Updated leave request for ${leave.employee}`);
+  await refreshSuite();
+  return leave;
+}
+
+export async function deleteLeaveRequestAction(id) {
+  const leave = await prisma.leaveRequest.findUnique({ where: { id } });
+  await prisma.leaveRequest.delete({ where: { id } });
+
+  await writeAudit("DELETE", "LeaveRequest", id, `Deleted leave request for ${leave?.employee || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createAttendanceRecordAction(payload) {
+  const attendance = await prisma.attendanceRecord.create({
+    data: {
+      employee: payload.employee,
+      present: Number(payload.present),
+      leaves: Number(payload.leaves),
+      overtime: Number(payload.overtime),
+      shift: payload.shift,
+      lockState: payload.lockState,
+      tone: payload.tone || "gold"
+    }
+  });
+
+  await writeAudit("CREATE", "AttendanceRecord", attendance.id, `Created attendance row for ${attendance.employee}`);
+  await refreshSuite();
+  return attendance;
+}
+
+export async function updateAttendanceRecordAction(id, payload) {
+  const attendance = await prisma.attendanceRecord.update({
+    where: { id },
+    data: {
+      employee: payload.employee,
+      present: Number(payload.present),
+      leaves: Number(payload.leaves),
+      overtime: Number(payload.overtime),
+      shift: payload.shift,
+      lockState: payload.lockState,
+      tone: payload.tone
+    }
+  });
+
+  await writeAudit("UPDATE", "AttendanceRecord", attendance.id, `Updated attendance row for ${attendance.employee}`);
+  await refreshSuite();
+  return attendance;
+}
+
+export async function deleteAttendanceRecordAction(id) {
+  const attendance = await prisma.attendanceRecord.findUnique({ where: { id } });
+  await prisma.attendanceRecord.delete({ where: { id } });
+
+  await writeAudit("DELETE", "AttendanceRecord", id, `Deleted attendance row for ${attendance?.employee || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createVendorWorkerAction(payload) {
+  const worker = await prisma.vendorWorker.create({
+    data: {
+      workerId: payload.workerId,
+      name: payload.name,
+      vendor: payload.vendor,
+      site: payload.site,
+      skill: payload.skill,
+      wageRate: payload.wageRate,
+      attendance: payload.attendance,
+      status: payload.status,
+      tone: payload.tone || "gold"
+    }
+  });
+
+  await writeAudit("CREATE", "VendorWorker", worker.id, `Created vendor worker ${worker.name}`);
+  await refreshSuite();
+  return worker;
+}
+
+export async function updateVendorWorkerAction(id, payload) {
+  const worker = await prisma.vendorWorker.update({
+    where: { id },
+    data: {
+      workerId: payload.workerId,
+      name: payload.name,
+      vendor: payload.vendor,
+      site: payload.site,
+      skill: payload.skill,
+      wageRate: payload.wageRate,
+      attendance: payload.attendance,
+      status: payload.status,
+      tone: payload.tone
+    }
+  });
+
+  await writeAudit("UPDATE", "VendorWorker", worker.id, `Updated vendor worker ${worker.name}`);
+  await refreshSuite();
+  return worker;
+}
+
+export async function deleteVendorWorkerAction(id) {
+  const worker = await prisma.vendorWorker.findUnique({ where: { id } });
+  await prisma.vendorWorker.delete({ where: { id } });
+
+  await writeAudit("DELETE", "VendorWorker", id, `Deleted vendor worker ${worker?.name || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createDocumentRecordAction(payload) {
+  const document = await prisma.documentRecord.create({
+    data: {
+      owner: payload.owner,
+      docType: payload.docType,
+      module: payload.module,
+      expiry: payload.expiry,
+      status: payload.status,
+      tone: payload.tone || "gold"
+    }
+  });
+
+  await writeAudit("CREATE", "DocumentRecord", document.id, `Created document ${document.docType}`);
+  await refreshSuite();
+  return document;
+}
+
+export async function updateDocumentRecordAction(id, payload) {
+  const document = await prisma.documentRecord.update({
+    where: { id },
+    data: {
+      owner: payload.owner,
+      docType: payload.docType,
+      module: payload.module,
+      expiry: payload.expiry,
+      status: payload.status,
+      tone: payload.tone
+    }
+  });
+
+  await writeAudit("UPDATE", "DocumentRecord", document.id, `Updated document ${document.docType}`);
+  await refreshSuite();
+  return document;
+}
+
+export async function deleteDocumentRecordAction(id) {
+  const document = await prisma.documentRecord.findUnique({ where: { id } });
+  await prisma.documentRecord.delete({ where: { id } });
+
+  await writeAudit("DELETE", "DocumentRecord", id, `Deleted document ${document?.docType || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createApprovalItemAction(payload) {
+  const approval = await prisma.approvalItem.create({
+    data: {
+      module: payload.module,
+      title: payload.title,
+      owner: payload.owner,
+      amount: payload.amount,
+      level: payload.level,
+      status: payload.status,
+      tone: payload.tone || "gold"
+    }
+  });
+
+  await writeAudit("CREATE", "ApprovalItem", approval.id, `Created approval ${approval.title}`);
+  await refreshSuite();
+  return approval;
+}
+
+export async function updateApprovalItemAction(id, payload) {
+  const approval = await prisma.approvalItem.update({
+    where: { id },
+    data: {
+      module: payload.module,
+      title: payload.title,
+      owner: payload.owner,
+      amount: payload.amount,
+      level: payload.level,
+      status: payload.status,
+      tone: payload.tone
+    }
+  });
+
+  await writeAudit("UPDATE", "ApprovalItem", approval.id, `Updated approval ${approval.title}`);
+  await refreshSuite();
+  return approval;
+}
+
+export async function deleteApprovalItemAction(id) {
+  const approval = await prisma.approvalItem.findUnique({ where: { id } });
+  await prisma.approvalItem.delete({ where: { id } });
+
+  await writeAudit("DELETE", "ApprovalItem", id, `Deleted approval ${approval?.title || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createCompanySettingAction(payload) {
+  const setting = await prisma.companySetting.create({
+    data: {
+      category: payload.category,
+      name: payload.name,
+      value: payload.value,
+      status: payload.status
+    }
+  });
+
+  await writeAudit("CREATE", "CompanySetting", setting.id, `Created setting ${setting.name}`);
+  await refreshSuite();
+  return setting;
+}
+
+export async function updateCompanySettingAction(id, payload) {
+  const setting = await prisma.companySetting.update({
+    where: { id },
+    data: {
+      category: payload.category,
+      name: payload.name,
+      value: payload.value,
+      status: payload.status
+    }
+  });
+
+  await writeAudit("UPDATE", "CompanySetting", setting.id, `Updated setting ${setting.name}`);
+  await refreshSuite();
+  return setting;
+}
+
+export async function deleteCompanySettingAction(id) {
+  const setting = await prisma.companySetting.findUnique({ where: { id } });
+  await prisma.companySetting.delete({ where: { id } });
+
+  await writeAudit("DELETE", "CompanySetting", id, `Deleted setting ${setting?.name || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createUploadedAssetRecordAction(payload) {
+  const asset = await prisma.uploadedAsset.create({
+    data: {
+      module: payload.module,
+      owner: payload.owner,
+      label: payload.label,
+      fileName: payload.fileName,
+      fileUrl: payload.fileUrl,
+      mimeType: payload.mimeType,
+      sizeLabel: payload.sizeLabel,
+      status: payload.status || "Uploaded"
+    }
+  });
+
+  await writeAudit("CREATE", "UploadedAsset", asset.id, `Uploaded asset ${asset.fileName}`);
+  await refreshSuite();
+  return asset;
+}
+
+export async function deleteUploadedAssetAction(id) {
+  const asset = await prisma.uploadedAsset.findUnique({ where: { id } });
+  await deleteUploadedFile(asset?.fileUrl);
+  await prisma.uploadedAsset.delete({ where: { id } });
+
+  await writeAudit("DELETE", "UploadedAsset", id, `Deleted asset ${asset?.fileName || id}`);
+  await refreshSuite();
+  return { id };
+}
+
+export async function createNotificationAction(payload) {
+  const notification = await prisma.notification.create({
+    data: {
+      subject: payload.subject,
+      audience: payload.audience,
+      recipients: payload.recipients,
+      channel: payload.channel,
+      message: payload.message,
+      status: payload.status || "Draft",
+      tone: payload.tone || "gold",
+      providerResult: null,
+      providerError: null
+    }
+  });
+
+  await writeAudit("CREATE", "Notification", notification.id, `Created notification ${notification.subject}`);
+  await refreshSuite();
+  return notification;
+}
+
+export async function updateNotificationAction(id, payload) {
+  const notification = await prisma.notification.update({
+    where: { id },
+    data: {
+      subject: payload.subject,
+      audience: payload.audience,
+      recipients: payload.recipients,
+      channel: payload.channel,
+      message: payload.message,
+      status: payload.status,
+      tone: payload.tone,
+      providerError: null
+    }
+  });
+
+  await writeAudit("UPDATE", "Notification", notification.id, `Updated notification ${notification.subject}`);
+  await refreshSuite();
+  return notification;
+}
+
+export async function sendNotificationAction(id) {
+  const current = await prisma.notification.findUnique({ where: { id } });
+  const delivery = await deliverNotification(current);
+  const notification = await prisma.notification.update({
+    where: { id },
+    data: {
+      status: delivery.ok ? "Sent" : "Failed",
+      tone: delivery.ok ? "teal" : "gold",
+      providerResult: delivery.ok ? delivery.detail : null,
+      providerError: delivery.ok ? null : delivery.detail
+    }
+  });
+
+  await writeAudit("SEND", "Notification", notification.id, `Sent notification ${notification.subject}`);
+  await refreshSuite();
+  return notification;
+}
+
+export async function deleteNotificationAction(id) {
+  const notification = await prisma.notification.findUnique({ where: { id } });
+  await prisma.notification.delete({ where: { id } });
+
+  await writeAudit("DELETE", "Notification", id, `Deleted notification ${notification?.subject || id}`);
   await refreshSuite();
   return { id };
 }

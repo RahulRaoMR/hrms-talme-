@@ -6,7 +6,9 @@ import {
   documentSeed,
   employeeMasterSeed,
   leaveSeed,
+  notificationSeed,
   settingSeed,
+  uploadedAssetSeed,
   vendorWorkerSeed
 } from "../lib/demo-data.js";
 
@@ -111,6 +113,14 @@ async function main() {
 
   if ((await prisma.companySetting.count()) === 0) {
     await prisma.companySetting.createMany({ data: settingSeed });
+  }
+
+  if ((await prisma.uploadedAsset.count()) === 0) {
+    await prisma.uploadedAsset.createMany({ data: uploadedAssetSeed });
+  }
+
+  if ((await prisma.notification.count()) === 0) {
+    await prisma.notification.createMany({ data: notificationSeed });
   }
 }
 
