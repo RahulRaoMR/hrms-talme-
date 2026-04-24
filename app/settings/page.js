@@ -1,9 +1,11 @@
-import PlaceholderPage from "@/components/pages/placeholder-page";
+import SettingsPageClient from "@/components/pages/settings-page";
 import { requireAuth } from "@/lib/require-auth";
+import { getCompanySettings } from "@/lib/query-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   await requireAuth("/settings");
-  return <PlaceholderPage title="Setting" eyebrow="System Configuration" />;
+  const settings = await getCompanySettings();
+  return <SettingsPageClient settings={JSON.parse(JSON.stringify(settings))} />;
 }

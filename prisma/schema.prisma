@@ -54,6 +54,128 @@ model Invoice {
   updatedAt  DateTime @updatedAt
 }
 
+model Employee {
+  id          String   @id @default(cuid())
+  employeeId  String   @unique
+  name        String
+  department  String
+  location    String
+  manager     String
+  grade       String
+  joiningDate String
+  salaryBand  String
+  bankStatus  String
+  status      String
+  tone        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LeaveRequest {
+  id        String   @id @default(cuid())
+  employee  String
+  leaveType String
+  dates     String
+  balance   String
+  approver  String
+  status    String
+  tone      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  employee  String
+  present   Int
+  leaves    Int
+  overtime  Int
+  shift     String
+  lockState String
+  tone      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VendorWorker {
+  id         String   @id @default(cuid())
+  workerId   String   @unique
+  name       String
+  vendor     String
+  site       String
+  skill      String
+  wageRate   String
+  attendance String
+  status     String
+  tone       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model DocumentRecord {
+  id        String   @id @default(cuid())
+  owner     String
+  docType   String
+  module    String
+  expiry    String
+  status    String
+  tone      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ApprovalItem {
+  id        String   @id @default(cuid())
+  module    String
+  title     String
+  owner     String
+  amount    String
+  level     String
+  status    String
+  tone      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CompanySetting {
+  id        String   @id @default(cuid())
+  category  String
+  name      String
+  value     String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UploadedAsset {
+  id        String   @id @default(cuid())
+  module    String
+  owner     String
+  label     String
+  fileName  String
+  fileUrl   String
+  mimeType  String
+  sizeLabel String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  subject   String
+  audience  String
+  recipients String   @default("")
+  channel   String
+  message   String
+  status    String
+  tone      String
+  providerResult String?
+  providerError  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   actor     String

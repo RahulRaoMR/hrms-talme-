@@ -1,5 +1,16 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import {
+  approvalSeed,
+  attendanceSeed,
+  documentSeed,
+  employeeMasterSeed,
+  leaveSeed,
+  notificationSeed,
+  settingSeed,
+  uploadedAssetSeed,
+  vendorWorkerSeed
+} from "../lib/demo-data.js";
 
 const prisma = new PrismaClient();
 
@@ -67,6 +78,50 @@ async function main() {
       detail: "Seeded Talme HRMS demo database"
     }
   });
+
+  for (const employee of employeeMasterSeed) {
+    await prisma.employee.upsert({
+      where: { employeeId: employee.employeeId },
+      update: {},
+      create: employee
+    });
+  }
+
+  if ((await prisma.leaveRequest.count()) === 0) {
+    await prisma.leaveRequest.createMany({ data: leaveSeed });
+  }
+
+  if ((await prisma.attendanceRecord.count()) === 0) {
+    await prisma.attendanceRecord.createMany({ data: attendanceSeed });
+  }
+
+  for (const worker of vendorWorkerSeed) {
+    await prisma.vendorWorker.upsert({
+      where: { workerId: worker.workerId },
+      update: {},
+      create: worker
+    });
+  }
+
+  if ((await prisma.documentRecord.count()) === 0) {
+    await prisma.documentRecord.createMany({ data: documentSeed });
+  }
+
+  if ((await prisma.approvalItem.count()) === 0) {
+    await prisma.approvalItem.createMany({ data: approvalSeed });
+  }
+
+  if ((await prisma.companySetting.count()) === 0) {
+    await prisma.companySetting.createMany({ data: settingSeed });
+  }
+
+  if ((await prisma.uploadedAsset.count()) === 0) {
+    await prisma.uploadedAsset.createMany({ data: uploadedAssetSeed });
+  }
+
+  if ((await prisma.notification.count()) === 0) {
+    await prisma.notification.createMany({ data: notificationSeed });
+  }
 }
 
 main()
