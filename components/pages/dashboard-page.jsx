@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import BarChart from "@/components/bar-chart";
-import Drawer from "@/components/drawer";
+
 import FilterChips from "@/components/filter-chips";
 import SuiteShell from "@/components/suite-shell";
 import DashboardHero from "@/components/features/dashboard/dashboard-hero";
@@ -12,7 +12,7 @@ import AdminPanel from "@/components/features/admin/admin-panel";
 import { dashboardChartSets, dashboardMetrics } from "@/lib/demo-data";
 
 export default function DashboardPageClient() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const [range, setRange] = useState("30D");
   const [metrics, setMetrics] = useState(dashboardMetrics);
 
@@ -48,15 +48,7 @@ export default function DashboardPageClient() {
       title="Unified Workforce Command"
       primaryHref="/ats"
       primaryLabel="Open ATS"
-      actions={
-        <button
-          className="ghost-button"
-          onClick={() => setDrawerOpen(true)}
-          type="button"
-        >
-          Open Insights
-        </button>
-      }
+
     >
       <DashboardHero metrics={metrics} />
       
@@ -94,29 +86,7 @@ export default function DashboardPageClient() {
         <AdminPanel />
       </section>
 
-      <Drawer
-        open={drawerOpen}
-        eyebrow="Executive Insight"
-        title="Priority Brief"
-        onClose={() => setDrawerOpen(false)}
-      >
-        <div className="process-card">
-          <strong>ATS</strong>
-          <small>Direct ATS candidates are converting faster than partner-sourced roles this week.</small>
-        </div>
-        <div className="process-card">
-          <strong>HRMS</strong>
-          <small>Attendance sheet closure is on track, with Plant 2 still carrying two exceptions.</small>
-        </div>
-        <div className="process-card">
-          <strong>VMS</strong>
-          <small>Security vendor compliance needs follow-up before invoice release.</small>
-        </div>
-        <div className="process-card">
-          <strong>Payroll</strong>
-          <small>Salary file can move once attendance and tax review are both confirmed.</small>
-        </div>
-      </Drawer>
+
     </SuiteShell>
   );
 }

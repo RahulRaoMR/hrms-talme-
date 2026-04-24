@@ -53,7 +53,9 @@ export default function SuiteShell({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">T</div>
+          <div className="brand-mark" style={{ background: 'transparent' }}>
+            <img src="/talme-logo.png" alt="Talme Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px' }} />
+          </div>
           <div>
             <p className="eyebrow">{brandEyebrow}</p>
             <h2>Talme</h2>
@@ -111,14 +113,26 @@ export default function SuiteShell({
             {actions}
             <button
               className="ghost-button"
+              style={{ gap: '10px', padding: '6px 14px 6px 8px' }}
+              type="button"
+            >
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: 'var(--panel-soft)', display: 'grid', placeItems: 'center', border: '1px solid var(--line)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              </div>
+              <span style={{ fontSize: '0.9rem' }}>Talme Technologies Pvt Ltd</span>
+            </button>
+            <button
+              className="ghost-button"
               onClick={() => signOut({ callbackUrl: "/login" })}
               type="button"
             >
               Log Out
             </button>
-            <Link className="primary-button" href={primaryHref}>
-              {primaryLabel}
-            </Link>
+            {primaryHref && (
+              <Link className="primary-button" href={primaryHref}>
+                {primaryLabel}
+              </Link>
+            )}
           </div>
         </header>
 
