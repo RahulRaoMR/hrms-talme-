@@ -23,6 +23,7 @@ export default async function EmployeeDetailPage({ params }) {
       summary={`${employee.name} is mapped to ${employee.department} at ${employee.location} under ${employee.manager}.`}
       details={[
         ["Employee ID", employee.employeeId],
+        ["Email", employee.email || "Not added"],
         ["Department", employee.department],
         ["Location", employee.location],
         ["Manager", employee.manager],
@@ -38,6 +39,7 @@ export default async function EmployeeDetailPage({ params }) {
           items: [
             { label: "Confirmation Status", value: employee.status },
             { label: "Payroll Ready", value: employee.bankStatus === "Verified" ? "Yes" : "Pending" },
+            { label: "Email Ready", value: employee.email ? "Yes" : "Pending" },
             { label: "Reporting Manager", value: employee.manager }
           ]
         }

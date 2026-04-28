@@ -19,6 +19,7 @@ import StatusBadge from "@/components/status-badge";
 
 const employeeSeed = {
   employeeId: "TLM-2201",
+  email: "anita.rao@talme.ai",
   name: "Anita Rao",
   department: "HR Operations",
   location: "Bengaluru Hub",
@@ -276,6 +277,7 @@ export default function HrmsPageClient({ data }) {
         setState={setEmployeeForm}
         fields={[
           ["employeeId", "Employee ID"],
+          ["email", "Email"],
           ["name", "Name"],
           ["department", "Department"],
           ["location", "Location"],
@@ -306,6 +308,7 @@ export default function HrmsPageClient({ data }) {
         setState={setEmployeeEdit}
         fields={[
           ["employeeId", "Employee ID"],
+          ["email", "Email"],
           ["name", "Name"],
           ["department", "Department"],
           ["location", "Location"],

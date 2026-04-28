@@ -25,6 +25,7 @@ export default function EmployeePortalPageClient({ data }) {
           </div>
           <div className="doc-stack">
             <div className="doc-line"><span>Employee ID</span><strong>{employee?.employeeId}</strong></div>
+            <div className="doc-line"><span>Email</span><strong>{employee?.email || "Not added"}</strong></div>
             <div className="doc-line"><span>Department</span><strong>{employee?.department}</strong></div>
             <div className="doc-line"><span>Manager</span><strong>{employee?.manager}</strong></div>
             <div className="doc-line"><span>Bank</span><strong>{employee?.bankStatus}</strong></div>

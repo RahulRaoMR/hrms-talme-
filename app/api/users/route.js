@@ -1,22 +1,4 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { ensureSeedData } from "@/lib/seed-db";
+import { userController } from "@/modules/user/controller";
 
-export async function GET() {
-  await ensureSeedData();
-
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      active: true,
-      createdAt: true,
-      updatedAt: true
-    }
-  });
-
-  return NextResponse.json(users);
-}
+export const GET = userController.GET;
+export const POST = userController.POST;

@@ -1,0 +1,72 @@
+[
+  {
+    "recruiterId": "R001",
+    "name": "Harish",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": "HRBP"
+  },
+  {
+    "recruiterId": "R002",
+    "name": "Harshitha",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": "Lead"
+  },
+  {
+    "recruiterId": "R003",
+    "name": "Bhoomika",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": "Recruiter"
+  },
+  {
+    "recruiterId": "R004",
+    "name": "Pooja",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": "Recruiter"
+  },
+  {
+    "recruiterId": "R005",
+    "name": "Narthana",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": "Lead"
+  },
+  {
+    "recruiterId": "R006",
+    "name": "Himanshu",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": "Recruiter"
+  },
+  {
+    "recruiterId": "R007",
+    "name": "Pooja & Bhoomika",
+    "email": "",
+    "phoneNumber": "",
+    "currentStatus": "",
+    "joinedDate": "",
+    "lwd": "",
+    "designation": ""
+  }
+]
