@@ -26,6 +26,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!email || !password) return null;
 
+        const employee = await prisma.employee.findUnique({
+          where: { employeeId: email }
+        });
+
+        if (employee && password === "employee123") {
+          return {
+            id: employee.id,
+            name: employee.name,
+            email: employee.email || `${employee.employeeId.toLowerCase()}@talme.local`,
+            role: "Employee",
+            employeeId: employee.employeeId
+          };
+        }
+
         const user = await prisma.user.findUnique({
           where: { email }
         });
@@ -39,7 +53,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role
+          role: user.role,
+          employeeId: null
         };
       }
     })
@@ -48,12 +63,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
+        token.employeeId = user.employeeId;
+      } else if (!token.role && token.email) {
+        const currentUser = await prisma.user.findUnique({
+          where: { email: token.email },
+          select: { role: true }
+        });
+        token.role = currentUser?.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.role = token.role;
+        session.user.employeeId = token.employeeId;
       }
       return session;
     }

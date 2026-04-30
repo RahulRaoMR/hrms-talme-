@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
@@ -19,15 +20,115 @@ model User {
 }
 
 model Candidate {
-  id        String   @id @default(cuid())
-  name      String
-  role      String
-  stage     String
-  source    String
-  status    String
-  tone      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  jobId                  String?
+  recruiterId            String?
+  recruiterName          String?
+  name                   String
+  role                   String
+  stage                  String
+  source                 String
+  status                 String
+  tone                   String
+  businessUnit           String?
+  domain                 String?
+  client                 String?
+  noticePeriod           String?
+  email                  String?
+  phone                  String?
+  qualification          String?
+  yearsOfExperience      Float?
+  previousCompany        String?
+  previousCtc            String?
+  location               String?
+  preferredLocation      String?
+  expectedCtc            String?
+  sourceDate             String?
+  screeningDate          String?
+  screeningNotes         String?
+  tech1Date              String?
+  tech1Status            String?
+  tech1Remarks           String?
+  tech1Panel             String?
+  tech2Date              String?
+  tech2Status            String?
+  tech2Remarks           String?
+  tech2Panel             String?
+  tech3Date              String?
+  tech3Status            String?
+  tech3Remarks           String?
+  tech3Panel             String?
+  offerStageInputDate    String?
+  documentCollectionDate String?
+  approvalDate           String?
+  offerDate              String?
+  offerStatus            String?
+  offerDecisionDate      String?
+  offerAcceptStatus      String?
+  joiningDate            String?
+  joiningStatus          String?
+  offeredCtc             String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([jobId])
+  @@index([recruiterId])
+  @@index([status])
+}
+
+model JobOpening {
+  id                  String   @id @default(cuid())
+  jobId               String   @unique
+  agingDays           Int?
+  hireType            String?
+  postedDate          String?
+  businessUnit        String?
+  department          String?
+  client              String?
+  domain              String?
+  position            String
+  priority            String?
+  numberOfOpenings    Int?
+  status              String?
+  remarks             String?
+  candidateConcerned  String?
+  holdDate            String?
+  offerStageDate      String?
+  offerDate           String?
+  joiningDate         String?
+  candidateCtc        String?
+  source              String?
+  harmonizedRole      String?
+  recruiterTagged     String?
+  originalJobPostDate String?
+  tone                String   @default("gold")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([client])
+}
+
+model Recruiter {
+  id            String   @id @default(cuid())
+  recruiterId   String   @unique
+  name          String
+  email         String?
+  phoneNumber   String?
+  currentStatus String?
+  joinedDate    String?
+  lwd           String?
+  designation   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model HarmonizedRole {
+  id             String   @id @default(cuid())
+  position       String   @unique
+  harmonizedRole String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Vendor {
@@ -57,6 +158,7 @@ model Invoice {
 model Employee {
   id          String   @id @default(cuid())
   employeeId  String   @unique
+  email       String?
   name        String
   department  String
   location    String

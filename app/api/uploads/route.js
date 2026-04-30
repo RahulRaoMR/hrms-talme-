@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { createUploadedAssetRecordAction } from "@/app/actions";
+import { getUploadedAssets } from "@/lib/query-data";
 import { saveUploadedFile } from "@/lib/storage";
+
+export async function GET(request) {
+  const module = request.nextUrl.searchParams.get("module") || "All";
+  const assets = await getUploadedAssets({ module });
+  return NextResponse.json(assets);
+}
 
 export async function POST(request) {
   const formData = await request.formData();

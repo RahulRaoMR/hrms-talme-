@@ -1,41 +1,25 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
-import { auth } from "@/auth";
 import { deliverNotification } from "@/lib/notify";
+import { revalidateSuitePaths, writeAuditLog } from "@/lib/backend-core";
 import { prisma } from "@/lib/prisma";
 import { ensureSeedData } from "@/lib/seed-db";
 import { deleteUploadedFile } from "@/lib/storage";
+import {
+  releasePayrollEmails,
+  sendLeaveStatusEmailToEmployee,
+  sendOfferEmailToCandidate,
+  sendWelcomeEmailToEmployee,
+  shouldSendOfferEmail
+} from "@/services/emailAutomation";
 
 async function refreshSuite() {
-  revalidatePath("/dashboard");
-  revalidatePath("/ats");
-  revalidatePath("/vms");
-  revalidatePath("/payroll");
-  revalidatePath("/approvals");
-  revalidatePath("/reports");
-  revalidatePath("/documents");
-  revalidatePath("/settings");
-  revalidatePath("/employee-portal");
-  revalidatePath("/vendor-portal");
-  revalidatePath("/search");
-  revalidatePath("/users");
-  revalidatePath("/activity");
+  revalidateSuitePaths();
 }
 
 async function writeAudit(action, entity, entityId, detail) {
-  const session = await auth();
-
-  await prisma.auditLog.create({
-    data: {
-      actor: session?.user?.email || "system",
-      action,
-      entity,
-      entityId,
-      detail
-    }
-  });
+  await writeAuditLog(action, entity, entityId, detail);
 }
 
 function normalizeCsvRows(rows, headers) {
@@ -56,6 +40,7 @@ export async function createCandidateAction(payload) {
   const candidate = await prisma.candidate.create({
     data: {
       name: payload.name,
+      email: payload.email,
       role: payload.role,
       stage: payload.stage,
       source: payload.source,
@@ -63,6 +48,10 @@ export async function createCandidateAction(payload) {
       tone: payload.tone || "gold"
     }
   });
+
+  if (shouldSendOfferEmail(null, candidate.status)) {
+    await sendOfferEmailToCandidate(candidate);
+  }
 
   await writeAudit("CREATE", "Candidate", candidate.id, `Created candidate ${candidate.name}`);
   await refreshSuite();
@@ -93,10 +82,12 @@ export async function importCandidatesAction(rows) {
 }
 
 export async function updateCandidateAction(id, payload) {
+  const current = await prisma.candidate.findUnique({ where: { id } });
   const candidate = await prisma.candidate.update({
     where: { id },
     data: {
       name: payload.name,
+      email: payload.email,
       role: payload.role,
       stage: payload.stage,
       source: payload.source,
@@ -104,6 +95,10 @@ export async function updateCandidateAction(id, payload) {
       tone: payload.tone
     }
   });
+
+  if (shouldSendOfferEmail(current?.status, candidate.status)) {
+    await sendOfferEmailToCandidate(candidate);
+  }
 
   await writeAudit("UPDATE", "Candidate", candidate.id, `Updated candidate ${candidate.name}`);
   await refreshSuite();
@@ -119,6 +114,7 @@ export async function approveCandidateAction(id) {
     }
   });
 
+  await sendOfferEmailToCandidate(candidate);
   await writeAudit("APPROVE", "Candidate", id, `Approved candidate ${candidate.name}`);
   await refreshSuite();
   return candidate;
@@ -326,6 +322,21 @@ export async function approveInvoiceAction(id) {
   return invoice;
 }
 
+export async function releasePayrollAction(periodLabel) {
+  await ensureSeedData();
+
+  const result = await releasePayrollEmails({ periodLabel });
+
+  await writeAudit(
+    "PAYROLL_RELEASE",
+    "Employee",
+    null,
+    `Released payroll emails for ${result.periodLabel}: ${result.sent}/${result.eligible} delivered`
+  );
+  await refreshSuite();
+  return result;
+}
+
 export async function deleteInvoiceAction(id) {
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   await prisma.invoice.delete({
@@ -410,6 +421,7 @@ export async function createEmployeeAction(payload) {
   const employee = await prisma.employee.create({
     data: {
       employeeId: payload.employeeId,
+      email: payload.email,
       name: payload.name,
       department: payload.department,
       location: payload.location,
@@ -423,6 +435,7 @@ export async function createEmployeeAction(payload) {
     }
   });
 
+  await sendWelcomeEmailToEmployee(employee);
   await writeAudit("CREATE", "Employee", employee.id, `Created employee ${employee.name}`);
   await refreshSuite();
   return employee;
@@ -433,6 +446,7 @@ export async function updateEmployeeAction(id, payload) {
     where: { id },
     data: {
       employeeId: payload.employeeId,
+      email: payload.email,
       name: payload.name,
       department: payload.department,
       location: payload.location,
@@ -479,6 +493,7 @@ export async function createLeaveRequestAction(payload) {
 }
 
 export async function updateLeaveRequestAction(id, payload) {
+  const current = await prisma.leaveRequest.findUnique({ where: { id } });
   const leave = await prisma.leaveRequest.update({
     where: { id },
     data: {
@@ -491,6 +506,10 @@ export async function updateLeaveRequestAction(id, payload) {
       tone: payload.tone
     }
   });
+
+  if (current?.status !== leave.status) {
+    await sendLeaveStatusEmailToEmployee(leave);
+  }
 
   await writeAudit("UPDATE", "LeaveRequest", leave.id, `Updated leave request for ${leave.employee}`);
   await refreshSuite();

@@ -36,6 +36,7 @@ export default function AtsPageClient() {
   const [isPending, startTransition] = useTransition();
   const [formState, setFormState] = useState({
     name: "Asha Verma",
+    email: "asha.verma@talme.ai",
     role: "Talent Specialist",
     stage: "Screening",
     source: "Direct ATS"
@@ -378,6 +379,15 @@ export default function AtsPageClient() {
               />
             </label>
             <label>
+              <span>Email</span>
+              <input
+                value={formState.email}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, email: event.target.value }))
+                }
+              />
+            </label>
+            <label>
               <span>Role</span>
               <input
                 value={formState.role}
@@ -432,6 +442,7 @@ export default function AtsPageClient() {
               startTransition(async () => {
                 const updated = await updateCandidateAction(editState.id, {
                   name: editState.name,
+                  email: editState.email,
                   role: editState.role,
                   stage: editState.stage,
                   source: editState.source,
@@ -452,6 +463,15 @@ export default function AtsPageClient() {
                   value={editState.name}
                   onChange={(event) =>
                     setEditState((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Email</span>
+                <input
+                  value={editState.email ?? ""}
+                  onChange={(event) =>
+                    setEditState((current) => ({ ...current, email: event.target.value }))
                   }
                 />
               </label>

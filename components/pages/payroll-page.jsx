@@ -8,6 +8,7 @@ import {
   createInvoiceAction,
   deleteInvoiceAction,
   importInvoicesAction,
+  releasePayrollAction,
   updateInvoiceAction
 } from "@/app/actions";
 import BarChart from "@/components/bar-chart";
@@ -36,6 +37,7 @@ export default function PayrollPageClient() {
   const [sort, setSort] = useState({ key: "vendor", direction: "asc" });
   const [selectedIds, setSelectedIds] = useState([]);
   const [isPending, startTransition] = useTransition();
+  const [releaseSummary, setReleaseSummary] = useState(null);
   const [formState, setFormState] = useState({
     vendor: "PrimeServe Infra",
     invoiceNo: "INV-5511",
@@ -95,13 +97,40 @@ export default function PayrollPageClient() {
       primaryLabel="Open VMS"
       brandEyebrow="Payroll Suite"
       actions={
-        <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-          Add Invoice
-        </button>
+        <div className="row-actions">
+          <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
+            Add Invoice
+          </button>
+          <button
+            className="primary-button"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(async () => {
+                const result = await releasePayrollAction();
+                setReleaseSummary(result);
+              })
+            }
+            type="button"
+          >
+            {isPending ? "Releasing..." : "Release Payroll"}
+          </button>
+        </div>
       }
     >
       <PayrollOverview />
       <EmployeeCtcBreakdownPanel />
+
+      {releaseSummary ? (
+        <section className="page-section panel">
+          <div className="signal-row">
+            <span className="teal">
+              {releaseSummary.sent} salary email{releaseSummary.sent === 1 ? "" : "s"} sent
+            </span>
+            <span>{releaseSummary.eligible} eligible employees</span>
+            <span>{releaseSummary.periodLabel}</span>
+          </div>
+        </section>
+      ) : null}
 
       <section className="page-section split-grid">
         <article className="panel">

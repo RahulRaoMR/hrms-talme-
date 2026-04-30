@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { navItems } from "@/lib/demo-data";
-import { canAccess } from "@/lib/permissions";
+import { canAccess, resolveRole } from "@/lib/permissions";
 
 export default function SuiteShell({
   eyebrow,
@@ -20,6 +20,8 @@ export default function SuiteShell({
   const [focusMode, setFocusMode] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const { data: session, status } = useSession();
+  const role = resolveRole(session?.user?.role) || "Enterprise Admin";
+  const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
     const isFocus = window.localStorage.getItem("talme-focus-mode") === "on";
@@ -64,7 +66,7 @@ export default function SuiteShell({
 
         <div className="nav-group">
           <div className="nav-label">Core</div>
-          {navItems.filter((item) => canAccess(session?.user?.role, item.href)).map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               key={item.href}
               className={`nav-link ${pathname === item.href ? "active" : ""}`}
@@ -90,7 +92,7 @@ export default function SuiteShell({
             <h1>{title}</h1>
             {session?.user ? (
               <p className="session-note">
-                Signed in as <strong>{session.user.role}</strong> - {session.user.email}
+                Signed in as <strong>{role || session.user.role}</strong> - {session.user.email}
               </p>
             ) : null}
           </div>
