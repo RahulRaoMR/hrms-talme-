@@ -68,7 +68,7 @@ export default function LoginPageClient() {
                   throw new Error(result.error);
                 }
 
-                router.replace(selectedCredentials.destination);
+                router.push(selectedCredentials.destination);
                 router.refresh();
               } catch {
                 setError("Unable to sign in. Please retry.");
@@ -138,7 +138,7 @@ export default function LoginPageClient() {
                       throw new Error(result.error);
                     }
 
-                    router.replace("/dashboard");
+                    router.push("/dashboard");
                     router.refresh();
                   } catch {
                     setError("Unable to open demo access. Please retry.");
@@ -170,7 +170,7 @@ export default function LoginPageClient() {
                       throw new Error(result.error);
                     }
 
-                    router.replace("/employee-app");
+                    router.push("/employee-app");
                     router.refresh();
                   } catch {
                     setError("Unable to open employee access. Please retry.");

@@ -55,7 +55,7 @@ export default function LandingPage() {
         throw new Error(result.error);
       }
 
-      router.replace(selectedCredentials.destination);
+      router.push(selectedCredentials.destination);
       router.refresh();
     } catch {
       setError("Unable to sign in. Please check the selected role and ID.");
@@ -82,7 +82,7 @@ export default function LandingPage() {
         throw new Error(result.error);
       }
 
-      router.replace(destination);
+      router.push(destination);
       router.refresh();
     } catch {
       setError("Unable to open access. Please retry.");

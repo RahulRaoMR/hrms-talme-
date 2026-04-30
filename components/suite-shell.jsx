@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { navItems } from "@/lib/demo-data";
@@ -17,6 +17,7 @@ export default function SuiteShell({
   brandEyebrow = "Enterprise Suite"
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [focusMode, setFocusMode] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const { data: session, status } = useSession();
@@ -39,6 +40,19 @@ export default function SuiteShell({
     document.body.classList.toggle("light-mode", lightMode);
     window.localStorage.setItem("talme-theme-mode", lightMode ? "light" : "dark");
   }, [lightMode]);
+
+  useEffect(() => {
+    if (pathname !== "/dashboard") return undefined;
+
+    window.history.pushState({ talmeDashboard: true }, "", window.location.href);
+
+    function sendBackToHrms() {
+      router.replace("/");
+    }
+
+    window.addEventListener("popstate", sendBackToHrms);
+    return () => window.removeEventListener("popstate", sendBackToHrms);
+  }, [pathname, router]);
 
   if (status === "loading") {
     return (
