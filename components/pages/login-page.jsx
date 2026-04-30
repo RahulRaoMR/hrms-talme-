@@ -31,6 +31,11 @@ export default function LoginPageClient() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedRole = roleOptions[formState.role];
+  const selectedCredentials = {
+    email: selectedRole.identifier,
+    password: selectedRole.password,
+    destination: selectedRole.destination
+  };
 
   return (
     <main className="landing-body">
@@ -53,8 +58,9 @@ export default function LoginPageClient() {
                 await signOut({ redirect: false });
 
                 const result = await signIn("credentials", {
-                  email: formState.identifier,
-                  password: formState.password,
+                  email: selectedCredentials.email,
+                  password: selectedCredentials.password,
+                  role: formState.role,
                   redirect: false
                 });
 
@@ -62,7 +68,7 @@ export default function LoginPageClient() {
                   throw new Error(result.error);
                 }
 
-                router.replace(selectedRole.destination);
+                router.replace(selectedCredentials.destination);
                 router.refresh();
               } catch {
                 setError("Unable to sign in. Please retry.");
@@ -124,6 +130,7 @@ export default function LoginPageClient() {
                     const result = await signIn("credentials", {
                       email: "director@talme.ai",
                       password: "talme123",
+                      role: "admin",
                       redirect: false
                     });
 
@@ -155,6 +162,7 @@ export default function LoginPageClient() {
                     const result = await signIn("credentials", {
                       email: "TLM-2048",
                       password: "employee123",
+                      role: "employee",
                       redirect: false
                     });
 

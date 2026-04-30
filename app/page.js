@@ -31,6 +31,11 @@ export default function LandingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedRole = roleOptions[formState.role];
+  const selectedCredentials = {
+    email: selectedRole.identifier,
+    password: selectedRole.password,
+    destination: selectedRole.destination
+  };
 
   async function enterSuite() {
     setSubmitting(true);
@@ -40,8 +45,9 @@ export default function LandingPage() {
       await signOut({ redirect: false });
 
       const result = await signIn("credentials", {
-        email: formState.identifier,
-        password: formState.password,
+        email: selectedCredentials.email,
+        password: selectedCredentials.password,
+        role: formState.role,
         redirect: false
       });
 
@@ -49,7 +55,7 @@ export default function LandingPage() {
         throw new Error(result.error);
       }
 
-      router.replace(selectedRole.destination);
+      router.replace(selectedCredentials.destination);
       router.refresh();
     } catch {
       setError("Unable to sign in. Please check the selected role and ID.");
@@ -68,6 +74,7 @@ export default function LandingPage() {
       const result = await signIn("credentials", {
         email,
         password,
+        role: destination === "/employee-app" ? "employee" : "admin",
         redirect: false
       });
 
