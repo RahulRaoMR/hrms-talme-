@@ -769,8 +769,12 @@ small {
 }
 
 .panel > .data-table {
-  display: block;
+  min-width: 760px;
+}
+
+.panel:has(> .data-table) {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bar-chart {
@@ -2045,6 +2049,7 @@ small {
 @media (max-width: 640px) {
   .app-shell {
     width: min(100% - 14px, 1440px);
+    margin: 7px auto;
   }
 
   .sidebar,
@@ -2056,6 +2061,15 @@ small {
   .chart-card {
     padding: 18px;
     border-radius: 22px;
+  }
+
+  .sidebar {
+    max-height: none;
+  }
+
+  .workspace-topbar h1,
+  .landing-card h1 {
+    font-size: 2.35rem;
   }
 
   .landing-actions,
@@ -2074,6 +2088,52 @@ small {
   .search-pill,
   .chip-button {
     width: 100%;
+  }
+
+  .search-input {
+    max-width: none;
+  }
+
+  .panel:has(> .data-table) {
+    margin-inline: -2px;
+    padding-inline: 12px;
+  }
+
+  .data-table {
+    min-width: 720px;
+    table-layout: auto;
+  }
+
+  .data-table th,
+  .data-table td {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .data-table .row-actions {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .data-table .primary-button,
+  .data-table .ghost-button,
+  .data-table .mini-button,
+  .data-table .chip-button {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 9px 12px;
+  }
+
+  .data-table .status {
+    white-space: nowrap;
+  }
+
+  .doc-line {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .insight-drawer {

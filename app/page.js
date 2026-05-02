@@ -71,33 +71,6 @@ export default function LandingPage() {
     }
   }
 
-  async function openAccess(email, password, destination) {
-    setSubmitting(true);
-    setError("");
-
-    try {
-      await signOut({ redirect: false });
-
-      const result = await signIn("credentials", {
-        email,
-        password,
-        role: destination === "/employee-app" ? "employee" : "admin",
-        redirect: false
-      });
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
-      router.push(destination);
-      router.refresh();
-    } catch {
-      setError("Unable to open access. Please retry.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
     <main className="landing-body">
       <section className="landing-shell">
@@ -152,22 +125,6 @@ export default function LandingPage() {
                 }
               />
             </label>
-            <button
-              className="ghost-button"
-              disabled={submitting}
-              onClick={() => openAccess("director@talme.ai", "talme123", "/dashboard")}
-              type="button"
-            >
-              Admin Access
-            </button>
-            <button
-              className="ghost-button"
-              disabled={submitting}
-              onClick={() => openAccess("TLM-2048", "employee123", "/employee-app")}
-              type="button"
-            >
-              Employee Access
-            </button>
             <button className="primary-button" disabled={submitting} onClick={enterSuite} type="button">
               {submitting ? "Opening..." : "Enter Suite"}
             </button>
