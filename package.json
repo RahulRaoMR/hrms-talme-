@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "postinstall": "prisma generate",
-    "prebuild": "prisma generate",
+    "postinstall": "node scripts/prisma-generate.mjs",
+    "prebuild": "node scripts/prisma-generate.mjs",
     "build": "next build",
+    "prestart": "node scripts/prepare-database.mjs",
     "start": "node server.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
