@@ -28,8 +28,8 @@ export default function DocumentsPageClient({ data }) {
   const [formState, setFormState] = useState(documentSeed);
   const [uploadState, setUploadState] = useState({
     module: "Employee",
-    owner: "Manish Gupta",
-    label: "Offer Letter"
+    owner: "",
+    label: ""
   });
   const [uploading, setUploading] = useState(false);
   const [isPending, startTransition] = useTransition();

@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 export default function EmployeeAppLogin() {
   const router = useRouter();
   const [formState, setFormState] = useState({
-    employeeId: "TLM-2048",
-    password: "employee123"
+    employeeId: "",
+    password: ""
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -84,7 +84,7 @@ export default function EmployeeAppLogin() {
             <input
               value={formState.employeeId}
               onChange={(event) => setFormState((current) => ({ ...current, employeeId: event.target.value }))}
-              placeholder="TLM-2048"
+              placeholder="Employee ID"
             />
           </label>
           <label>
@@ -103,12 +103,6 @@ export default function EmployeeAppLogin() {
 
         {error ? <p className="employee-login-error">{error}</p> : null}
 
-        <div className="employee-login-hint">
-          <span>Demo Employee ID</span>
-          <strong>TLM-2048</strong>
-          <span>Password</span>
-          <strong>employee123</strong>
-        </div>
       </section>
     </main>
   );

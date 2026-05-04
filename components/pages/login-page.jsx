@@ -22,8 +22,8 @@ const roleOptions = {
   employee: {
     label: "Employee",
     identifierLabel: "Employee ID",
-    identifier: "TLM-2048",
-    password: "employee123",
+    identifier: "",
+    password: "",
     destination: "/employee-app"
   }
 };

@@ -221,6 +221,12 @@ textarea {
   min-width: min(100%, 260px);
 }
 
+.landing-reset-panel {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
 .primary-button,
 .ghost-button,
 .mini-button,
@@ -858,6 +864,334 @@ small {
 
 .light-mode .modal-card {
   background: rgba(247, 250, 252, 0.98);
+}
+
+.employee-drawer-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(8, 15, 25, 0.56);
+}
+
+.employee-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.employee-drawer {
+  --hrms-accent: #d6b06a;
+  --hrms-accent-strong: #f0d59d;
+  --hrms-surface: #09111d;
+  --hrms-surface-soft: #111b2a;
+  --hrms-surface-lift: #172536;
+  --hrms-ink: #ecf2f8;
+  --hrms-label: #b6c5d5;
+  --hrms-muted: #8fa1b5;
+  --hrms-border: rgba(214, 176, 106, 0.2);
+  position: relative;
+  width: min(620px, 100%);
+  height: 100vh;
+  overflow: hidden;
+  background: var(--hrms-surface);
+  color: var(--hrms-ink);
+  box-shadow: -18px 0 56px rgba(0, 0, 0, 0.42);
+}
+
+.employee-drawer form {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.employee-drawer-titlebar {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 22px 0 28px;
+  background: linear-gradient(180deg, #111b2a 0%, #0b1523 100%);
+  border-bottom: 1px solid rgba(214, 176, 106, 0.28);
+}
+
+.employee-drawer-titlebar h2 {
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  font-size: 1.42rem;
+  letter-spacing: 0;
+  color: var(--hrms-ink);
+}
+
+.employee-close-button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--hrms-muted);
+  cursor: pointer;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.employee-close-button:hover {
+  background: rgba(214, 176, 106, 0.12);
+  color: var(--hrms-accent-strong);
+}
+
+.employee-accordion {
+  overflow-y: auto;
+  background: var(--hrms-surface);
+  scrollbar-color: rgba(214, 176, 106, 0.5) transparent;
+}
+
+.employee-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.employee-section-head {
+  width: 100%;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 22px;
+  background: var(--hrms-surface);
+  color: var(--hrms-ink);
+  cursor: pointer;
+  text-align: left;
+  font-weight: 700;
+}
+
+.employee-section.open .employee-section-head {
+  background: rgba(214, 176, 106, 0.08);
+  color: var(--hrms-accent-strong);
+}
+
+.section-chevron {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-right: 1.8px solid var(--hrms-accent);
+  border-bottom: 1.8px solid var(--hrms-accent);
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.employee-section.open .section-chevron {
+  transform: rotate(225deg);
+}
+
+.employee-section-body {
+  padding: 22px;
+  background: var(--hrms-surface);
+}
+
+.pooja-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.pooja-form-grid.compact-grid {
+  max-width: 288px;
+}
+
+.pooja-field,
+.pooja-file-field,
+.pooja-radio-group {
+  min-width: 0;
+}
+
+.pooja-field span,
+.pooja-file-field > span,
+.pooja-radio-group legend {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--hrms-label);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.pooja-field em,
+.pooja-radio-group em {
+  color: #f2b4a4;
+  font-style: normal;
+}
+
+.pooja-field input,
+.pooja-field select,
+.pooja-field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hrms-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.pooja-field input::placeholder,
+.pooja-field textarea::placeholder {
+  color: #8fa1b5;
+  opacity: 0.95;
+}
+
+.pooja-field input:focus,
+.pooja-field select:focus,
+.pooja-field textarea:focus,
+.pooja-file-field input:focus {
+  border-color: var(--hrms-accent);
+  box-shadow: 0 0 0 3px rgba(214, 176, 106, 0.16);
+  outline: 0;
+}
+
+.pooja-field select {
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--hrms-accent) 50%) calc(100% - 22px) 52% / 8px 8px no-repeat,
+    linear-gradient(135deg, var(--hrms-accent) 50%, transparent 50%) calc(100% - 16px) 52% / 8px 8px no-repeat,
+    linear-gradient(rgba(214, 176, 106, 0.24), rgba(214, 176, 106, 0.24)) calc(100% - 46px) 50% / 1px 28px no-repeat,
+    rgba(255, 255, 255, 0.04);
+  padding-right: 60px;
+}
+
+.pooja-field select option {
+  background: #111b2a;
+  color: var(--hrms-ink);
+}
+
+.pooja-field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.pooja-phone-field {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 4px;
+}
+
+.pooja-phone-field select,
+.pooja-phone-field input {
+  border-radius: 5px;
+}
+
+.pooja-radio-group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.pooja-radio-group div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 22px;
+  min-height: 36px;
+}
+
+.pooja-radio-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--hrms-label);
+  font-weight: 700;
+}
+
+.pooja-radio-group input {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  accent-color: var(--hrms-accent);
+}
+
+.pooja-file-field input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--hrms-border);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hrms-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.pooja-file-field input::file-selector-button {
+  min-height: 48px;
+  margin: 0 18px 0 0;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid var(--hrms-border);
+  background: rgba(214, 176, 106, 0.12);
+  color: var(--hrms-ink);
+  cursor: pointer;
+}
+
+.pooja-add-more,
+.pooja-outline-button,
+.pooja-secondary-button,
+.pooja-primary-button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  padding: 0 18px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.pooja-add-more {
+  justify-self: start;
+  background: linear-gradient(135deg, var(--hrms-accent-strong), #b98b46);
+  color: #0c1219;
+}
+
+.employee-drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  background: linear-gradient(180deg, #111b2a 0%, #0b1523 100%);
+  border-top: 1px solid rgba(214, 176, 106, 0.28);
+}
+
+.pooja-outline-button {
+  border: 1px solid var(--hrms-accent);
+  background: transparent;
+  color: var(--hrms-accent-strong);
+}
+
+.pooja-secondary-button {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--hrms-label);
+}
+
+.pooja-primary-button {
+  background: linear-gradient(135deg, var(--hrms-accent-strong), #b98b46);
+  color: #0c1219;
+}
+
+.pooja-add-more:hover,
+.pooja-primary-button:hover {
+  background: linear-gradient(135deg, #ffe2a4, var(--hrms-accent));
+}
+
+.pooja-outline-button:hover,
+.pooja-secondary-button:hover {
+  background: rgba(214, 176, 106, 0.12);
+  color: var(--hrms-accent-strong);
+}
+
+.pooja-primary-button:disabled {
+  opacity: 0.62;
+  cursor: wait;
 }
 
 .phone-app-shell {
@@ -2080,6 +2414,11 @@ small {
   .pagination-row,
   .row-actions {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .landing-password-field {
+    width: 100%;
   }
 
   .primary-button,

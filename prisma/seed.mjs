@@ -87,11 +87,11 @@ async function main() {
     });
   }
 
-  if ((await prisma.leaveRequest.count()) === 0) {
+  if ((await prisma.leaveRequest.count()) === 0 && leaveSeed.length) {
     await prisma.leaveRequest.createMany({ data: leaveSeed });
   }
 
-  if ((await prisma.attendanceRecord.count()) === 0) {
+  if ((await prisma.attendanceRecord.count()) === 0 && attendanceSeed.length) {
     await prisma.attendanceRecord.createMany({ data: attendanceSeed });
   }
 
@@ -103,11 +103,11 @@ async function main() {
     });
   }
 
-  if ((await prisma.documentRecord.count()) === 0) {
+  if ((await prisma.documentRecord.count()) === 0 && documentSeed.length) {
     await prisma.documentRecord.createMany({ data: documentSeed });
   }
 
-  if ((await prisma.approvalItem.count()) === 0) {
+  if ((await prisma.approvalItem.count()) === 0 && approvalSeed.length) {
     await prisma.approvalItem.createMany({ data: approvalSeed });
   }
 
@@ -115,7 +115,7 @@ async function main() {
     await prisma.companySetting.createMany({ data: settingSeed });
   }
 
-  if ((await prisma.uploadedAsset.count()) === 0) {
+  if ((await prisma.uploadedAsset.count()) === 0 && uploadedAssetSeed.length) {
     await prisma.uploadedAsset.createMany({ data: uploadedAssetSeed });
   }
 

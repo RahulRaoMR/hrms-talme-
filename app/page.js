@@ -9,40 +9,86 @@ const roleOptions = {
     label: "Enterprise Admin",
     identifierLabel: "Corporate Email",
     identifier: "director@talme.ai",
-    password: "talme123",
     destination: "/dashboard"
   },
   hr: {
     label: "HR",
     identifierLabel: "Corporate Email",
     identifier: "hr@talme.ai",
-    password: "hr123",
     destination: "/dashboard"
   },
   employee: {
     label: "Employee",
     identifierLabel: "Employee ID",
-    identifier: "TLM-2048",
-    password: "employee123",
+    identifier: "",
     destination: "/employee-app"
   }
 };
+const RESET_REQUEST_TIMEOUT_MS = 30000;
 
 export default function LandingPage() {
   const router = useRouter();
   const [formState, setFormState] = useState({
     identifier: roleOptions.admin.identifier,
-    password: roleOptions.admin.password,
+    password: "",
     role: "admin"
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [resetState, setResetState] = useState({
+    open: false,
+    email: roleOptions.admin.identifier,
+    otp: "",
+    password: "",
+    step: "request",
+    submitting: false,
+    message: "",
+    status: "info"
+  });
   const selectedRole = roleOptions[formState.role];
   const selectedCredentials = {
-    email: selectedRole.identifier,
-    password: selectedRole.password,
+    email: formState.identifier,
+    password: formState.password,
     destination: selectedRole.destination
   };
+  const canResetIdentifier = formState.identifier.includes("@");
+
+  async function parseApiResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    const text = await response.text();
+    return {
+      error: text.includes("<!DOCTYPE")
+        ? "Reset service is not available. Restart the dev server and try again."
+        : text || "Unexpected server response."
+    };
+  }
+
+  async function fetchResetApi(url, body) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), RESET_REQUEST_TIMEOUT_MS);
+
+    try {
+      return await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify(body)
+      });
+    } catch (requestError) {
+      if (requestError.name === "AbortError") {
+        throw new Error("OTP request timed out. Check email settings and try again.");
+      }
+
+      throw requestError;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 
   async function enterSuite() {
     setSubmitting(true);
@@ -71,6 +117,81 @@ export default function LandingPage() {
     }
   }
 
+  async function submitResetRequest() {
+    setResetState((current) => ({
+      ...current,
+      submitting: true,
+      message: ""
+    }));
+    setError("");
+
+    try {
+      const response = await fetchResetApi("/api/auth/password-reset/request", {
+        email: resetState.email
+      });
+      const payload = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to send OTP.");
+      }
+
+      setResetState((current) => ({
+        ...current,
+        step: "confirm",
+        submitting: false,
+        message: payload.message,
+        status: "success"
+      }));
+    } catch (resetError) {
+      setResetState((current) => ({
+        ...current,
+        submitting: false,
+        message: resetError.message,
+        status: "error"
+      }));
+    }
+  }
+
+  async function confirmResetPassword() {
+    setResetState((current) => ({ ...current, submitting: true, message: "" }));
+    setError("");
+
+    try {
+      const response = await fetchResetApi("/api/auth/password-reset/confirm", {
+        email: resetState.email,
+        otp: resetState.otp,
+        password: resetState.password
+      });
+      const payload = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to reset password.");
+      }
+
+      setFormState((current) => ({
+        ...current,
+        identifier: resetState.email,
+        password: resetState.password
+      }));
+      setResetState((current) => ({
+        ...current,
+        step: "request",
+        otp: "",
+        password: "",
+        submitting: false,
+        message: payload.message,
+        status: "success"
+      }));
+    } catch (resetError) {
+      setResetState((current) => ({
+        ...current,
+        submitting: false,
+        message: resetError.message,
+        status: "error"
+      }));
+    }
+  }
+
   return (
     <main className="landing-body">
       <section className="landing-shell">
@@ -93,9 +214,17 @@ export default function LandingPage() {
                   const nextConfig = roleOptions[nextRole];
                   setFormState({
                     identifier: nextConfig.identifier,
-                    password: nextConfig.password,
+                    password: "",
                     role: nextRole
                   });
+                  setResetState((current) => ({
+                    ...current,
+                    email: nextConfig.identifier.includes("@") ? nextConfig.identifier : "",
+                    otp: "",
+                    password: "",
+                    step: "request",
+                    message: ""
+                  }));
                 }}
               >
                 <option value="admin">Enterprise Admin</option>
@@ -107,9 +236,22 @@ export default function LandingPage() {
               <span>{selectedRole.identifierLabel}</span>
               <input
                 value={formState.identifier}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, identifier: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextIdentifier = event.target.value;
+                  setFormState((current) => ({ ...current, identifier: nextIdentifier }));
+                  setResetState((current) =>
+                    current.open && nextIdentifier.includes("@")
+                      ? {
+                          ...current,
+                          email: nextIdentifier,
+                          otp: "",
+                          password: "",
+                          step: "request",
+                          message: ""
+                        }
+                      : current
+                  );
+                }}
               />
             </label>
           </div>
@@ -128,7 +270,113 @@ export default function LandingPage() {
             <button className="primary-button" disabled={submitting} onClick={enterSuite} type="button">
               {submitting ? "Opening..." : "Enter Suite"}
             </button>
+            <button
+              className="ghost-button"
+              onClick={() =>
+                setResetState((current) => ({
+                  ...current,
+                  open: !current.open,
+                  email: canResetIdentifier ? formState.identifier : current.email,
+                  otp: "",
+                  password: "",
+                  step: "request",
+                  message: ""
+                }))
+              }
+              type="button"
+            >
+              Forgot Password?
+            </button>
           </div>
+          {resetState.open ? (
+            <div className="landing-reset-panel">
+              <div className="landing-grid">
+                <label>
+                  <span>Email Account</span>
+                  <input
+                    type="email"
+                    value={resetState.email}
+                    onChange={(event) =>
+                      setResetState((current) => ({
+                        ...current,
+                        email: event.target.value,
+                        message: ""
+                      }))
+                    }
+                  />
+                </label>
+                {resetState.step === "confirm" ? (
+                  <label>
+                    <span>OTP</span>
+                    <input
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={resetState.otp}
+                      onChange={(event) =>
+                        setResetState((current) => ({
+                          ...current,
+                          otp: event.target.value.replace(/\D/g, ""),
+                          message: ""
+                        }))
+                      }
+                    />
+                  </label>
+                ) : null}
+                {resetState.step === "confirm" ? (
+                  <label>
+                    <span>New Password</span>
+                    <input
+                      type="password"
+                      value={resetState.password}
+                      onChange={(event) =>
+                        setResetState((current) => ({
+                          ...current,
+                          password: event.target.value,
+                          message: ""
+                        }))
+                      }
+                    />
+                  </label>
+                ) : null}
+              </div>
+              <div className="landing-actions">
+                {resetState.step === "request" ? (
+                  <button
+                    className="primary-button"
+                    disabled={resetState.submitting}
+                    onClick={submitResetRequest}
+                    type="button"
+                  >
+                    {resetState.submitting ? "Sending OTP..." : "Send OTP"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="primary-button"
+                      disabled={resetState.submitting}
+                      onClick={confirmResetPassword}
+                      type="button"
+                    >
+                      {resetState.submitting ? "Changing..." : "Reset Password"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      disabled={resetState.submitting}
+                      onClick={submitResetRequest}
+                      type="button"
+                    >
+                      Resend OTP
+                    </button>
+                  </>
+                )}
+              </div>
+              {resetState.message ? (
+                <p className={resetState.status === "error" ? "form-error" : "session-note"}>
+                  {resetState.message}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {error ? <p className="form-error">{error}</p> : null}
 
           <div className="landing-modules">

@@ -4,6 +4,12 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { ensureSeedData } from "@/lib/seed-db";
 
+const credentialRoles = {
+  admin: "Enterprise Admin",
+  hr: "HR",
+  employee: "Employee"
+};
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login"
@@ -19,80 +25,39 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         role: {}
       },
       async authorize(credentials) {
-        const email = credentials.email?.trim();
+        const identifier = credentials.email?.trim();
         const password = credentials.password?.trim();
+        const expectedRole = credentialRoles[credentials.role] || credentials.role;
 
-        if (!email || !password) return null;
-
-        const demoUsers = {
-          "director@talme.ai": {
-            password: "talme123",
-            user: {
-              id: "demo-admin",
-              name: "Talme Director",
-              email: "director@talme.ai",
-              role: "Enterprise Admin",
-              employeeId: null
-            }
-          },
-          "hr@talme.ai": {
-            password: "hr123",
-            user: {
-              id: "demo-hr",
-              name: "Talme HR",
-              email: "hr@talme.ai",
-              role: "HR",
-              employeeId: null
-            }
-          },
-          "TLM-2048": {
-            password: "employee123",
-            user: {
-              id: "demo-employee",
-              name: "Manish Gupta",
-              email: "manish.gupta@talme.ai",
-              role: "Employee",
-              employeeId: "TLM-2048"
-            }
-          }
-        };
-
-        const demoUser = demoUsers[email];
-        if (demoUser && password === demoUser.password) {
-          return demoUser.user;
-        }
+        if (!identifier || !password) return null;
 
         await ensureSeedData();
 
-        const employee = await prisma.employee.findUnique({
-          where: { employeeId: email }
-        });
-
-        if (employee && password === "employee123") {
-          return {
-            id: employee.id,
-            name: employee.name,
-            email: employee.email || `${employee.employeeId.toLowerCase()}@talme.local`,
-            role: "Employee",
-            employeeId: employee.employeeId
-          };
-        }
+        const employee =
+          expectedRole === "Employee" || !identifier.includes("@")
+            ? await prisma.employee.findUnique({
+                where: { employeeId: identifier },
+                select: { id: true, employeeId: true, email: true, name: true }
+              })
+            : null;
+        const loginEmail = employee?.email || identifier.toLowerCase();
 
         const user = await prisma.user.findUnique({
-          where: { email }
+          where: { email: loginEmail }
         });
 
         if (!user || !user.active) return null;
+        if (expectedRole && user.role !== expectedRole) return null;
 
         const matches = await bcrypt.compare(password, user.passwordHash);
         if (!matches) return null;
 
         return {
           id: user.id,
-          name: user.name,
+          name: employee?.name || user.name,
           email: user.email,
           role: user.role,
-          employeeId: null
+          employeeId: employee?.employeeId || null
         };
       }
     })

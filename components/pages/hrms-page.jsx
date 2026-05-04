@@ -18,37 +18,74 @@ import SuiteShell from "@/components/suite-shell";
 import StatusBadge from "@/components/status-badge";
 
 const employeeSeed = {
-  employeeId: "TLM-2201",
-  email: "anita.rao@talme.ai",
-  name: "Anita Rao",
-  department: "HR Operations",
-  location: "Bengaluru Hub",
-  manager: "Ritika Nair",
-  grade: "L2",
-  joiningDate: "2024-06-10",
-  salaryBand: "INR 8.4L",
-  bankStatus: "Pending",
-  status: "Probation",
+  employeeId: "",
+  email: "",
+  name: "",
+  department: "",
+  location: "",
+  manager: "",
+  grade: "",
+  joiningDate: "",
+  salaryBand: "",
+  bankStatus: "",
+  status: "",
   tone: "gold"
 };
 
+const employeeCreateSeed = {
+  employeeCode: "37",
+  employeeName: "",
+  displayName: "",
+  mobileCountry: "+91",
+  mobileNumber: "",
+  email: "",
+  gender: "Male",
+  punchInBranch: "",
+  masterBranch: "",
+  department: "",
+  designation: "",
+  employeeType: "",
+  doorLockPermission: "Yes",
+  salaryType: "Monthly",
+  salaryAmount: "0",
+  payrollGroup: "",
+  providentFund: "",
+  uan: "",
+  esic: "",
+  address: "",
+  bankName: "",
+  branchName: "",
+  accountNo: "",
+  ifscCode: "",
+  emergencyCountry: "+91",
+  emergencyNumber: "",
+  emergencyPersonName: "",
+  emergencyRelation: "",
+  emergencyAddress: "",
+  dateOfBirth: "",
+  dateOfJoining: "",
+  referenceName: "",
+  referenceCountry: "+91",
+  referenceNumber: ""
+};
+
 const leaveSeed = {
-  employee: "Anita Rao",
-  leaveType: "Casual Leave",
-  dates: "May 05 - May 06",
-  balance: "6 days",
-  approver: "Ritika Nair",
-  status: "Manager Review",
+  employee: "",
+  leaveType: "",
+  dates: "",
+  balance: "",
+  approver: "",
+  status: "",
   tone: "gold"
 };
 
 const attendanceSeed = {
-  employee: "Anita Rao",
-  present: 23,
-  leaves: 1,
-  overtime: 2,
-  shift: "General",
-  lockState: "Review",
+  employee: "",
+  present: "",
+  leaves: "",
+  overtime: "",
+  shift: "",
+  lockState: "",
   tone: "gold"
 };
 
@@ -63,7 +100,7 @@ export default function HrmsPageClient({ data }) {
   const [employeeEdit, setEmployeeEdit] = useState(null);
   const [leaveEdit, setLeaveEdit] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
-  const [employeeForm, setEmployeeForm] = useState(employeeSeed);
+  const [employeeForm, setEmployeeForm] = useState(employeeCreateSeed);
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
   const [attendanceForm, setAttendanceForm] = useState(attendanceSeed);
   const [isPending, startTransition] = useTransition();
@@ -99,7 +136,7 @@ export default function HrmsPageClient({ data }) {
             </tr>
           </thead>
           <tbody>
-            {employees.map((employee) => (
+            {employees.length ? employees.map((employee) => (
               <tr key={employee.id}>
                 <td>{employee.employeeId}</td>
                 <td>{employee.name}</td>
@@ -135,7 +172,11 @@ export default function HrmsPageClient({ data }) {
                   </div>
                 </td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan="7">No employees added yet.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </section>
@@ -269,32 +310,17 @@ export default function HrmsPageClient({ data }) {
         </article>
       </section>
 
-      <EntityModal
+      <EmployeeCreateDrawer
         open={employeeModalOpen}
-        title="Create Employee"
-        eyebrow="Employee Master"
         state={employeeForm}
         setState={setEmployeeForm}
-        fields={[
-          ["employeeId", "Employee ID"],
-          ["email", "Email"],
-          ["name", "Name"],
-          ["department", "Department"],
-          ["location", "Location"],
-          ["manager", "Manager"],
-          ["grade", "Grade"],
-          ["joiningDate", "Joining Date"],
-          ["salaryBand", "Salary Band"],
-          ["bankStatus", "Bank Status"],
-          ["status", "Status"],
-          ["tone", "Tone"]
-        ]}
         isPending={isPending}
         onClose={() => setEmployeeModalOpen(false)}
         onSubmit={() =>
           startTransition(async () => {
-            const created = await createEmployeeAction(employeeForm);
+            const created = await createEmployeeAction(toEmployeePayload(employeeForm));
             setEmployees((current) => [created, ...current]);
+            setEmployeeForm(employeeCreateSeed);
             setEmployeeModalOpen(false);
           })
         }
@@ -352,6 +378,7 @@ export default function HrmsPageClient({ data }) {
           startTransition(async () => {
             const created = await createLeaveRequestAction(leaveForm);
             setLeaveRequests((current) => [created, ...current]);
+            setLeaveForm(leaveSeed);
             setLeaveModalOpen(false);
           })
         }
@@ -404,6 +431,7 @@ export default function HrmsPageClient({ data }) {
           startTransition(async () => {
             const created = await createAttendanceRecordAction(attendanceForm);
             setAttendanceRecords((current) => [created, ...current]);
+            setAttendanceForm(attendanceSeed);
             setAttendanceModalOpen(false);
           })
         }
@@ -435,6 +463,249 @@ export default function HrmsPageClient({ data }) {
         }
       />
     </SuiteShell>
+  );
+}
+
+function toEmployeePayload(form) {
+  const employeeName = form.employeeName || form.displayName || `Employee ${form.employeeCode}`;
+  const location = form.punchInBranch || form.masterBranch || "Head Office";
+  const salaryBand = [form.salaryType, form.salaryAmount ? `INR ${form.salaryAmount}` : ""].filter(Boolean).join(" - ");
+
+  return {
+    employeeId: form.employeeCode || String(Date.now()),
+    email: form.email,
+    name: employeeName,
+    department: form.department || "General",
+    location,
+    manager: form.emergencyPersonName || "Not Assigned",
+    grade: form.designation || form.employeeType || "Employee",
+    joiningDate: form.dateOfJoining || new Date().toISOString().slice(0, 10),
+    salaryBand: salaryBand || "Monthly - INR 0",
+    bankStatus: form.bankName || form.accountNo ? "Bank Added" : "Pending",
+    status: "Active",
+    tone: "gold"
+  };
+}
+
+function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPending }) {
+  const [openSections, setOpenSections] = useState({
+    basic: true,
+    bank: false,
+    legal: false,
+    emergency: false,
+    personal: false,
+    reference: false
+  });
+
+  if (!open) return null;
+
+  const update = (key) => (event) => {
+    setState((current) => ({ ...current, [key]: event.target.value }));
+  };
+
+  const toggle = (key) => {
+    setOpenSections((current) => ({ ...current, [key]: !current[key] }));
+  };
+
+  const expandOnly = (key) => {
+    setOpenSections((current) => ({ ...current, [key]: true }));
+  };
+
+  return (
+    <div className="employee-drawer-shell" role="presentation">
+      <button className="employee-drawer-backdrop" onClick={onClose} type="button" aria-label="Close employee form" />
+      <aside className="employee-drawer" role="dialog" aria-modal="true" aria-labelledby="employee-drawer-title">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <header className="employee-drawer-titlebar">
+            <h2 id="employee-drawer-title">Add Details</h2>
+            <button className="employee-close-button" onClick={onClose} type="button" aria-label="Close">
+              x
+            </button>
+          </header>
+
+          <div className="employee-accordion">
+            <EmployeeSection title="Basic Details" open={openSections.basic} onToggle={() => toggle("basic")}>
+              <div className="pooja-form-grid">
+                <TextField label="Employee Code" required value={state.employeeCode} onChange={update("employeeCode")} />
+                <TextField label="Employee Name" required placeholder="Enter Employee Name" value={state.employeeName} onChange={update("employeeName")} />
+                <TextField label="Display Name" placeholder="Enter Display Name" value={state.displayName} onChange={update("displayName")} />
+                <PhoneField label="Mobile Number" required country={state.mobileCountry} number={state.mobileNumber} onCountryChange={update("mobileCountry")} onNumberChange={update("mobileNumber")} />
+                <TextField label="Email" type="email" placeholder="Enter Employee Email" value={state.email} onChange={update("email")} />
+                <RadioGroup label="Gender" required name="gender" value={state.gender} options={["Male", "Female", "Other"]} onChange={update("gender")} />
+                <SelectField label="Punch In Branch" required placeholder="Select Branches" value={state.punchInBranch} onChange={update("punchInBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
+                <SelectField label="Master Branch" required placeholder="Select Master Branches" value={state.masterBranch} onChange={update("masterBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
+                <SelectField label="Department" required placeholder="Select/Create Department" value={state.department} onChange={update("department")} options={["HR", "Operations", "Finance", "Sales", "Technology"]} />
+                <SelectField label="Designation" required placeholder="Select/Create Designation" value={state.designation} onChange={update("designation")} options={["Associate", "Executive", "Manager", "Lead", "Admin"]} />
+                <SelectField label="Employee Type" placeholder="Select Employee Type" value={state.employeeType} onChange={update("employeeType")} options={["Full Time", "Part Time", "Contract", "Intern"]} />
+                <RadioGroup label="Door Lock Permission" required name="door-lock" value={state.doorLockPermission} options={["Yes", "No"]} onChange={update("doorLockPermission")} />
+                <RadioGroup label="Salary Type" required name="salary-type" value={state.salaryType} options={["Monthly", "Hourly", "Compliance"]} onChange={update("salaryType")} />
+                <TextField label="" type="number" value={state.salaryAmount} onChange={update("salaryAmount")} />
+                <SelectField label="Payroll Group" required placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
+                <TextField label="Provident Fund (PF)" placeholder="Enter PF Account Number" value={state.providentFund} onChange={update("providentFund")} />
+                <TextField label="Universal Account Number (UAN)" placeholder="Enter 12-Digit UAN Number" value={state.uan} onChange={update("uan")} />
+                <TextField label="Employee State Insurance Corporation (ESIC)" placeholder="Enter 10-Digit ESIC IP Number" value={state.esic} onChange={update("esic")} />
+                <TextareaField label="Address" value={state.address} onChange={update("address")} />
+              </div>
+            </EmployeeSection>
+
+            <EmployeeSection title="Bank Details" open={openSections.bank} onToggle={() => toggle("bank")}>
+              <div className="pooja-form-grid">
+                <TextField label="Bank Name" placeholder="Enter Bank Name" value={state.bankName} onChange={update("bankName")} />
+                <TextField label="Branch Name" placeholder="Enter Branch Name" value={state.branchName} onChange={update("branchName")} />
+                <TextField label="Account No" placeholder="Enter Account No" value={state.accountNo} onChange={update("accountNo")} />
+                <TextField label="IFSC Code" placeholder="Enter IFSC Code" value={state.ifscCode} onChange={update("ifscCode")} />
+              </div>
+            </EmployeeSection>
+
+            <EmployeeSection title="Legal Documents" open={openSections.legal} onToggle={() => toggle("legal")}>
+              <div className="pooja-form-grid">
+                {["Aadhar Card", "Driving Licence", "PAN Card", "Passport Size Photo"].map((label) => (
+                  <FileField key={label} label={label} />
+                ))}
+              </div>
+            </EmployeeSection>
+
+            <EmployeeSection title="Emergency Contact Information" open={openSections.emergency} onToggle={() => toggle("emergency")}>
+              <div className="pooja-form-grid">
+                <PhoneField label="Contact Number" country={state.emergencyCountry} number={state.emergencyNumber} onCountryChange={update("emergencyCountry")} onNumberChange={update("emergencyNumber")} />
+                <TextField label="Contact Person Name" placeholder="Enter Person Name" value={state.emergencyPersonName} onChange={update("emergencyPersonName")} />
+                <TextField label="Relation with the Contact" placeholder="Enter Relation" value={state.emergencyRelation} onChange={update("emergencyRelation")} />
+                <TextareaField label="Address" value={state.emergencyAddress} onChange={update("emergencyAddress")} />
+              </div>
+            </EmployeeSection>
+
+            <EmployeeSection title="Personal Information" open={openSections.personal} onToggle={() => toggle("personal")}>
+              <div className="pooja-form-grid compact-grid">
+                <TextField label="Date of Birth" type="date" value={state.dateOfBirth} onChange={update("dateOfBirth")} />
+                <TextField label="Date of Joining" type="date" value={state.dateOfJoining} onChange={update("dateOfJoining")} />
+              </div>
+            </EmployeeSection>
+
+            <EmployeeSection title="Reference" open={openSections.reference} onToggle={() => toggle("reference")}>
+              <div className="pooja-form-grid">
+                <TextField label="Name" placeholder="Enter Name" value={state.referenceName} onChange={update("referenceName")} />
+                <PhoneField label="Contact Number" country={state.referenceCountry} number={state.referenceNumber} onCountryChange={update("referenceCountry")} onNumberChange={update("referenceNumber")} />
+                <button className="pooja-add-more" type="button" onClick={() => expandOnly("reference")}>
+                  Add More
+                </button>
+              </div>
+            </EmployeeSection>
+          </div>
+
+          <footer className="employee-drawer-actions">
+            <button className="pooja-outline-button" onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button className="pooja-secondary-button" type="button" onClick={() => setState(employeeCreateSeed)}>
+              Reset
+            </button>
+            <button className="pooja-primary-button" disabled={isPending} type="submit">
+              {isPending ? "Saving..." : "Save"}
+            </button>
+          </footer>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+function EmployeeSection({ title, open, onToggle, children }) {
+  return (
+    <section className={`employee-section ${open ? "open" : ""}`}>
+      <button className="employee-section-head" type="button" onClick={onToggle} aria-expanded={open}>
+        <span>{title}</span>
+        <span className="section-chevron" aria-hidden="true" />
+      </button>
+      {open ? <div className="employee-section-body">{children}</div> : null}
+    </section>
+  );
+}
+
+function RequiredMark({ required }) {
+  return required ? <em>*</em> : null;
+}
+
+function TextField({ label, required, ...props }) {
+  return (
+    <label className="pooja-field">
+      {label ? <span>{label} <RequiredMark required={required} /></span> : null}
+      <input required={required} {...props} />
+    </label>
+  );
+}
+
+function TextareaField({ label, required, ...props }) {
+  return (
+    <label className="pooja-field full-span">
+      <span>{label} <RequiredMark required={required} /></span>
+      <textarea required={required} {...props} />
+    </label>
+  );
+}
+
+function SelectField({ label, required, placeholder, value, onChange, options }) {
+  return (
+    <label className="pooja-field full-span">
+      <span>{label}<RequiredMark required={required} /></span>
+      <select required={required} value={value} onChange={onChange}>
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function RadioGroup({ label, required, name, value, options, onChange }) {
+  return (
+    <fieldset className="pooja-radio-group">
+      <legend>{label}<RequiredMark required={required} /></legend>
+      <div>
+        {options.map((option) => (
+          <label key={option}>
+            <input
+              checked={value === option}
+              name={name}
+              onChange={onChange}
+              type="radio"
+              value={option}
+            />
+            <span>{option}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function PhoneField({ label, required, country, number, onCountryChange, onNumberChange }) {
+  return (
+    <div className="pooja-field full-span">
+      <span>{label} <RequiredMark required={required} /></span>
+      <div className="pooja-phone-field">
+        <select aria-label={`${label} country code`} value={country} onChange={onCountryChange}>
+          <option value="+91">+91</option>
+          <option value="+1">+1</option>
+          <option value="+44">+44</option>
+        </select>
+        <input required={required} placeholder="Enter Number" value={number} onChange={onNumberChange} />
+      </div>
+    </div>
+  );
+}
+
+function FileField({ label }) {
+  return (
+    <label className="pooja-file-field full-span">
+      <span>{label}</span>
+      <input type="file" />
+    </label>
   );
 }
 

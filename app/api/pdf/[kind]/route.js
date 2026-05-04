@@ -4,7 +4,7 @@ function linesForKind(kind, searchParams) {
   if (kind === "payslip") {
     return [
       "Talme HRMS - Payslip",
-      `Employee: ${searchParams.get("employee") || "Manish Gupta"}`,
+      `Employee: ${searchParams.get("employee") || "Employee"}`,
       `Month: ${searchParams.get("month") || "April 2026"}`,
       `Annual Band: ${searchParams.get("band") || "INR 9.6L"}`,
       `Status: ${searchParams.get("status") || "Ready for download"}`
