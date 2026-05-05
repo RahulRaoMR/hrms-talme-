@@ -1,22 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 process.env.DATABASE_URL ||=
-  process.env.NODE_ENV === "production" ? "file:/tmp/talme-hrms/dev.db" : "file:./dev.db";
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL_NON_POOLING;
 
-if (process.env.DATABASE_URL.startsWith("file:")) {
-  const databasePath = process.env.DATABASE_URL.slice("file:".length).split("?")[0];
-
-  if (databasePath.startsWith("/")) {
-    mkdirSync(dirname(databasePath), { recursive: true });
-  } else if (!databasePath.startsWith(".")) {
-    mkdirSync(dirname(fileURLToPath(`file:///${databasePath}`)), { recursive: true });
-  }
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL is missing. Add your PostgreSQL connection string in Render environment variables.");
+  process.exit(1);
 }
 
-const result = spawnSync("npx", ["prisma", "db", "push", "--skip-generate"], {
+const result = spawnSync("npx", ["prisma", "migrate", "deploy"], {
   env: process.env,
   shell: true,
   stdio: "inherit"
