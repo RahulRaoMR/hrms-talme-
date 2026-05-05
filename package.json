@@ -7,7 +7,7 @@
     "postinstall": "node scripts/prisma-generate.mjs",
     "prebuild": "node scripts/prisma-generate.mjs",
     "build": "next build",
-    "start": "node server.js",
+    "start": "next start",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
