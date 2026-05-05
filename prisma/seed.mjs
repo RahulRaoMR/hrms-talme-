@@ -13,6 +13,7 @@ import {
 } from "../lib/demo-data.js";
 
 const prisma = new PrismaClient();
+const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 
 const candidates = [
   ["Neha Sharma", "HRBP", "Final Interview", "Direct ATS", "Pending", "gold"],
@@ -38,13 +39,14 @@ async function main() {
     where: { email: "director@talme.ai" },
     update: {
       active: true,
-      role: "Enterprise Admin"
+      role: "Enterprise Admin",
+      passwordHash: await bcrypt.hash(defaultAdminPassword, 10)
     },
     create: {
       name: "Talme Director",
       email: "director@talme.ai",
       role: "Enterprise Admin",
-      passwordHash: await bcrypt.hash("talme123", 10)
+      passwordHash: await bcrypt.hash(defaultAdminPassword, 10)
     }
   });
 
