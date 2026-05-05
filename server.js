@@ -12,12 +12,13 @@ if (!process.env.DATABASE_URL && databaseUrl) {
 }
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = process.env.HOSTNAME || "0.0.0.0";
+const hostname = "0.0.0.0";
 const port = parseInt(process.env.PORT, 10) || 3000;
 const databaseStatus = process.env.DATABASE_URL
   ? `${new URL(process.env.DATABASE_URL).protocol.replace(":", "")} configured`
   : "missing";
 
+console.log(`PORT: ${process.env.PORT || port}`);
 console.log(`DATABASE_URL status: ${databaseStatus}`);
 
 const app = next({ dev, hostname, port });
