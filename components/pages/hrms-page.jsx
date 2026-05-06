@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   createAttendanceRecordAction,
   createEmployeeAction,
@@ -33,7 +33,7 @@ const employeeSeed = {
 };
 
 const employeeCreateSeed = {
-  employeeCode: "37",
+  employeeCode: "TTPL-",
   employeeName: "",
   displayName: "",
   mobileCountry: "+91",
@@ -48,10 +48,12 @@ const employeeCreateSeed = {
   doorLockPermission: "Yes",
   salaryType: "Monthly",
   salaryAmount: "0",
+  approvedMonthlyCtc: "",
   payrollGroup: "",
   providentFund: "",
   uan: "",
   esic: "",
+  esiNumber: "",
   address: "",
   bankName: "",
   branchName: "",
@@ -94,16 +96,26 @@ export default function HrmsPageClient({ data }) {
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
   const [attendanceRecords, setAttendanceRecords] = useState(data?.attendanceRecords || []);
   const [documents] = useState(data?.documents || []);
+  const [salarySheet, setSalarySheet] = useState({ rows: [], generated: false, monthLabel: "" });
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [employeeEdit, setEmployeeEdit] = useState(null);
   const [leaveEdit, setLeaveEdit] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
-  const [employeeForm, setEmployeeForm] = useState(employeeCreateSeed);
+  const [employeeForm, setEmployeeForm] = useState({ ...employeeCreateSeed });
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
   const [attendanceForm, setAttendanceForm] = useState(attendanceSeed);
   const [isPending, startTransition] = useTransition();
+  const salarySheetTotal = salarySheet.rows.reduce((total, row) => total + row.totalPay, 0);
+
+  const generateSalarySheet = () => {
+    setSalarySheet(generateSalaryRows(employees, attendanceRecords));
+  };
+
+  const downloadSalarySheet = () => {
+    downloadCsv(`salary-sheet-${salarySheet.monthLabel || "current-month"}.csv`, salarySheet.rows);
+  };
 
   return (
     <SuiteShell
@@ -119,7 +131,14 @@ export default function HrmsPageClient({ data }) {
             <p className="eyebrow">Employee Master</p>
             <h3>Profiles, bank, salary, and lifecycle</h3>
           </div>
-          <button className="mini-button" onClick={() => setEmployeeModalOpen(true)} type="button">
+          <button
+            className="mini-button"
+            onClick={() => {
+              setEmployeeForm({ ...employeeCreateSeed });
+              setEmployeeModalOpen(true);
+            }}
+            type="button"
+          >
             Add Employee
           </button>
         </div>
@@ -289,7 +308,9 @@ export default function HrmsPageClient({ data }) {
           <div className="score-grid">
             <div className="score-card"><strong>1</strong><small>Lock attendance</small></div>
             <div className="score-card"><strong>2</strong><small>Apply leave and OT</small></div>
-            <div className="score-card"><strong>3</strong><small>Generate salary sheet</small></div>
+            <button className="score-card salary-generate-card" onClick={generateSalarySheet} type="button">
+              <strong>3</strong><small>Generate salary sheet</small>
+            </button>
           </div>
         </article>
         <article className="panel">
@@ -310,6 +331,64 @@ export default function HrmsPageClient({ data }) {
         </article>
       </section>
 
+      {salarySheet.generated ? (
+        <section className="page-section panel salary-sheet-panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Generated Salary Sheet</p>
+              <h3>{salarySheet.monthLabel}</h3>
+            </div>
+            {salarySheet.rows.length ? (
+              <button className="mini-button" onClick={downloadSalarySheet} type="button">
+                Download CSV
+              </button>
+            ) : null}
+          </div>
+          {salarySheet.rows.length ? (
+            <table className="data-table salary-sheet-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Salary CTC</th>
+                  <th>Net Pay</th>
+                  <th>Days</th>
+                  <th>Worked</th>
+                  <th>Paid Leave</th>
+                  <th>Salary Days</th>
+                  <th>LOP</th>
+                  <th>OT</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {salarySheet.rows.map((row) => (
+                  <tr key={row.employeeId}>
+                    <td>{row.name}</td>
+                    <td>{formatInr(row.monthlyCtc)}</td>
+                    <td>{formatInr(row.monthlyNetPay)}</td>
+                    <td>{row.monthDays}</td>
+                    <td>{row.presentDays}</td>
+                    <td>{row.paidLeaves}</td>
+                    <td>{formatNumber(row.salaryDays)}</td>
+                    <td>{formatNumber(row.lopDays)}</td>
+                    <td>{row.otHours}h / {formatInr(row.otAmount)}</td>
+                    <td><strong>{formatInr(row.totalPay)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="9">Total salary payable</td>
+                  <td><strong>{formatInr(salarySheetTotal)}</strong></td>
+                </tr>
+              </tfoot>
+            </table>
+          ) : (
+            <p className="empty-state">No salary rows generated. Add matching employees in Employee Master and Monthly Attendance first.</p>
+          )}
+        </section>
+      ) : null}
+
       <EmployeeCreateDrawer
         open={employeeModalOpen}
         state={employeeForm}
@@ -320,7 +399,7 @@ export default function HrmsPageClient({ data }) {
           startTransition(async () => {
             const created = await createEmployeeAction(toEmployeePayload(employeeForm));
             setEmployees((current) => [created, ...current]);
-            setEmployeeForm(employeeCreateSeed);
+            setEmployeeForm({ ...employeeCreateSeed });
             setEmployeeModalOpen(false);
           })
         }
@@ -469,7 +548,8 @@ export default function HrmsPageClient({ data }) {
 function toEmployeePayload(form) {
   const employeeName = form.employeeName || form.displayName || `Employee ${form.employeeCode}`;
   const location = form.punchInBranch || form.masterBranch || "Head Office";
-  const salaryBand = [form.salaryType, form.salaryAmount ? `INR ${form.salaryAmount}` : ""].filter(Boolean).join(" - ");
+  const monthlyCtc = form.approvedMonthlyCtc || form.salaryAmount;
+  const salaryBand = [form.salaryType, monthlyCtc ? `INR ${monthlyCtc}` : ""].filter(Boolean).join(" - ");
 
   return {
     employeeId: form.employeeCode || String(Date.now()),
@@ -487,6 +567,204 @@ function toEmployeePayload(form) {
   };
 }
 
+const inrFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0
+});
+
+function formatInr(value) {
+  return inrFormatter.format(Math.round(Number(value) || 0));
+}
+
+function formatNumber(value) {
+  return Number.isInteger(value) ? String(value) : Number(value || 0).toFixed(2);
+}
+
+function normalizeLookup(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function extractSalaryNumber(salaryBand) {
+  const normalized = String(salaryBand || "").toLowerCase();
+  const lpaMatch = normalized.match(/(\d+(?:\.\d+)?)\s*lpa/);
+
+  if (lpaMatch) {
+    return {
+      annualCtc: Number(lpaMatch[1]) * 100000
+    };
+  }
+
+  const amount = Number(normalized.replace(/,/g, "").match(/\d+(?:\.\d+)?/)?.[0] || 0);
+
+  if (!amount) {
+    return { annualCtc: 0 };
+  }
+
+  if (normalized.includes("annual") || normalized.includes("year") || normalized.includes("ctc")) {
+    return { annualCtc: amount };
+  }
+
+  if (normalized.includes("month")) {
+    return { annualCtc: amount * 12 };
+  }
+
+  return {
+    annualCtc: amount >= 100000 ? amount : amount * 12
+  };
+}
+
+function calculateMonthlyPayFromCtc(annualCtc) {
+  const monthlyCtc = (Number(annualCtc) || 0) / 12;
+  const basic = monthlyCtc * 0.5;
+  const employerPf = Math.min(basic, 15000) * 0.12;
+  const edli = basic <= 15000 ? basic * 0.005 : 75;
+  const epfAdmin = basic <= 15000 ? basic * 0.005 : 75;
+  const employerTotal = employerPf + edli + epfAdmin;
+  const grossPay = monthlyCtc - employerTotal;
+  const employeePf = employerPf;
+  const medicalInsurance = 500;
+  const professionalTax = grossPay >= 25000 ? 200 : 0;
+  const employeeTotal = employeePf + medicalInsurance + professionalTax;
+
+  return {
+    monthlyCtc,
+    monthlyNetPay: Math.max(0, grossPay - employeeTotal)
+  };
+}
+
+function countSundays(year, monthIndex) {
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  let sundays = 0;
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    if (new Date(year, monthIndex, day).getDay() === 0) {
+      sundays += 1;
+    }
+  }
+
+  return sundays;
+}
+
+function generateSalaryRows(employees, attendanceRecords) {
+  const today = new Date();
+  const monthDays = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const sundays = countSundays(today.getFullYear(), today.getMonth());
+  const monthLabel = today.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const attendanceByEmployee = new Map();
+
+  attendanceRecords.forEach((record) => {
+    attendanceByEmployee.set(normalizeLookup(record.employee), record);
+  });
+
+  const rows = employees
+    .map((employee) => {
+      const attendance =
+        attendanceByEmployee.get(normalizeLookup(employee.name)) ||
+        attendanceByEmployee.get(normalizeLookup(employee.employeeId));
+
+      if (!attendance) {
+        return null;
+      }
+
+      const { annualCtc } = extractSalaryNumber(employee.salaryBand);
+      const { monthlyCtc, monthlyNetPay } = calculateMonthlyPayFromCtc(annualCtc);
+      const presentDays = Number(attendance.present) || 0;
+      const paidLeaves = Number(attendance.leaves) || 0;
+      const holidays = 0;
+      const salaryDays = presentDays + sundays + holidays + paidLeaves;
+      const perDayCost = monthDays ? monthlyNetPay / monthDays : 0;
+      const perHourCost = perDayCost / 8.5;
+      const otHours = Number(attendance.overtime) || 0;
+      const otAmount = perHourCost * 1.5 * otHours;
+      const salaryExcludingOt = perDayCost * salaryDays;
+      const totalPay = salaryExcludingOt + otAmount;
+
+      return {
+        employeeId: employee.employeeId || employee.id,
+        name: employee.name,
+        monthlyCtc,
+        monthlyNetPay,
+        month: monthLabel,
+        monthDays,
+        perDayCost,
+        perHourCost,
+        presentDays,
+        sundays,
+        holidays,
+        paidLeaves,
+        salaryDays,
+        salaryExcludingOt,
+        otHours,
+        otAmount,
+        otApplicability: "1.5x",
+        totalPay,
+        lopDays: monthDays - salaryDays
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    rows,
+    generated: true,
+    monthLabel
+  };
+}
+
+function downloadCsv(fileName, rows) {
+  const headers = [
+    "Name",
+    "Salary CTC",
+    "Salary Net Pay",
+    "Month",
+    "No. Of Days",
+    "Per Day Cost",
+    "Per Hour Cost",
+    "No of days worked",
+    "Sunday",
+    "Holidays",
+    "Paid leaves",
+    "Total Working days for salary",
+    "Salary Excluding OT",
+    "OT Hours",
+    "OT Amount",
+    "OT Applicability",
+    "Total",
+    "LOP"
+  ];
+  const csvRows = rows.map((row) => [
+    row.name,
+    Math.round(row.monthlyCtc),
+    Math.round(row.monthlyNetPay),
+    row.month,
+    row.monthDays,
+    row.perDayCost.toFixed(2),
+    row.perHourCost.toFixed(2),
+    row.presentDays,
+    row.sundays,
+    row.holidays,
+    row.paidLeaves,
+    row.salaryDays,
+    row.salaryExcludingOt.toFixed(2),
+    row.otHours,
+    row.otAmount.toFixed(2),
+    row.otApplicability,
+    row.totalPay.toFixed(2),
+    row.lopDays
+  ]);
+  const csv = [headers, ...csvRows]
+    .map((cells) => cells.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPending }) {
   const [openSections, setOpenSections] = useState({
     basic: true,
@@ -496,6 +774,12 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
     personal: false,
     reference: false
   });
+
+  useEffect(() => {
+    if (open && state.employeeCode === "37") {
+      setState((current) => ({ ...current, employeeCode: employeeCreateSeed.employeeCode }));
+    }
+  }, [open, setState, state.employeeCode]);
 
   if (!open) return null;
 
@@ -545,10 +829,12 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
                 <RadioGroup label="Door Lock Permission" required name="door-lock" value={state.doorLockPermission} options={["Yes", "No"]} onChange={update("doorLockPermission")} />
                 <RadioGroup label="Salary Type" required name="salary-type" value={state.salaryType} options={["Monthly", "Hourly", "Compliance"]} onChange={update("salaryType")} />
                 <TextField label="" type="number" value={state.salaryAmount} onChange={update("salaryAmount")} />
+                <TextField label="Approved Monthly CTC" type="number" placeholder="Enter Approved Monthly CTC" value={state.approvedMonthlyCtc} onChange={update("approvedMonthlyCtc")} />
                 <SelectField label="Payroll Group" required placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
                 <TextField label="Provident Fund (PF)" placeholder="Enter PF Account Number" value={state.providentFund} onChange={update("providentFund")} />
                 <TextField label="Universal Account Number (UAN)" placeholder="Enter 12-Digit UAN Number" value={state.uan} onChange={update("uan")} />
                 <TextField label="Employee State Insurance Corporation (ESIC)" placeholder="Enter 10-Digit ESIC IP Number" value={state.esic} onChange={update("esic")} />
+                <TextField label="ESI Number" placeholder="Enter ESI Number" value={state.esiNumber} onChange={update("esiNumber")} />
                 <TextareaField label="Address" value={state.address} onChange={update("address")} />
               </div>
             </EmployeeSection>
@@ -601,7 +887,7 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
             <button className="pooja-outline-button" onClick={onClose} type="button">
               Cancel
             </button>
-            <button className="pooja-secondary-button" type="button" onClick={() => setState(employeeCreateSeed)}>
+            <button className="pooja-secondary-button" type="button" onClick={() => setState({ ...employeeCreateSeed })}>
               Reset
             </button>
             <button className="pooja-primary-button" disabled={isPending} type="submit">

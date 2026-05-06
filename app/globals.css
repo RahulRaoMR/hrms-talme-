@@ -646,6 +646,38 @@ small {
   min-width: 0;
 }
 
+.salary-generate-card {
+  width: 100%;
+  color: inherit;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.salary-generate-card:hover {
+  border-color: rgba(214, 176, 106, 0.55);
+  background: rgba(214, 176, 106, 0.08);
+}
+
+.salary-sheet-panel {
+  overflow-x: auto;
+}
+
+.salary-sheet-table {
+  min-width: 1120px;
+}
+
+.salary-sheet-table tfoot td {
+  border-bottom: 0;
+  color: var(--gold-2);
+}
+
+.empty-state {
+  color: var(--muted);
+  margin-top: 12px;
+}
+
 .flow-card strong,
 .flow-card small {
   display: block;
