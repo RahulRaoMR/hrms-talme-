@@ -30,6 +30,7 @@ export default async function EmployeeDetailPage({ params }) {
         ["Grade", employee.grade],
         ["Joining Date", employee.joiningDate],
         ["Salary Band", employee.salaryBand],
+        ["Salary Net Pay", employee.salaryNetPay ? `INR ${Math.round(employee.salaryNetPay).toLocaleString("en-IN")}` : "Not added"],
         ["Bank Status", employee.bankStatus],
         ["Status", employee.status]
       ]}

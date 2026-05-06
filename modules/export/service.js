@@ -5,7 +5,7 @@ import { ApiRouteError } from "@/lib/api-route-factory";
 const exporters = {
   employees: {
     fileName: "talme-employees.csv",
-    headers: ["Employee ID", "Name", "Department", "Location", "Manager", "Grade", "Salary Band", "Status"],
+    headers: ["Employee ID", "Name", "Department", "Location", "Manager", "Grade", "Salary Band", "Salary Net Pay", "Status"],
     map: (item) => [
       item.employeeId,
       item.name,
@@ -14,6 +14,7 @@ const exporters = {
       item.manager,
       item.grade,
       item.salaryBand,
+      item.salaryNetPay,
       item.status
     ],
     load: () => prisma.employee.findMany({ orderBy: { createdAt: "desc" } })

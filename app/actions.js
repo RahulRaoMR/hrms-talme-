@@ -429,6 +429,7 @@ export async function createEmployeeAction(payload) {
       grade: payload.grade,
       joiningDate: payload.joiningDate,
       salaryBand: payload.salaryBand,
+      salaryNetPay: Number(payload.salaryNetPay) || 0,
       bankStatus: payload.bankStatus,
       status: payload.status,
       tone: payload.tone || "gold"
@@ -454,6 +455,7 @@ export async function updateEmployeeAction(id, payload) {
       grade: payload.grade,
       joiningDate: payload.joiningDate,
       salaryBand: payload.salaryBand,
+      salaryNetPay: Number(payload.salaryNetPay) || 0,
       bankStatus: payload.bankStatus,
       status: payload.status,
       tone: payload.tone
@@ -529,11 +531,18 @@ export async function createAttendanceRecordAction(payload) {
   const attendance = await prisma.attendanceRecord.create({
     data: {
       employee: payload.employee,
+      salaryNetPay: Number(payload.salaryNetPay) || 0,
+      month: payload.month || "",
+      monthDays: Number(payload.monthDays) || 0,
+      sundays: Number(payload.sundays) || 0,
+      holidays: Number(payload.holidays) || 0,
+      paidLeaves: Number(payload.paidLeaves) || 0,
+      otHours: Number(payload.otHours) || 0,
       present: Number(payload.present),
-      leaves: Number(payload.leaves),
-      overtime: Number(payload.overtime),
-      shift: payload.shift,
-      lockState: payload.lockState,
+      leaves: Number(payload.leaves ?? payload.paidLeaves) || 0,
+      overtime: Number(payload.overtime ?? payload.otHours) || 0,
+      shift: payload.shift || "Salary Net Pay",
+      lockState: payload.lockState || "Salary Ready",
       tone: payload.tone || "gold"
     }
   });
@@ -548,12 +557,19 @@ export async function updateAttendanceRecordAction(id, payload) {
     where: { id },
     data: {
       employee: payload.employee,
+      salaryNetPay: Number(payload.salaryNetPay) || 0,
+      month: payload.month || "",
+      monthDays: Number(payload.monthDays) || 0,
+      sundays: Number(payload.sundays) || 0,
+      holidays: Number(payload.holidays) || 0,
+      paidLeaves: Number(payload.paidLeaves) || 0,
+      otHours: Number(payload.otHours) || 0,
       present: Number(payload.present),
-      leaves: Number(payload.leaves),
-      overtime: Number(payload.overtime),
-      shift: payload.shift,
-      lockState: payload.lockState,
-      tone: payload.tone
+      leaves: Number(payload.leaves ?? payload.paidLeaves) || 0,
+      overtime: Number(payload.overtime ?? payload.otHours) || 0,
+      shift: payload.shift || "Salary Net Pay",
+      lockState: payload.lockState || "Salary Ready",
+      tone: payload.tone || "gold"
     }
   });
 

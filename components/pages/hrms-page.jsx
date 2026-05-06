@@ -27,6 +27,7 @@ const employeeSeed = {
   grade: "",
   joiningDate: "",
   salaryBand: "",
+  salaryNetPay: "",
   bankStatus: "",
   status: "",
   tone: "gold"
@@ -49,6 +50,7 @@ const employeeCreateSeed = {
   salaryType: "Monthly",
   salaryAmount: "0",
   approvedMonthlyCtc: "",
+  salaryNetPay: "",
   payrollGroup: "",
   providentFund: "",
   uan: "",
@@ -83,11 +85,18 @@ const leaveSeed = {
 
 const attendanceSeed = {
   employee: "",
+  salaryNetPay: "",
+  month: getMonthInputValue(new Date()),
+  monthDays: "",
   present: "",
-  leaves: "",
-  overtime: "",
-  shift: "",
-  lockState: "",
+  sundays: "",
+  holidays: "",
+  paidLeaves: "",
+  otHours: "",
+  leaves: "0",
+  overtime: "0",
+  shift: "Salary Net Pay",
+  lockState: "Salary Ready",
   tone: "gold"
 };
 
@@ -215,11 +224,14 @@ export default function HrmsPageClient({ data }) {
             <thead>
               <tr>
                 <th>Employee</th>
-                <th>Present</th>
-                <th>Leaves</th>
-                <th>OT</th>
-                <th>Shift</th>
-                <th>Status</th>
+                <th>Salary Net Pay</th>
+                <th>Month</th>
+                <th>Days Worked</th>
+                <th>Sunday</th>
+                <th>Holidays</th>
+                <th>Paid Leave</th>
+                <th>OT Hours</th>
+                <th>Total</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -227,11 +239,17 @@ export default function HrmsPageClient({ data }) {
               {attendanceRecords.map((record) => (
                 <tr key={record.id}>
                   <td>{record.employee}</td>
+                  <td>{formatInr(record.salaryNetPay || findEmployeeNetPay(record.employee, employees))}</td>
+                  <td>{formatMonthLabel(record.month)}</td>
                   <td>{record.present}</td>
-                  <td>{record.leaves}</td>
-                  <td>{record.overtime}</td>
-                  <td>{record.shift}</td>
-                  <td><StatusBadge tone={record.tone}>{record.lockState}</StatusBadge></td>
+                  <td>{record.sundays || calculateMonthMeta(record.month).sundays}</td>
+                  <td>{record.holidays || 0}</td>
+                  <td>{record.paidLeaves ?? record.leaves}</td>
+                  <td>{record.otHours ?? record.overtime}</td>
+                  <td><strong>{formatInr(calculateAttendancePay({
+                    ...record,
+                    salaryNetPay: record.salaryNetPay || findEmployeeNetPay(record.employee, employees)
+                  }).totalPay)}</strong></td>
                   <td>
                     <div className="row-actions">
                       <button className="mini-button" onClick={() => setAttendanceEdit(record)} type="button">
@@ -421,6 +439,7 @@ export default function HrmsPageClient({ data }) {
           ["grade", "Grade"],
           ["joiningDate", "Joining Date"],
           ["salaryBand", "Salary Band"],
+          ["salaryNetPay", "Salary Net Pay"],
           ["bankStatus", "Bank Status"],
           ["status", "Status"],
           ["tone", "Tone"]
@@ -489,53 +508,37 @@ export default function HrmsPageClient({ data }) {
         }
       />
 
-      <EntityModal
+      <AttendanceModal
         open={attendanceModalOpen}
         title="Create Attendance Record"
         eyebrow="Attendance & T&A"
         state={attendanceForm}
         setState={setAttendanceForm}
-        fields={[
-          ["employee", "Employee"],
-          ["present", "Present Days"],
-          ["leaves", "Leaves"],
-          ["overtime", "Overtime"],
-          ["shift", "Shift"],
-          ["lockState", "Status"],
-          ["tone", "Tone"]
-        ]}
+        employees={employees}
         isPending={isPending}
         onClose={() => setAttendanceModalOpen(false)}
         onSubmit={() =>
           startTransition(async () => {
-            const created = await createAttendanceRecordAction(attendanceForm);
+            const created = await createAttendanceRecordAction(normalizeAttendancePayload(attendanceForm));
             setAttendanceRecords((current) => [created, ...current]);
-            setAttendanceForm(attendanceSeed);
+            setAttendanceForm({ ...attendanceSeed, month: getMonthInputValue(new Date()) });
             setAttendanceModalOpen(false);
           })
         }
       />
 
-      <EntityModal
+      <AttendanceModal
         open={!!attendanceEdit}
         title="Update Attendance Record"
         eyebrow="Attendance & T&A"
         state={attendanceEdit}
         setState={setAttendanceEdit}
-        fields={[
-          ["employee", "Employee"],
-          ["present", "Present Days"],
-          ["leaves", "Leaves"],
-          ["overtime", "Overtime"],
-          ["shift", "Shift"],
-          ["lockState", "Status"],
-          ["tone", "Tone"]
-        ]}
+        employees={employees}
         isPending={isPending}
         onClose={() => setAttendanceEdit(null)}
         onSubmit={() =>
           startTransition(async () => {
-            const updated = await updateAttendanceRecordAction(attendanceEdit.id, attendanceEdit);
+            const updated = await updateAttendanceRecordAction(attendanceEdit.id, normalizeAttendancePayload(attendanceEdit));
             setAttendanceRecords((current) => current.map((item) => (item.id === updated.id ? updated : item)));
             setAttendanceEdit(null);
           })
@@ -561,6 +564,7 @@ function toEmployeePayload(form) {
     grade: form.designation || form.employeeType || "Employee",
     joiningDate: form.dateOfJoining || new Date().toISOString().slice(0, 10),
     salaryBand: salaryBand || "Monthly - INR 0",
+    salaryNetPay: Number(form.salaryNetPay) || 0,
     bankStatus: form.bankName || form.accountNo ? "Bank Added" : "Pending",
     status: "Active",
     tone: "gold"
@@ -583,6 +587,112 @@ function formatNumber(value) {
 
 function normalizeLookup(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function getMonthInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function parseMonthValue(value) {
+  const [yearValue, monthValue] = String(value || getMonthInputValue(new Date())).split("-");
+  const year = Number(yearValue) || new Date().getFullYear();
+  const monthIndex = Math.max(0, Math.min(11, (Number(monthValue) || new Date().getMonth() + 1) - 1));
+
+  return { year, monthIndex };
+}
+
+function calculateMonthMeta(value) {
+  const { year, monthIndex } = parseMonthValue(value);
+  const monthDays = new Date(year, monthIndex + 1, 0).getDate();
+
+  return {
+    monthDays,
+    sundays: countSundays(year, monthIndex),
+    label: new Date(year, monthIndex, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+  };
+}
+
+function formatMonthLabel(value) {
+  return calculateMonthMeta(value).label;
+}
+
+function findEmployeeByAttendanceName(employeeName, employees) {
+  const normalizedName = normalizeLookup(employeeName);
+
+  return employees.find((employee) =>
+    normalizeLookup(employee.name) === normalizedName ||
+    normalizeLookup(employee.employeeId) === normalizedName
+  );
+}
+
+function findEmployeeNetPay(employeeName, employees) {
+  const employee = findEmployeeByAttendanceName(employeeName, employees);
+
+  if (!employee) {
+    return 0;
+  }
+
+  if (Number(employee.salaryNetPay)) {
+    return Number(employee.salaryNetPay);
+  }
+
+  return calculateMonthlyPayFromCtc(extractSalaryNumber(employee.salaryBand).annualCtc).monthlyNetPay;
+}
+
+function normalizeAttendancePayload(payload) {
+  const meta = calculateMonthMeta(payload.month);
+  const paidLeaves = Number(payload.paidLeaves ?? payload.leaves) || 0;
+  const otHours = Number(payload.otHours ?? payload.overtime) || 0;
+
+  return {
+    ...payload,
+    month: payload.month || getMonthInputValue(new Date()),
+    monthDays: meta.monthDays,
+    sundays: meta.sundays,
+    holidays: Number(payload.holidays) || 0,
+    paidLeaves,
+    otHours,
+    leaves: paidLeaves,
+    overtime: otHours,
+    shift: "Salary Net Pay",
+    lockState: "Salary Ready",
+    tone: "gold"
+  };
+}
+
+function calculateAttendancePay(attendance) {
+  const meta = calculateMonthMeta(attendance.month);
+  const monthDays = Number(attendance.monthDays) || meta.monthDays;
+  const salaryNetPay = Number(attendance.salaryNetPay) || 0;
+  const presentDays = Number(attendance.present) || 0;
+  const sundays = Number(attendance.sundays) || meta.sundays;
+  const holidays = Number(attendance.holidays) || 0;
+  const paidLeaves = Number(attendance.paidLeaves ?? attendance.leaves) || 0;
+  const otHours = Number(attendance.otHours ?? attendance.overtime) || 0;
+  const salaryDays = presentDays + sundays + holidays + paidLeaves;
+  const perDayCost = monthDays ? salaryNetPay / monthDays : 0;
+  const perHourCost = perDayCost / 8.5;
+  const salaryExcludingOt = perDayCost * salaryDays;
+  const otAmount = perHourCost * 1.5 * otHours;
+
+  return {
+    salaryNetPay,
+    monthDays,
+    presentDays,
+    sundays,
+    holidays,
+    paidLeaves,
+    otHours,
+    salaryDays,
+    perDayCost,
+    perHourCost,
+    salaryExcludingOt,
+    otAmount,
+    totalPay: salaryExcludingOt + otAmount,
+    lopDays: Math.max(0, monthDays - salaryDays)
+  };
 }
 
 function extractSalaryNumber(salaryBand) {
@@ -648,9 +758,8 @@ function countSundays(year, monthIndex) {
 
 function generateSalaryRows(employees, attendanceRecords) {
   const today = new Date();
-  const monthDays = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const sundays = countSundays(today.getFullYear(), today.getMonth());
-  const monthLabel = today.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const defaultMonth = getMonthInputValue(today);
+  const defaultMonthLabel = calculateMonthMeta(defaultMonth).label;
   const attendanceByEmployee = new Map();
 
   attendanceRecords.forEach((record) => {
@@ -669,37 +778,35 @@ function generateSalaryRows(employees, attendanceRecords) {
 
       const { annualCtc } = extractSalaryNumber(employee.salaryBand);
       const { monthlyCtc, monthlyNetPay } = calculateMonthlyPayFromCtc(annualCtc);
-      const presentDays = Number(attendance.present) || 0;
-      const paidLeaves = Number(attendance.leaves) || 0;
-      const holidays = 0;
-      const salaryDays = presentDays + sundays + holidays + paidLeaves;
-      const perDayCost = monthDays ? monthlyNetPay / monthDays : 0;
-      const perHourCost = perDayCost / 8.5;
-      const otHours = Number(attendance.overtime) || 0;
-      const otAmount = perHourCost * 1.5 * otHours;
-      const salaryExcludingOt = perDayCost * salaryDays;
-      const totalPay = salaryExcludingOt + otAmount;
+      const salaryNetPay = Number(attendance.salaryNetPay) || Number(employee.salaryNetPay) || monthlyNetPay;
+      const month = attendance.month || defaultMonth;
+      const monthLabel = calculateMonthMeta(month).label;
+      const calculated = calculateAttendancePay({
+        ...attendance,
+        month,
+        salaryNetPay
+      });
 
       return {
         employeeId: employee.employeeId || employee.id,
         name: employee.name,
         monthlyCtc,
-        monthlyNetPay,
+        monthlyNetPay: salaryNetPay,
         month: monthLabel,
-        monthDays,
-        perDayCost,
-        perHourCost,
-        presentDays,
-        sundays,
-        holidays,
-        paidLeaves,
-        salaryDays,
-        salaryExcludingOt,
-        otHours,
-        otAmount,
+        monthDays: calculated.monthDays,
+        perDayCost: calculated.perDayCost,
+        perHourCost: calculated.perHourCost,
+        presentDays: calculated.presentDays,
+        sundays: calculated.sundays,
+        holidays: calculated.holidays,
+        paidLeaves: calculated.paidLeaves,
+        salaryDays: calculated.salaryDays,
+        salaryExcludingOt: calculated.salaryExcludingOt,
+        otHours: calculated.otHours,
+        otAmount: calculated.otAmount,
         otApplicability: "1.5x",
-        totalPay,
-        lopDays: monthDays - salaryDays
+        totalPay: calculated.totalPay,
+        lopDays: calculated.lopDays
       };
     })
     .filter(Boolean);
@@ -707,7 +814,7 @@ function generateSalaryRows(employees, attendanceRecords) {
   return {
     rows,
     generated: true,
-    monthLabel
+    monthLabel: rows[0]?.month || defaultMonthLabel
   };
 }
 
@@ -830,6 +937,7 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
                 <RadioGroup label="Salary Type" required name="salary-type" value={state.salaryType} options={["Monthly", "Hourly", "Compliance"]} onChange={update("salaryType")} />
                 <TextField label="" type="number" value={state.salaryAmount} onChange={update("salaryAmount")} />
                 <TextField label="Approved Monthly CTC" type="number" placeholder="Enter Approved Monthly CTC" value={state.approvedMonthlyCtc} onChange={update("approvedMonthlyCtc")} />
+                <TextField label="Salary Net Pay" type="number" placeholder="Enter Monthly Net Pay" value={state.salaryNetPay} onChange={update("salaryNetPay")} />
                 <SelectField label="Payroll Group" required placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
                 <TextField label="Provident Fund (PF)" placeholder="Enter PF Account Number" value={state.providentFund} onChange={update("providentFund")} />
                 <TextField label="Universal Account Number (UAN)" placeholder="Enter 12-Digit UAN Number" value={state.uan} onChange={update("uan")} />
@@ -1028,6 +1136,141 @@ function EntityModal({ open, title, eyebrow, state, setState, onSubmit, onClose,
           </div>
         </form>
       ) : null}
+    </Modal>
+  );
+}
+
+function AttendanceModal({ open, title, eyebrow, state, setState, onSubmit, onClose, isPending, employees }) {
+  useEffect(() => {
+    if (!open || !state) return;
+
+    const meta = calculateMonthMeta(state.month);
+    const employeeNetPay = findEmployeeNetPay(state.employee, employees);
+
+    setState((current) => {
+      if (!current) return current;
+
+      const nextSalaryNetPay = current.salaryNetPay || (employeeNetPay ? String(Math.round(employeeNetPay)) : "");
+
+      if (
+        String(current.monthDays || "") === String(meta.monthDays) &&
+        String(current.sundays || "") === String(meta.sundays) &&
+        String(current.salaryNetPay || "") === String(nextSalaryNetPay)
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        monthDays: meta.monthDays,
+        sundays: meta.sundays,
+        salaryNetPay: nextSalaryNetPay
+      };
+    });
+  }, [employees, open, setState, state]);
+
+  if (!open || !state) return null;
+
+  const update = (key) => (event) => {
+    const value = event.target.value;
+
+    setState((current) => {
+      const next = { ...current, [key]: value };
+
+      if (key === "employee") {
+        const netPay = findEmployeeNetPay(value, employees);
+        if (netPay) {
+          next.salaryNetPay = String(Math.round(netPay));
+        }
+      }
+
+      if (key === "month") {
+        const meta = calculateMonthMeta(value);
+        next.monthDays = meta.monthDays;
+        next.sundays = meta.sundays;
+      }
+
+      return next;
+    });
+  };
+
+  const normalized = normalizeAttendancePayload(state);
+  const calculated = calculateAttendancePay(normalized);
+
+  return (
+    <Modal open={open} eyebrow={eyebrow} title={title} onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <div className="form-grid">
+          <label>
+            <span>Employee</span>
+            <input list="attendance-employees" value={state.employee ?? ""} onChange={update("employee")} />
+            <datalist id="attendance-employees">
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.name}>
+                  {employee.employeeId}
+                </option>
+              ))}
+            </datalist>
+          </label>
+          <label>
+            <span>Salary Net Pay</span>
+            <input type="number" min="0" step="0.01" value={state.salaryNetPay ?? ""} onChange={update("salaryNetPay")} />
+          </label>
+          <label>
+            <span>Month</span>
+            <input type="month" value={state.month || getMonthInputValue(new Date())} onChange={update("month")} />
+          </label>
+          <label>
+            <span>No. Of Days</span>
+            <input readOnly value={calculated.monthDays} />
+          </label>
+          <label>
+            <span>No of days worked</span>
+            <input type="number" min="0" step="1" value={state.present ?? ""} onChange={update("present")} />
+          </label>
+          <label>
+            <span>Sunday</span>
+            <input readOnly value={calculated.sundays} />
+          </label>
+          <label>
+            <span>Holidays</span>
+            <input type="number" min="0" step="1" value={state.holidays ?? ""} onChange={update("holidays")} />
+          </label>
+          <label>
+            <span>Paid leaves</span>
+            <input type="number" min="0" step="1" value={state.paidLeaves ?? state.leaves ?? ""} onChange={update("paidLeaves")} />
+          </label>
+          <label>
+            <span>OT Hours</span>
+            <input type="number" min="0" step="0.5" value={state.otHours ?? state.overtime ?? ""} onChange={update("otHours")} />
+          </label>
+          <label>
+            <span>Total Working days for salary</span>
+            <input readOnly value={formatNumber(calculated.salaryDays)} />
+          </label>
+          <label>
+            <span>Salary Excluding OT</span>
+            <input readOnly value={Math.round(calculated.salaryExcludingOt)} />
+          </label>
+          <label>
+            <span>Total</span>
+            <input readOnly value={Math.round(calculated.totalPay)} />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={onClose} type="button">
+            Cancel
+          </button>
+          <button className="primary-button" disabled={isPending} type="submit">
+            {isPending ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }

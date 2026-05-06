@@ -166,6 +166,7 @@ model Employee {
   grade       String
   joiningDate String
   salaryBand  String
+  salaryNetPay Float    @default(0)
   bankStatus  String
   status      String
   tone        String
@@ -189,6 +190,13 @@ model LeaveRequest {
 model AttendanceRecord {
   id        String   @id @default(cuid())
   employee  String
+  salaryNetPay Float    @default(0)
+  month     String   @default("")
+  monthDays Int      @default(0)
+  sundays   Int      @default(0)
+  holidays  Int      @default(0)
+  paidLeaves Int     @default(0)
+  otHours   Float    @default(0)
   present   Int
   leaves    Int
   overtime  Int
