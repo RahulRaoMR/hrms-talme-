@@ -8,6 +8,7 @@
     "prebuild": "node scripts/prisma-generate.mjs",
     "build": "next build",
     "start": "next start",
+    "db:deploy": "node scripts/prepare-database.mjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",

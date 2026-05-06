@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { deliverNotification } from "@/lib/notify";
 import { revalidateSuitePaths, writeAuditLog } from "@/lib/backend-core";
-import { prisma } from "@/lib/prisma";
+import { hasPostgresDatabase, prisma } from "@/lib/prisma";
 import { ensureSeedData } from "@/lib/seed-db";
 import { deleteUploadedFile } from "@/lib/storage";
 import {
@@ -418,6 +418,10 @@ export async function deleteUserAction(id) {
 }
 
 export async function createEmployeeAction(payload) {
+  if (!hasPostgresDatabase) {
+    throw new Error("DATABASE_URL must be a PostgreSQL URL before employee details can be saved.");
+  }
+
   const employee = await prisma.employee.create({
     data: {
       employeeId: payload.employeeId,
@@ -528,6 +532,10 @@ export async function deleteLeaveRequestAction(id) {
 }
 
 export async function createAttendanceRecordAction(payload) {
+  if (!hasPostgresDatabase) {
+    throw new Error("DATABASE_URL must be a PostgreSQL URL before attendance details can be saved.");
+  }
+
   const attendance = await prisma.attendanceRecord.create({
     data: {
       employee: payload.employee,
