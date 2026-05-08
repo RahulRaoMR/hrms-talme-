@@ -5,7 +5,7 @@ import {
   createApprovalItemAction,
   deleteApprovalItemAction,
   updateApprovalItemAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";

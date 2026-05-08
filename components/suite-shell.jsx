@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { signOut, useSession } from "next-auth/react";
 import { navItems } from "@/lib/demo-data";
 import { canAccess, resolveRole } from "@/lib/permissions";
 
@@ -20,8 +19,7 @@ export default function SuiteShell({
   const router = useRouter();
   const [focusMode, setFocusMode] = useState(false);
   const [lightMode, setLightMode] = useState(false);
-  const { data: session, status } = useSession();
-  const role = resolveRole(session?.user?.role) || "Enterprise Admin";
+  const role = resolveRole("Enterprise Admin") || "Enterprise Admin";
   const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
@@ -53,17 +51,6 @@ export default function SuiteShell({
     window.addEventListener("popstate", sendBackToHrms);
     return () => window.removeEventListener("popstate", sendBackToHrms);
   }, [pathname, router]);
-
-  if (status === "loading") {
-    return (
-      <div className="app-loading">
-        <div className="loading-card">
-          <p className="eyebrow">Talme Suite</p>
-          <h2>Preparing Workspace</h2>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="app-shell">
@@ -104,11 +91,9 @@ export default function SuiteShell({
           <div className="workspace-head">
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
-            {session?.user ? (
-              <p className="session-note">
-                Signed in as <strong>{role || session.user.role}</strong> - {session.user.email}
-              </p>
-            ) : null}
+            <p className="session-note">
+              Frontend API: <strong>{process.env.NEXT_PUBLIC_API_URL || "local"}</strong>
+            </p>
           </div>
           <div className="topbar-actions">
             <div className="search-pill">Global Search</div>
@@ -139,7 +124,7 @@ export default function SuiteShell({
             </button>
             <button
               className="ghost-button"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => router.push("/login")}
               type="button"
             >
               Log Out

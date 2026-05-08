@@ -10,7 +10,7 @@ import {
   importInvoicesAction,
   releasePayrollAction,
   updateInvoiceAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import BarChart from "@/components/bar-chart";
 import CsvActions from "@/components/csv-actions";
 import FilterChips from "@/components/filter-chips";

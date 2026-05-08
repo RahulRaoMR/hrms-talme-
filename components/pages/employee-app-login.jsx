@@ -1,6 +1,5 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -34,17 +33,6 @@ export default function EmployeeAppLogin() {
     setError("");
 
     try {
-      const result = await signIn("credentials", {
-        email: formState.employeeId,
-        password: formState.password,
-        role: "employee",
-        redirect: false
-      });
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
       router.push("/employee-app");
       router.refresh();
     } catch {

@@ -9,6 +9,7 @@ import DashboardHero from "@/components/features/dashboard/dashboard-hero";
 import DashboardSummary from "@/components/features/dashboard/dashboard-summary";
 import RunboardPanel from "@/components/features/payroll/runboard-panel";
 import AdminPanel from "@/components/features/admin/admin-panel";
+import { apiUrl } from "@/lib/api-client";
 import { dashboardChartSets, dashboardMetrics } from "@/lib/demo-data";
 
 export default function DashboardPageClient() {
@@ -21,7 +22,7 @@ export default function DashboardPageClient() {
 
     async function loadBootstrap() {
       try {
-        const response = await fetch("/api/bootstrap");
+        const response = await fetch(apiUrl("/api/bootstrap"));
         const payload = await response.json();
         if (!cancelled && payload.metrics) {
           setMetrics(payload.metrics);

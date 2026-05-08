@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/api-client";
 
 const tabs = [
   { id: "calendar", label: "Calendar", icon: "CAL" },
@@ -384,6 +385,7 @@ function StatLine({ label, value }) {
 }
 
 export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }) {
+  const router = useRouter();
   const employee = data.employees.find((item) => item.employeeId === sessionEmployeeId) || data.employees[0] || {};
   const attendance = data.attendanceRecords.find((record) => record.employee === employee.name) || {};
   const [activeTab, setActiveTab] = useState("home");
@@ -455,7 +457,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     otAmount: "0",
     totalPay: String(payslipMonthlyNetPay)
   });
-  const payslipDownloadUrl = `/api/pdf/payslip?${payslipParams.toString()}`;
+  const payslipDownloadUrl = apiUrl(`/api/pdf/payslip?${payslipParams.toString()}`);
   const today = currentTime || new Date();
   const todayKey = formatStorageDate(today);
   const activityStorageKey = getActivityStorageKey(employeeId, today);
@@ -675,7 +677,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       tone: "gold"
     };
 
-    const response = await fetch("/api/leave-requests", {
+    const response = await fetch(apiUrl("/api/leave-requests"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -700,7 +702,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     formData.append("owner", employeeName);
     formData.append("label", file.name);
 
-    const response = await fetch("/api/uploads", {
+    const response = await fetch(apiUrl("/api/uploads"), {
       method: "POST",
       body: formData
     });
@@ -1041,7 +1043,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
               <small>{t("benefits")}</small>
               <button type="button">Deals</button>
               <button type="button">Check Update</button>
-              <button className="logout" onClick={() => signOut({ callbackUrl: "/login" })} type="button">{t("logout")} <em>v 2.0.9</em></button>
+              <button className="logout" onClick={() => router.push("/login")} type="button">{t("logout")} <em>v 2.0.9</em></button>
             </div>
           </aside>
         )}

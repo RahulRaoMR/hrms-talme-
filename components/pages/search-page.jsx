@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 const sections = [
   ["employees", "Employees", (item) => `${item.employeeId} - ${item.name}`],
@@ -27,7 +28,7 @@ export default function SearchPageClient() {
     let cancelled = false;
 
     async function runSearch() {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+      const response = await fetch(apiUrl(`/api/search?q=${encodeURIComponent(query)}`), {
         cache: "no-store"
       });
       const payload = await response.json();

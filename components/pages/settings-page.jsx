@@ -5,7 +5,7 @@ import {
   createCompanySettingAction,
   deleteCompanySettingAction,
   updateCompanySettingAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import Modal from "@/components/modal";
 import SuiteShell from "@/components/suite-shell";
 

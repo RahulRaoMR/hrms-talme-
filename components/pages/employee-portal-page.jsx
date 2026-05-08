@@ -2,6 +2,7 @@
 
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 export default function EmployeePortalPageClient({ data }) {
   const employee = data.employees[0];
@@ -46,7 +47,7 @@ export default function EmployeePortalPageClient({ data }) {
           <div className="landing-actions">
             <a
               className="primary-button"
-              href={`/api/pdf/payslip?employee=${encodeURIComponent(employee?.name || "Employee")}&month=April%202026&band=${encodeURIComponent(employee?.salaryBand || "INR 0")}`}
+              href={apiUrl(`/api/pdf/payslip?employee=${encodeURIComponent(employee?.name || "Employee")}&month=April%202026&band=${encodeURIComponent(employee?.salaryBand || "INR 0")}`)}
               target="_blank"
               rel="noreferrer"
             >

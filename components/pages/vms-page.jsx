@@ -9,7 +9,7 @@ import {
   deleteVendorAction,
   importVendorsAction,
   updateVendorAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import CsvActions from "@/components/csv-actions";
 import FilterChips from "@/components/filter-chips";
 import Modal from "@/components/modal";

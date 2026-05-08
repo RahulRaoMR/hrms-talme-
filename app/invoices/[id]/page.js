@@ -1,16 +1,12 @@
 import { notFound } from "next/navigation";
 import RecordDetailPage from "@/components/pages/record-detail-page";
-import { requireAuth } from "@/lib/require-auth";
-import { prisma } from "@/lib/prisma";
-import { ensureSeedData } from "@/lib/seed-db";
+import { findFrontendRecord } from "@/lib/frontend-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function InvoiceDetailPage({ params }) {
-  await requireAuth("/payroll");
-  await ensureSeedData();
   const { id } = await params;
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = findFrontendRecord("invoice", id);
   if (!invoice) notFound();
 
   return (

@@ -2,6 +2,7 @@
 
 import BarChart from "@/components/bar-chart";
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 export default function ReportsPageClient({ data }) {
   return (
@@ -86,7 +87,7 @@ export default function ReportsPageClient({ data }) {
           <div className="landing-actions">
             <a
               className="primary-button"
-              href="/api/pdf/payslip?employee=Manish%20Gupta&month=April%202026&band=INR%209.6L"
+              href={apiUrl("/api/pdf/payslip?employee=Manish%20Gupta&month=April%202026&band=INR%209.6L")}
               target="_blank"
               rel="noreferrer"
             >
@@ -94,7 +95,7 @@ export default function ReportsPageClient({ data }) {
             </a>
             <a
               className="ghost-button"
-              href="/api/pdf/invoice?vendor=StaffCore%20India&invoiceNo=INV-4388&amount=INR%2042,40,000&status=Approved"
+              href={apiUrl("/api/pdf/invoice?vendor=StaffCore%20India&invoiceNo=INV-4388&amount=INR%2042,40,000&status=Approved")}
               target="_blank"
               rel="noreferrer"
             >
@@ -102,7 +103,7 @@ export default function ReportsPageClient({ data }) {
             </a>
             <a
               className="ghost-button"
-              href="/api/pdf/offer?candidate=Neha%20Sharma&role=HRBP&location=Pune%20Plant&status=Draft"
+              href={apiUrl("/api/pdf/offer?candidate=Neha%20Sharma&role=HRBP&location=Pune%20Plant&status=Draft")}
               target="_blank"
               rel="noreferrer"
             >

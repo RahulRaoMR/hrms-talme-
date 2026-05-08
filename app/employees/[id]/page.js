@@ -1,16 +1,12 @@
 import { notFound } from "next/navigation";
 import RecordDetailPage from "@/components/pages/record-detail-page";
-import { requireAuth } from "@/lib/require-auth";
-import { prisma } from "@/lib/prisma";
-import { ensureSeedData } from "@/lib/seed-db";
+import { findFrontendRecord } from "@/lib/frontend-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmployeeDetailPage({ params }) {
-  await requireAuth("/hrms");
-  await ensureSeedData();
   const { id } = await params;
-  const employee = await prisma.employee.findUnique({ where: { id } });
+  const employee = findFrontendRecord("employee", id);
   if (!employee) notFound();
 
   return (

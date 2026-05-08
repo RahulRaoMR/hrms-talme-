@@ -5,10 +5,11 @@ import {
   createVendorWorkerAction,
   deleteVendorWorkerAction,
   updateVendorWorkerAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 const workerSeed = {
   workerId: "VW-9001",
@@ -125,7 +126,7 @@ export default function VendorPortalPageClient({ data }) {
           {invoices[0] ? (
             <a
               className="primary-button"
-              href={`/api/pdf/invoice?vendor=${encodeURIComponent(invoices[0].vendor)}&invoiceNo=${encodeURIComponent(invoices[0].invoiceNo)}&amount=${encodeURIComponent(invoices[0].amount)}&status=${encodeURIComponent(invoices[0].status)}`}
+              href={apiUrl(`/api/pdf/invoice?vendor=${encodeURIComponent(invoices[0].vendor)}&invoiceNo=${encodeURIComponent(invoices[0].invoiceNo)}&amount=${encodeURIComponent(invoices[0].amount)}&status=${encodeURIComponent(invoices[0].status)}`)}
               target="_blank"
               rel="noreferrer"
             >

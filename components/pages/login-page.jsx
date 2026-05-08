@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 const roleOptions = {
@@ -62,19 +61,6 @@ export default function LoginPageClient() {
               setError("");
 
               try {
-                await signOut({ redirect: false });
-
-                const result = await signIn("credentials", {
-                  email: selectedCredentials.email,
-                  password: selectedCredentials.password,
-                  role: formState.role,
-                  redirect: false
-                });
-
-                if (result?.error) {
-                  throw new Error(result.error);
-                }
-
                 router.push(selectedCredentials.destination);
                 router.refresh();
               } catch {

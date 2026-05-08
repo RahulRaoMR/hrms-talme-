@@ -6,10 +6,11 @@ import {
   createDocumentRecordAction,
   deleteDocumentRecordAction,
   updateDocumentRecordAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 const documentSeed = {
   owner: "StaffCore India",
@@ -56,7 +57,7 @@ export default function DocumentsPageClient({ data }) {
                 body.append("module", uploadState.module);
                 body.append("owner", uploadState.owner);
                 body.append("label", uploadState.label);
-                const response = await fetch("/api/uploads", { method: "POST", body });
+                const response = await fetch(apiUrl("/api/uploads"), { method: "POST", body });
                 const payload = await response.json();
                 setAssets((current) => [payload, ...current]);
                 setUploading(false);

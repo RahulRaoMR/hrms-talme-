@@ -1,8 +1,8 @@
 "use client";
 
-import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { apiUrl } from "@/lib/api-client";
 
 const roleOptions = {
   admin: {
@@ -76,7 +76,7 @@ export default function LandingPage() {
     const timeout = setTimeout(() => controller.abort(), RESET_REQUEST_TIMEOUT_MS);
 
     try {
-      return await fetch(url, {
+      return await fetch(apiUrl(url), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -98,19 +98,6 @@ export default function LandingPage() {
     setError("");
 
     try {
-      await signOut({ redirect: false });
-
-      const result = await signIn("credentials", {
-        email: selectedCredentials.email,
-        password: selectedCredentials.password,
-        role: formState.role,
-        redirect: false
-      });
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
       router.push(selectedCredentials.destination);
       router.refresh();
     } catch {

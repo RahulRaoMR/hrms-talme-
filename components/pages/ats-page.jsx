@@ -9,7 +9,7 @@ import {
   deleteCandidateAction,
   importCandidatesAction,
   updateCandidateAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import CsvActions from "@/components/csv-actions";
 import Drawer from "@/components/drawer";
 import FilterChips from "@/components/filter-chips";

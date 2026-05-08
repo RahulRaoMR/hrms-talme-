@@ -12,10 +12,11 @@ import {
   updateAttendanceRecordAction,
   updateEmployeeAction,
   updateLeaveRequestAction
-} from "@/app/actions";
+} from "@/lib/api-actions";
 import Modal from "@/components/modal";
 import SuiteShell from "@/components/suite-shell";
 import StatusBadge from "@/components/status-badge";
+import { apiUrl } from "@/lib/api-client";
 
 const employeeSeed = {
   employeeId: "",
@@ -130,7 +131,7 @@ export default function HrmsPageClient({ data }) {
   };
 
   const downloadSalarySlips = async () => {
-    const response = await fetch("/api/pdf/salary-slips", {
+    const response = await fetch(apiUrl("/api/pdf/salary-slips"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -158,7 +159,7 @@ export default function HrmsPageClient({ data }) {
     setShareSummary(null);
 
     try {
-      const response = await fetch("/api/pdf/share-salary-slips", {
+      const response = await fetch(apiUrl("/api/pdf/share-salary-slips"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

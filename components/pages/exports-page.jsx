@@ -1,6 +1,7 @@
 "use client";
 
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 const csvExports = [
   ["employees", "Employee Master CSV", "Profiles, salary bands, departments, and status"],
@@ -38,7 +39,7 @@ export default function ExportsPageClient() {
             </div>
             <p className="body-copy">{summary}</p>
             <div className="landing-actions">
-              <a className="primary-button" href={`/api/export/${dataset}`}>
+              <a className="primary-button" href={apiUrl(`/api/export/${dataset}`)}>
                 Download CSV
               </a>
             </div>
@@ -56,7 +57,7 @@ export default function ExportsPageClient() {
               </div>
             </div>
             <div className="landing-actions">
-              <a className="primary-button" href={href} target="_blank" rel="noreferrer">
+              <a className="primary-button" href={apiUrl(href)} target="_blank" rel="noreferrer">
                 Open PDF
               </a>
             </div>

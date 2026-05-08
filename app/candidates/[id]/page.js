@@ -1,16 +1,12 @@
 import { notFound } from "next/navigation";
 import RecordDetailPage from "@/components/pages/record-detail-page";
-import { requireAuth } from "@/lib/require-auth";
-import { prisma } from "@/lib/prisma";
-import { ensureSeedData } from "@/lib/seed-db";
+import { findFrontendRecord } from "@/lib/frontend-data";
 
 export const dynamic = "force-dynamic";
 
 export default async function CandidateDetailPage({ params }) {
-  await requireAuth("/ats");
-  await ensureSeedData();
   const { id } = await params;
-  const candidate = await prisma.candidate.findUnique({ where: { id } });
+  const candidate = findFrontendRecord("candidate", id);
   if (!candidate) notFound();
 
   return (
