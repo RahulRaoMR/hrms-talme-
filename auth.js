@@ -35,12 +35,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const employee =
           expectedRole === "Employee" || !identifier.includes("@")
-            ? await prisma.employee.findUnique({
-                where: { employeeId: identifier },
+            ? await prisma.employee.findFirst({
+                where: {
+                  employeeId: {
+                    equals: identifier,
+                    mode: "insensitive"
+                  }
+                },
                 select: { id: true, employeeId: true, email: true, name: true }
               })
             : null;
-        const loginEmail = employee?.email || identifier.toLowerCase();
+        const loginEmail = String(employee?.email || identifier).trim().toLowerCase();
 
         const user = await prisma.user.findUnique({
           where: { email: loginEmail }

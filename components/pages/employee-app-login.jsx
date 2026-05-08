@@ -37,6 +37,7 @@ export default function EmployeeAppLogin() {
       const result = await signIn("credentials", {
         email: formState.employeeId,
         password: formState.password,
+        role: "employee",
         redirect: false
       });
 

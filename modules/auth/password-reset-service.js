@@ -18,6 +18,10 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function normalizeIdentifier(identifier) {
+  return String(identifier || "").trim();
+}
+
 function createOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -40,10 +44,34 @@ function getDisplayName(email) {
 }
 
 export async function requestPasswordReset(payload) {
-  const email = normalizeEmail(payload?.email);
+  const identifier = normalizeIdentifier(payload?.identifier || payload?.email);
+  const role = String(payload?.role || "").trim().toLowerCase();
+  let email = normalizeEmail(payload?.email);
+  let employeeContext = null;
+
+  if (role === "employee" || (identifier && !identifier.includes("@"))) {
+    const employee = await prisma.employee.findFirst({
+      where: {
+        employeeId: {
+          equals: identifier,
+          mode: "insensitive"
+        }
+      },
+      select: { employeeId: true, email: true, name: true, department: true, manager: true }
+    });
+    employeeContext = employee;
+
+    email = normalizeEmail(employee?.email);
+
+    if (!email) {
+      throw createError("No registered email was found for that Employee ID.", 404);
+    }
+  } else if (identifier.includes("@")) {
+    email = normalizeEmail(identifier);
+  }
 
   if (!email) {
-    throw createError("Enter your corporate email address.");
+    throw createError(role === "employee" ? "Enter your Employee ID first." : "Enter your corporate email address.");
   }
 
   const user = await prisma.user.findUnique({
@@ -62,15 +90,39 @@ export async function requestPasswordReset(payload) {
     attempts: 0,
     createAccount: !user && process.env.NODE_ENV !== "production"
   });
-  const recipientName = user?.name || getDisplayName(email);
+  const recipientName = employeeContext?.name || user?.name || getDisplayName(email);
+  const requestedFor = role === "employee"
+    ? `
+      <div style="margin: 18px 0; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Employee password reset</p>
+        <p style="margin: 0;">Employee ID: <strong>${escapeHtml(employeeContext?.employeeId || identifier)}</strong></p>
+        <p style="margin: 4px 0 0;">Employee name: <strong>${escapeHtml(employeeContext?.name || recipientName)}</strong></p>
+        <p style="margin: 4px 0 0;">Department: <strong>${escapeHtml(employeeContext?.department || "-")}</strong></p>
+        <p style="margin: 4px 0 0;">Manager: <strong>${escapeHtml(employeeContext?.manager || "-")}</strong></p>
+        <p style="margin: 4px 0 0;">Registered email: <strong>${escapeHtml(email)}</strong></p>
+      </div>
+    `
+    : `
+      <div style="margin: 18px 0; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Account password reset</p>
+        <p style="margin: 0;">Account email: <strong>${escapeHtml(email)}</strong></p>
+      </div>
+    `;
 
   const html = renderEmailShell(
     "Password reset OTP",
     `
       <p>Hello ${escapeHtml(recipientName)},</p>
-      <p>Use this OTP to reset your Talme HRMS password. It expires in 10 minutes.</p>
-      <p style="font-size: 28px; font-weight: 700; letter-spacing: 0.18em; margin: 18px 0;">${otp}</p>
-      <p>If you did not request a password reset, you can ignore this email.</p>
+      <p>We received a request to reset your Talme HRMS password. Use the one-time password below to continue.</p>
+      ${requestedFor}
+      <div style="margin: 20px 0; padding: 18px; border-radius: 14px; background: #111827; color: #ffffff; text-align: center;">
+        <p style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #d1d5db;">Your OTP</p>
+        <p style="font-size: 34px; font-weight: 800; letter-spacing: 0.22em; margin: 0;">${otp}</p>
+        <p style="margin: 10px 0 0; color: #d1d5db;">Valid for 10 minutes</p>
+      </div>
+      <p>Enter this OTP on the password reset screen, then create your new password.</p>
+      <p>For your security, do not share this OTP with anyone. Talme HRMS will never ask for your OTP outside the reset screen.</p>
+      <p>If you did not request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
     `
   );
 
@@ -89,8 +141,9 @@ export async function requestPasswordReset(payload) {
     }
 
     return {
+      email,
       message: user
-        ? "OTP sent to your email account."
+        ? "OTP sent to your registered email account."
         : "OTP sent. This development account will be created after verification."
     };
   }

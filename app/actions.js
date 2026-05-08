@@ -6,6 +6,7 @@ import { revalidateSuitePaths, writeAuditLog } from "@/lib/backend-core";
 import { hasPostgresDatabase, prisma } from "@/lib/prisma";
 import { ensureSeedData } from "@/lib/seed-db";
 import { deleteUploadedFile } from "@/lib/storage";
+import { createEmployeePortalAccount } from "@/services/employeeAccount";
 import {
   releasePayrollEmails,
   sendLeaveStatusEmailToEmployee,
@@ -425,7 +426,7 @@ export async function createEmployeeAction(payload) {
   const employee = await prisma.employee.create({
     data: {
       employeeId: payload.employeeId,
-      email: payload.email,
+      email: String(payload.email || "").trim().toLowerCase(),
       name: payload.name,
       department: payload.department,
       location: payload.location,
@@ -440,7 +441,8 @@ export async function createEmployeeAction(payload) {
     }
   });
 
-  await sendWelcomeEmailToEmployee(employee);
+  const account = await createEmployeePortalAccount(employee);
+  await sendWelcomeEmailToEmployee(employee, { password: account.password });
   await writeAudit("CREATE", "Employee", employee.id, `Created employee ${employee.name}`);
   await refreshSuite();
   return employee;

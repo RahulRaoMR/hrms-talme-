@@ -176,8 +176,13 @@ function formatMonthTitle(date) {
   }).format(date);
 }
 
-function getCalendarStatus(monthDate, day, today) {
+function getCalendarStatus(monthDate, day, today, records = []) {
   if (!day) return "";
+
+  const activityState = getActivityState(records);
+
+  if (activityState.hasError) return "error";
+  if (activityState.isComplete) return "present";
 
   const isToday =
     monthDate.getFullYear() === today.getFullYear() &&
@@ -215,6 +220,60 @@ function formatStorageDate(date) {
   }).format(date);
 }
 
+function getMonthStart(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getMonthInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function parseMonthStart(value, fallback = new Date(2026, 3, 1)) {
+  const normalized = String(value || "");
+  const monthInputMatch = normalized.match(/^(\d{4})-(\d{2})/);
+
+  if (monthInputMatch) {
+    return new Date(Number(monthInputMatch[1]), Number(monthInputMatch[2]) - 1, 1);
+  }
+
+  const parsed = new Date(`1 ${normalized}`);
+
+  return Number.isNaN(parsed.getTime()) ? fallback : getMonthStart(parsed);
+}
+
+function parseSalaryAmount(value) {
+  const matches = String(value || "").replace(/,/g, "").match(/\d+(?:\.\d+)?/g);
+
+  return matches ? Number(matches[matches.length - 1]) || 0 : 0;
+}
+
+function getDateFromCalendarDay(monthDate, day) {
+  return new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
+}
+
+function getActivityStorageKey(employeeId, date) {
+  return `talme-employee-phone-activity-${employeeId}-${formatStorageDate(date)}`;
+}
+
+function getActivityState(records = []) {
+  const hasPunchIn = records.some((entry) => entry.type === "Punch In");
+  const hasPunchOut = records.some((entry) => entry.type === "Punch Out");
+
+  return {
+    hasPunchIn,
+    hasPunchOut,
+    hasError: hasPunchIn && !hasPunchOut,
+    isComplete: hasPunchIn && hasPunchOut
+  };
+}
+
+function sortActivity(records = []) {
+  return [...records].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+}
+
 function formatClockParts(totalSeconds) {
   const safeSeconds = Math.max(0, totalSeconds);
   const hours = Math.floor(safeSeconds / 3600);
@@ -230,6 +289,64 @@ function formatBreakTime(totalSeconds) {
   const minutes = Math.floor((safeSeconds % 3600) / 60);
 
   return `${String(hours).padStart(2, "0")}h:${String(minutes).padStart(2, "0")}m`;
+}
+
+function formatRegularizationDate(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(date);
+}
+
+function calculateActivityBreakSeconds(records) {
+  const sorted = sortActivity(records);
+  let breakSeconds = 0;
+
+  sorted.forEach((entry, index) => {
+    const nextEntry = sorted[index + 1];
+
+    if (entry.type !== "Punch Out" || nextEntry?.type !== "Punch In") {
+      return;
+    }
+
+    const breakStart = new Date(entry.timestamp);
+    const breakEnd = new Date(nextEntry.timestamp);
+
+    breakSeconds += Math.max(0, Math.floor((breakEnd.getTime() - breakStart.getTime()) / 1000));
+  });
+
+  return breakSeconds;
+}
+
+function calculateActivitySeconds(records, selectedDate, today) {
+  const sorted = sortActivity(records);
+  let activePunchIn = null;
+  let workSeconds = 0;
+  const isToday = formatStorageDate(selectedDate) === formatStorageDate(today);
+
+  sorted.forEach((entry) => {
+    if (entry.type === "Punch In") {
+      activePunchIn = new Date(entry.timestamp);
+      return;
+    }
+
+    if (entry.type === "Punch Out" && activePunchIn) {
+      const punchOut = new Date(entry.timestamp);
+      workSeconds += Math.max(0, Math.floor((punchOut.getTime() - activePunchIn.getTime()) / 1000));
+      activePunchIn = null;
+    }
+  });
+
+  if (activePunchIn && isToday) {
+    workSeconds += Math.max(0, Math.floor((today.getTime() - activePunchIn.getTime()) / 1000));
+  }
+
+  if (!workSeconds && !activePunchIn) {
+    return null;
+  }
+
+  return workSeconds;
 }
 
 function formatCurrency(amount) {
@@ -274,14 +391,17 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const [activity, setActivity] = useState([]);
   const [workSession, setWorkSession] = useState(null);
   const [currentTime, setCurrentTime] = useState(null);
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date(2026, 3, 1));
+  const [visibleMonth, setVisibleMonth] = useState(() => getMonthStart());
+  const [payslipMonth, setPayslipMonth] = useState(() => parseMonthStart(attendance.month));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  const [calendarActivityByDate, setCalendarActivityByDate] = useState({});
   const [leaveTab, setLeaveTab] = useState("pending");
-  const [leaveForm, setLeaveForm] = useState({
+  const [leaveForm, setLeaveForm] = useState(() => ({
     leaveType: "Casual Leave",
-    from: "2026-04-30",
-    to: "2026-04-30",
+    from: formatStorageDate(new Date()),
+    to: formatStorageDate(new Date()),
     reason: ""
-  });
+  }));
   const [leaveRequests, setLeaveRequests] = useState(data.leaveRequests.filter((leave) => leave.employee === employee.name));
   const [documents, setDocuments] = useState(data.documents.filter((document) => document.owner === employee.name));
   const [uploading, setUploading] = useState(false);
@@ -296,12 +416,65 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const employeeName = employee.name || "Employee";
   const employeeId = employee.employeeId || "TLM-0001";
   const salaryBand = employee.salaryBand || "INR 0";
+  const employeeAttendanceRecords = data.attendanceRecords.filter((record) =>
+    [employee.name, employee.employeeId].includes(record.employee)
+  );
+  const payslipMonthKey = getMonthInputValue(payslipMonth);
+  const payslipMonthTitle = formatMonthTitle(payslipMonth);
+  const matchingPayslipAttendance = employeeAttendanceRecords.find((record) => record.month === payslipMonthKey);
+  const payslipAttendance = matchingPayslipAttendance || (!attendance.month ? attendance : {});
+  const payslipMonthDays =
+    Number(payslipAttendance.monthDays) ||
+    new Date(payslipMonth.getFullYear(), payslipMonth.getMonth() + 1, 0).getDate();
+  const payslipMonthlyCtc = parseSalaryAmount(salaryBand) || Number(employee.salaryNetPay) || 0;
+  const payslipMonthlyNetPay = Number(payslipAttendance.salaryNetPay) || Number(employee.salaryNetPay) || payslipMonthlyCtc;
+  const payslipPresentDays = Number(payslipAttendance.present) || 0;
+  const payslipPaidLeaves = Number(payslipAttendance.paidLeaves ?? payslipAttendance.leaves) || 0;
+  const payslipSundays = Number(payslipAttendance.sundays) || 0;
+  const payslipHolidays = Number(payslipAttendance.holidays) || 0;
+  const payslipSalaryDays = payslipPresentDays + payslipSundays + payslipHolidays + payslipPaidLeaves;
+  const payslipLopDays = Math.max(0, payslipMonthDays - payslipSalaryDays);
+  const payslipParams = new URLSearchParams({
+    employee: employeeName,
+    employeeId,
+    month: payslipMonthTitle,
+    band: salaryBand,
+    designation: employee.grade || "",
+    department: employee.department || "",
+    joiningDate: employee.joiningDate || "",
+    bankName: /^(bank added|pending)$/i.test(employee.bankStatus || "") ? "" : employee.bankStatus || "",
+    monthDays: String(payslipMonthDays),
+    presentDays: String(payslipPresentDays),
+    paidLeaves: String(payslipPaidLeaves),
+    lopDays: String(payslipLopDays),
+    monthlyCtc: String(payslipMonthlyCtc),
+    monthlyNetPay: String(payslipMonthlyNetPay),
+    salaryDays: String(payslipSalaryDays || payslipPresentDays),
+    salaryExcludingOt: String(payslipMonthlyNetPay),
+    otHours: String(Number(payslipAttendance.otHours ?? payslipAttendance.overtime) || 0),
+    otAmount: "0",
+    totalPay: String(payslipMonthlyNetPay)
+  });
+  const payslipDownloadUrl = `/api/pdf/payslip?${payslipParams.toString()}`;
   const today = currentTime || new Date();
   const todayKey = formatStorageDate(today);
-  const activityStorageKey = `talme-employee-phone-activity-${employeeId}-${todayKey}`;
+  const activityStorageKey = getActivityStorageKey(employeeId, today);
   const sessionStorageKey = `talme-employee-phone-session-${employeeId}-${todayKey}`;
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const monthTitle = useMemo(() => formatMonthTitle(visibleMonth), [visibleMonth]);
+  const selectedDateKey = selectedCalendarDate ? formatStorageDate(selectedCalendarDate) : "";
+  const selectedDateActivity = useMemo(
+    () => sortActivity(calendarActivityByDate[selectedDateKey] || []),
+    [calendarActivityByDate, selectedDateKey]
+  );
+  const selectedActivityState = useMemo(() => getActivityState(selectedDateActivity), [selectedDateActivity]);
+  const selectedBreakSeconds = useMemo(() => calculateActivityBreakSeconds(selectedDateActivity), [selectedDateActivity]);
+  const selectedActivitySeconds = selectedCalendarDate
+    ? calculateActivitySeconds(selectedDateActivity, selectedCalendarDate, today)
+    : null;
+  const selectedClockParts = selectedActivitySeconds === null
+    ? ["--", "--", "--"]
+    : formatClockParts(selectedActivitySeconds);
   const loanPaidAmount = loanProfile.totalAmount - loanProfile.remainingBalance;
   const loanPaidPercent = Math.round((loanPaidAmount / loanProfile.totalAmount) * 100);
   const t = (key) => translate(language, key);
@@ -312,6 +485,13 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
 
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "calendar") {
+      setVisibleMonth(getMonthStart());
+      setSelectedCalendarDate(null);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const storedLanguage = window.localStorage.getItem("talme-employee-app-language") || "en";
@@ -338,6 +518,33 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       window.localStorage.setItem(activityStorageKey, JSON.stringify(activity));
     }
   }, [activity, activityStorageKey]);
+
+  useEffect(() => {
+    if (activeTab !== "calendar") {
+      return;
+    }
+
+    const year = visibleMonth.getFullYear();
+    const month = visibleMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const nextActivityByDate = {};
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(year, month, day);
+      const dateKey = formatStorageDate(date);
+      const storedActivity = window.localStorage.getItem(getActivityStorageKey(employeeId, date));
+
+      if (storedActivity) {
+        nextActivityByDate[dateKey] = JSON.parse(storedActivity);
+      }
+    }
+
+    if (formatStorageDate(visibleMonth).slice(0, 7) === todayKey.slice(0, 7) && activity.length) {
+      nextActivityByDate[todayKey] = activity;
+    }
+
+    setCalendarActivityByDate(nextActivityByDate);
+  }, [activeTab, activity, employeeId, todayKey, visibleMonth]);
 
   useEffect(() => {
     if (workSession) {
@@ -405,6 +612,10 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + direction, 1));
   }
 
+  function movePayslipMonth(direction) {
+    setPayslipMonth((current) => new Date(current.getFullYear(), current.getMonth() + direction, 1));
+  }
+
   function resetSwipe() {
     setSwiping(false);
     setSwipeOffset(0);
@@ -460,7 +671,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       dates: `${leaveForm.from} to ${leaveForm.to}`,
       balance: "Submitted from employee app",
       approver: employee.manager || "Manager",
-      status: "Manager Review",
+      status: "Pending",
       tone: "gold"
     };
 
@@ -579,33 +790,94 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
 
         {activeTab === "calendar" && (
           <section className="phone-screen">
-            <header className="phone-page-head">
-              <h1>{t("calendar")}</h1>
-              <div className="view-toggle"><span>CAL</span><span>LIST</span></div>
-            </header>
-            <div className="month-row">
-              <button onClick={() => moveCalendarMonth(-1)} type="button">&lt;</button>
-              <h2>{monthTitle}</h2>
-              <button onClick={() => moveCalendarMonth(1)} type="button">&gt;</button>
-            </div>
-            <div className="weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
-            <div className="calendar-grid">
-              {calendarDays.map((day, index) => (
-                <span className={day ? `day ${getCalendarStatus(visibleMonth, day, today)}` : "day blank"} key={`${day || "blank"}-${index}`}>
-                  {day}
-                </span>
-              ))}
-            </div>
-            <div className="legend-grid">
-              {[
-                ["leave", "On leave"], ["present", "Present"], ["absent", "Absent"], ["half", "Half Day"],
-                ["weekoff", "Week Off"], ["holiday", "Holiday"], ["late", "Late"], ["error", "Punch Error"]
-              ].map(([tone, label]) => <span key={tone}><i className={tone} />{label}</span>)}
-            </div>
-            <section className="pending-card">
-              <h2>{t("pendingRegularization")}</h2>
-              <EmptyState compact />
-            </section>
+            {selectedCalendarDate ? (
+              <>
+                <header className="phone-page-head regularization-head">
+                  <button className="phone-back-button" onClick={() => setSelectedCalendarDate(null)} type="button">&lt;</button>
+                  <h1>Regularization</h1>
+                  <span className="regularization-date">CAL {formatRegularizationDate(selectedCalendarDate)}</span>
+                </header>
+
+                <article className={`hours-card regularization-hours ${selectedActivityState.hasError ? "has-error" : ""}`}>
+                  <h2>Working Hours</h2>
+                  <div className="time-boxes">
+                    <strong>{selectedClockParts[0]}</strong><span>:</span><strong>{selectedClockParts[1]}</strong><span>:</span><strong>{selectedClockParts[2]}</strong>
+                  </div>
+                  <div className="time-labels"><span>Hour</span><span>Min</span><span>Sec</span></div>
+                  <div className="break-pill">Total Break Time {selectedDateActivity.length ? formatBreakTime(selectedBreakSeconds) : "--h:--m"}</div>
+                </article>
+                <div className="shift-card">First shift timing is 08:00 am - 05:30 pm</div>
+
+                {selectedActivityState.hasError ? (
+                  <div className="regularization-error">⚠ Punch Out is missing for this date.</div>
+                ) : null}
+
+                <section className="phone-section regularization-activity">
+                  <div className="activity-section-head">
+                    <h2>Your activity</h2>
+                    <button type="button">Add Punch</button>
+                  </div>
+                  {selectedDateActivity.length ? (
+                    selectedDateActivity.map((entry, index) => (
+                      <div className="activity-row" key={`${entry.type}-${entry.time}-${index}`}>
+                        <span className={entry.type.includes("Out") ? "danger" : "ok"}>
+                          {entry.type.includes("Out") ? ">" : "<"}
+                        </span>
+                        <strong>{entry.type}</strong>
+                        <time>{entry.time}</time>
+                      </div>
+                    ))
+                  ) : (
+                    <EmptyState />
+                  )}
+                </section>
+              </>
+            ) : (
+              <>
+                <header className="phone-page-head">
+                  <h1>{t("calendar")}</h1>
+                  <div className="view-toggle"><span>CAL</span><span>LIST</span></div>
+                </header>
+                <div className="month-row">
+                  <button onClick={() => moveCalendarMonth(-1)} type="button">&lt;</button>
+                  <h2>{monthTitle}</h2>
+                  <button onClick={() => moveCalendarMonth(1)} type="button">&gt;</button>
+                </div>
+                <div className="weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
+                <div className="calendar-grid">
+                  {calendarDays.map((day, index) => {
+                    if (!day) {
+                      return <span className="day blank" key={`blank-${index}`} />;
+                    }
+
+                    const date = getDateFromCalendarDay(visibleMonth, day);
+                    const dateKey = formatStorageDate(date);
+                    const records = calendarActivityByDate[dateKey] || [];
+
+                    return (
+                      <button
+                        className={`day ${getCalendarStatus(visibleMonth, day, today, records)}`}
+                        key={dateKey}
+                        onClick={() => setSelectedCalendarDate(date)}
+                        type="button"
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="legend-grid">
+                  {[
+                    ["leave", "On leave"], ["present", "Present"], ["absent", "Absent"], ["half", "Half Day"],
+                    ["weekoff", "Week Off"], ["holiday", "Holiday"], ["late", "Late"], ["error", "Punch Error"]
+                  ].map(([tone, label]) => <span key={tone}><i className={tone} />{label}</span>)}
+                </div>
+                <section className="pending-card">
+                  <h2>{t("pendingRegularization")}</h2>
+                  <EmptyState compact />
+                </section>
+              </>
+            )}
           </section>
         )}
 
@@ -615,7 +887,21 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
             <div className="phone-tabs">
               <button className={leaveTab === "pending" ? "active" : ""} onClick={() => setLeaveTab("pending")} type="button">Pending</button>
               <button className={leaveTab === "history" ? "active" : ""} onClick={() => setLeaveTab("history")} type="button">History</button>
-              <button className={leaveTab === "apply" ? "active" : ""} onClick={() => setLeaveTab("apply")} type="button">Apply</button>
+              <button
+                className={leaveTab === "apply" ? "active" : ""}
+                onClick={() => {
+                  const currentDate = formatStorageDate(new Date());
+                  setLeaveForm((current) => ({
+                    ...current,
+                    from: currentDate,
+                    to: currentDate
+                  }));
+                  setLeaveTab("apply");
+                }}
+                type="button"
+              >
+                Apply
+              </button>
             </div>
             {leaveTab === "apply" ? (
               <form className="phone-form" onSubmit={submitLeave}>
@@ -636,13 +922,17 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
         {activeTab === "payslips" && (
           <section className="phone-screen">
             <header className="phone-page-head"><h1>{t("payslips")}</h1></header>
-            <div className="month-row"><button type="button">&lt;</button><h2>2026</h2><button className="disabled" type="button">&gt;</button></div>
+            <div className="month-row">
+              <button onClick={() => movePayslipMonth(-1)} type="button">&lt;</button>
+              <h2>{payslipMonth.getFullYear()}</h2>
+              <button onClick={() => movePayslipMonth(1)} type="button">&gt;</button>
+            </div>
             <div className="payslip-card">
-              <h2>April 2026</h2>
+              <h2>{payslipMonthTitle}</h2>
               <StatLine label="Employee" value={employeeName} />
               <StatLine label="Band" value={salaryBand} />
-              <StatLine label="Present Days" value={attendance.present || 0} />
-              <a className="phone-primary" href={`/api/pdf/payslip?employee=${encodeURIComponent(employeeName)}&month=April%202026&band=${encodeURIComponent(salaryBand)}`} target="_blank" rel="noreferrer">{t("downloadPayslip")}</a>
+              <StatLine label="Present Days" value={payslipPresentDays} />
+              <a className="phone-primary" href={payslipDownloadUrl} target="_blank" rel="noreferrer">{t("downloadPayslip")}</a>
             </div>
           </section>
         )}

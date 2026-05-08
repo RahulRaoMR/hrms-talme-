@@ -111,10 +111,13 @@ export default function HrmsPageClient({ data }) {
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [employeeEdit, setEmployeeEdit] = useState(null);
   const [leaveEdit, setLeaveEdit] = useState(null);
+  const [leaveToAccept, setLeaveToAccept] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
   const [employeeForm, setEmployeeForm] = useState({ ...employeeCreateSeed });
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
   const [attendanceForm, setAttendanceForm] = useState(attendanceSeed);
+  const [shareSummary, setShareSummary] = useState(null);
+  const [isSharingPayslips, setIsSharingPayslips] = useState(false);
   const [isPending, startTransition] = useTransition();
   const salarySheetTotal = salarySheet.rows.reduce((total, row) => total + row.totalPay, 0);
 
@@ -124,6 +127,63 @@ export default function HrmsPageClient({ data }) {
 
   const downloadSalarySheet = () => {
     downloadCsv(`salary-sheet-${salarySheet.monthLabel || "current-month"}.csv`, salarySheet.rows);
+  };
+
+  const downloadSalarySlips = async () => {
+    const response = await fetch("/api/pdf/salary-slips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        month: salarySheet.monthLabel,
+        rows: salarySheet.rows
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to generate salary slips.");
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `salary-slips-${salarySheet.monthLabel || "current-month"}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const shareSalarySlips = async () => {
+    setIsSharingPayslips(true);
+    setShareSummary(null);
+
+    try {
+      const response = await fetch("/api/pdf/share-salary-slips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: salarySheet.monthLabel,
+          rows: salarySheet.rows
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to share salary slips.");
+      }
+
+      const result = await response.json();
+      setShareSummary(result);
+    } catch (error) {
+      setShareSummary({
+        sent: 0,
+        skipped: 0,
+        failed: salarySheet.rows.length,
+        periodLabel: salarySheet.monthLabel,
+        error: error?.message || "Unable to share salary slips."
+      });
+    } finally {
+      setIsSharingPayslips(false);
+    }
   };
 
   return (
@@ -292,6 +352,16 @@ export default function HrmsPageClient({ data }) {
                 <small>{leave.leaveType} - {leave.dates} - {leave.balance}</small>
                 <div className="row-actions">
                   <StatusBadge tone={leave.tone}>{leave.status}</StatusBadge>
+                  {!["accepted", "leave accepted"].includes(String(leave.status || "").trim().toLowerCase()) ? (
+                    <button
+                      className="mini-button"
+                      disabled={isPending}
+                      onClick={() => setLeaveToAccept(leave)}
+                      type="button"
+                    >
+                      Accept
+                    </button>
+                  ) : null}
                   <button className="mini-button" onClick={() => setLeaveEdit(leave)} type="button">
                     Edit
                   </button>
@@ -357,50 +427,70 @@ export default function HrmsPageClient({ data }) {
               <h3>{salarySheet.monthLabel}</h3>
             </div>
             {salarySheet.rows.length ? (
-              <button className="mini-button" onClick={downloadSalarySheet} type="button">
-                Download CSV
-              </button>
+              <div className="row-actions">
+                <button className="mini-button" onClick={downloadSalarySheet} type="button">
+                  Download CSV
+                </button>
+                <button className="mini-button" disabled={isSharingPayslips} onClick={shareSalarySlips} type="button">
+                  {isSharingPayslips ? "Sharing..." : "Share Salary Slip"}
+                </button>
+              </div>
             ) : null}
           </div>
           {salarySheet.rows.length ? (
-            <table className="data-table salary-sheet-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Salary CTC</th>
-                  <th>Net Pay</th>
-                  <th>Days</th>
-                  <th>Worked</th>
-                  <th>Paid Leave</th>
-                  <th>Salary Days</th>
-                  <th>LOP</th>
-                  <th>OT</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salarySheet.rows.map((row) => (
-                  <tr key={row.employeeId}>
-                    <td>{row.name}</td>
-                    <td>{formatInr(row.monthlyCtc)}</td>
-                    <td>{formatInr(row.monthlyNetPay)}</td>
-                    <td>{row.monthDays}</td>
-                    <td>{row.presentDays}</td>
-                    <td>{row.paidLeaves}</td>
-                    <td>{formatNumber(row.salaryDays)}</td>
-                    <td>{formatNumber(row.lopDays)}</td>
-                    <td>{row.otHours}h / {formatInr(row.otAmount)}</td>
-                    <td><strong>{formatInr(row.totalPay)}</strong></td>
+            <>
+              <table className="data-table salary-sheet-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Salary CTC</th>
+                    <th>Net Pay</th>
+                    <th>Days</th>
+                    <th>Worked</th>
+                    <th>Paid Leave</th>
+                    <th>Salary Days</th>
+                    <th>LOP</th>
+                    <th>OT</th>
+                    <th>Total</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan="9">Total salary payable</td>
-                  <td><strong>{formatInr(salarySheetTotal)}</strong></td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody>
+                  {salarySheet.rows.map((row) => (
+                    <tr key={row.employeeId}>
+                      <td>{row.name}</td>
+                      <td>{formatInr(row.monthlyCtc)}</td>
+                      <td>{formatInr(row.monthlyNetPay)}</td>
+                      <td>{row.monthDays}</td>
+                      <td>{row.presentDays}</td>
+                      <td>{row.paidLeaves}</td>
+                      <td>{formatNumber(row.salaryDays)}</td>
+                      <td>{formatNumber(row.lopDays)}</td>
+                      <td>{row.otHours}h / {formatInr(row.otAmount)}</td>
+                      <td><strong>{formatInr(row.totalPay)}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan="9">Total salary payable</td>
+                    <td><strong>{formatInr(salarySheetTotal)}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+              <div className="salary-sheet-actions">
+                <button className="primary-button" onClick={downloadSalarySlips} type="button">
+                  Download Salary Slip
+                </button>
+              </div>
+              {shareSummary ? (
+                <p className="empty-state">
+                  {shareSummary.sent} payslip email{shareSummary.sent === 1 ? "" : "s"} sent for {shareSummary.periodLabel}.
+                  {shareSummary.skipped ? ` ${shareSummary.skipped} skipped because registered email is missing.` : ""}
+                  {shareSummary.failed ? ` ${shareSummary.failed} failed.` : ""}
+                  {shareSummary.error ? ` ${shareSummary.error}` : ""}
+                </p>
+              ) : null}
+            </>
           ) : (
             <p className="empty-state">No salary rows generated. Add matching employees in Employee Master and Monthly Attendance first.</p>
           )}
@@ -507,6 +597,47 @@ export default function HrmsPageClient({ data }) {
           })
         }
       />
+
+      <Modal
+        open={!!leaveToAccept}
+        title="Accept leave request"
+        eyebrow="Leave approval"
+        onClose={() => setLeaveToAccept(null)}
+      >
+        <div className="approval-confirm">
+          <p>
+            Confirm approval for <strong>{leaveToAccept?.employee}</strong>. An approval email will be sent to the employee.
+          </p>
+          <div className="approval-summary">
+            <span>{leaveToAccept?.leaveType}</span>
+            <strong>{leaveToAccept?.dates}</strong>
+            <small>{leaveToAccept?.balance}</small>
+          </div>
+          <div className="modal-actions">
+            <button className="ghost-button" onClick={() => setLeaveToAccept(null)} type="button">
+              Cancel
+            </button>
+            <button
+              className="primary-button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  const updated = await updateLeaveRequestAction(leaveToAccept.id, {
+                    ...leaveToAccept,
+                    status: "Leave Accepted",
+                    tone: "teal"
+                  });
+                  setLeaveRequests((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+                  setLeaveToAccept(null);
+                })
+              }
+              type="button"
+            >
+              {isPending ? "Accepting..." : "Accept Leave"}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <AttendanceModal
         open={attendanceModalOpen}
@@ -789,7 +920,12 @@ function generateSalaryRows(employees, attendanceRecords) {
 
       return {
         employeeId: employee.employeeId || employee.id,
+        email: employee.email,
         name: employee.name,
+        designation: employee.grade,
+        department: employee.department,
+        joiningDate: employee.joiningDate,
+        bankName: /^(bank added|pending)$/i.test(employee.bankStatus || "") ? "" : employee.bankStatus,
         monthlyCtc,
         monthlyNetPay: salaryNetPay,
         month: monthLabel,

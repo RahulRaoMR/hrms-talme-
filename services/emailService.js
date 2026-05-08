@@ -82,6 +82,15 @@ function getDefaultFrom(provider = "smtp") {
   return emailUser ? `"Talme HRMS" <${emailUser}>` : '"Talme HRMS" <no-reply@example.com>';
 }
 
+function normalizeResendAttachments(attachments = []) {
+  return attachments.map((attachment) => ({
+    filename: attachment.filename,
+    content: Buffer.isBuffer(attachment.content)
+      ? attachment.content.toString("base64")
+      : attachment.content
+  }));
+}
+
 export function isEmailConfigured() {
   if (hasResendKey()) {
     return true;
@@ -123,7 +132,8 @@ export async function sendEmail(to, subject, html, options = {}) {
         to,
         subject,
         html,
-        text: options.text
+        text: options.text,
+        attachments: options.attachments?.length ? normalizeResendAttachments(options.attachments) : undefined
       })
     }).finally(() => clearTimeout(timeout));
 
@@ -142,7 +152,8 @@ export async function sendEmail(to, subject, html, options = {}) {
       to,
       subject,
       html,
-      text: options.text
+      text: options.text,
+      attachments: options.attachments
     }),
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error("Email send timed out. Check SMTP credentials and network access.")), EMAIL_TIMEOUT_MS)

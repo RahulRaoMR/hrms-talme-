@@ -51,7 +51,10 @@ export default function LandingPage() {
     password: formState.password,
     destination: selectedRole.destination
   };
-  const canResetIdentifier = formState.identifier.includes("@");
+  const resetIdentifierLabel = formState.role === "employee" ? "Employee ID" : "Email Account";
+  const resetTargetHint = formState.role === "employee"
+    ? "OTP will be sent to the registered mail saved for this Employee ID."
+    : "OTP will be sent to this email account.";
 
   async function parseApiResponse(response) {
     const contentType = response.headers.get("content-type") || "";
@@ -126,8 +129,13 @@ export default function LandingPage() {
     setError("");
 
     try {
+      if (!formState.identifier.trim()) {
+        throw new Error(formState.role === "employee" ? "Enter Employee ID first." : "Enter your email first.");
+      }
+
       const response = await fetchResetApi("/api/auth/password-reset/request", {
-        email: resetState.email
+        identifier: formState.identifier,
+        role: formState.role
       });
       const payload = await parseApiResponse(response);
 
@@ -137,6 +145,7 @@ export default function LandingPage() {
 
       setResetState((current) => ({
         ...current,
+        email: payload.email || current.email,
         step: "confirm",
         submitting: false,
         message: payload.message,
@@ -170,7 +179,7 @@ export default function LandingPage() {
 
       setFormState((current) => ({
         ...current,
-        identifier: resetState.email,
+        identifier: formState.role === "employee" ? current.identifier : resetState.email,
         password: resetState.password
       }));
       setResetState((current) => ({
@@ -219,7 +228,7 @@ export default function LandingPage() {
                   });
                   setResetState((current) => ({
                     ...current,
-                    email: nextConfig.identifier.includes("@") ? nextConfig.identifier : "",
+                    email: "",
                     otp: "",
                     password: "",
                     step: "request",
@@ -240,10 +249,9 @@ export default function LandingPage() {
                   const nextIdentifier = event.target.value;
                   setFormState((current) => ({ ...current, identifier: nextIdentifier }));
                   setResetState((current) =>
-                    current.open && nextIdentifier.includes("@")
+                    current.open
                       ? {
                           ...current,
-                          email: nextIdentifier,
                           otp: "",
                           password: "",
                           step: "request",
@@ -276,7 +284,7 @@ export default function LandingPage() {
                 setResetState((current) => ({
                   ...current,
                   open: !current.open,
-                  email: canResetIdentifier ? formState.identifier : current.email,
+                  email: "",
                   otp: "",
                   password: "",
                   step: "request",
@@ -291,20 +299,11 @@ export default function LandingPage() {
           {resetState.open ? (
             <div className="landing-reset-panel">
               <div className="landing-grid">
-                <label>
-                  <span>Email Account</span>
-                  <input
-                    type="email"
-                    value={resetState.email}
-                    onChange={(event) =>
-                      setResetState((current) => ({
-                        ...current,
-                        email: event.target.value,
-                        message: ""
-                      }))
-                    }
-                  />
-                </label>
+                <div className="reset-target-card">
+                  <span>{resetIdentifierLabel}</span>
+                  <strong>{formState.identifier || `Enter ${resetIdentifierLabel} above`}</strong>
+                  <small>{resetTargetHint}</small>
+                </div>
                 {resetState.step === "confirm" ? (
                   <label>
                     <span>OTP</span>

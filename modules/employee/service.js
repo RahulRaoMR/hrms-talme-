@@ -1,3 +1,4 @@
+import { createEmployeePortalAccount } from "@/services/employeeAccount";
 import { sendWelcomeEmailToEmployee } from "@/services/emailAutomation";
 import { createCrudService } from "@/services/crud-service";
 
@@ -8,7 +9,8 @@ export const employeeService = {
 
   async create(payload) {
     const employee = await baseService.create(payload);
-    await sendWelcomeEmailToEmployee(employee);
+    const account = await createEmployeePortalAccount(employee);
+    await sendWelcomeEmailToEmployee(employee, { password: account.password });
     return employee;
   }
 };

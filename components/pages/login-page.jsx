@@ -39,8 +39,8 @@ export default function LoginPageClient() {
   const [error, setError] = useState("");
   const selectedRole = roleOptions[formState.role];
   const selectedCredentials = {
-    email: selectedRole.identifier,
-    password: selectedRole.password,
+    email: formState.identifier,
+    password: formState.password,
     destination: selectedRole.destination
   };
 

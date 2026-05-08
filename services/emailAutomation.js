@@ -64,12 +64,20 @@ export function shouldSendOfferEmail(previousStatus, nextStatus) {
   return !isOfferStatus(previousStatus) && isOfferStatus(nextStatus);
 }
 
-export async function sendWelcomeEmailToEmployee(employee) {
+function getLeaveEmailStatus(status) {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+
+  return ["accepted", "leave accepted"].includes(normalizedStatus) ? "Approved" : status || "Updated";
+}
+
+export async function sendWelcomeEmailToEmployee(employee, options = {}) {
+  const passwordLine = options.password ? ` Temporary password: ${options.password}.` : "";
+
   return sendEmailSafely({
     to: employee?.email,
     subject: "Welcome to Talme",
-    html: welcomeTemplate(employee?.name || "Team Member"),
-    text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully.`,
+    html: welcomeTemplate(employee, options.password),
+    text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully. Employee ID: ${employee?.employeeId || "-"}. Department: ${employee?.department || "-"}. Manager: ${employee?.manager || "-"}.${passwordLine}`,
     context: "employee welcome"
   });
 }
@@ -86,17 +94,18 @@ export async function sendOfferEmailToCandidate(candidate) {
 
 export async function sendLeaveStatusEmailToEmployee(leaveRequest) {
   const employee = await findEmployeeByReference(leaveRequest?.employee);
+  const emailStatus = getLeaveEmailStatus(leaveRequest?.status);
 
   return sendEmailSafely({
     to: employee?.email,
-    subject: `Leave ${leaveRequest?.status || "Update"}`,
+    subject: `Leave ${emailStatus}`,
     html: leaveTemplate(
       employee?.name || leaveRequest?.employee || "Employee",
-      leaveRequest?.status || "Updated",
+      emailStatus,
       leaveRequest?.leaveType,
       leaveRequest?.dates
     ),
-    text: `Hi ${employee?.name || leaveRequest?.employee || "Employee"}, your leave request status is ${leaveRequest?.status || "Updated"}.`,
+    text: `Hi ${employee?.name || leaveRequest?.employee || "Employee"}, your leave request status is ${emailStatus}.`,
     context: "leave status"
   });
 }
