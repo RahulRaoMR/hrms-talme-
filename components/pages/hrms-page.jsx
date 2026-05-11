@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import {
   createAttendanceRecordAction,
@@ -62,6 +61,12 @@ const employeeCreateSeed = {
   branchName: "",
   accountNo: "",
   ifscCode: "",
+  legalDocuments: {
+    aadharCard: "",
+    drivingLicence: "",
+    panCard: "",
+    passportSizePhoto: ""
+  },
   emergencyCountry: "+91",
   emergencyNumber: "",
   emergencyPersonName: "",
@@ -73,6 +78,84 @@ const employeeCreateSeed = {
   referenceCountry: "+91",
   referenceNumber: ""
 };
+
+const employeeDetailSections = [
+  {
+    title: "Basic Details",
+    fields: [
+      ["employeeCode", "Employee Code"],
+      ["employeeName", "Employee Name"],
+      ["displayName", "Display Name"],
+      ["mobileNumber", "Mobile Number"],
+      ["email", "Email"],
+      ["gender", "Gender"],
+      ["punchInBranch", "Punch In Branch"],
+      ["masterBranch", "Master Branch"],
+      ["department", "Department"],
+      ["designation", "Designation"],
+      ["employeeType", "Employee Type"],
+      ["doorLockPermission", "Door Lock Permission"],
+      ["salaryType", "Salary Type"],
+      ["salaryAmount", "Salary Amount"],
+      ["approvedMonthlyCtc", "Approved Monthly CTC"],
+      ["salaryNetPay", "Salary Net Pay"],
+      ["payrollGroup", "Payroll Group"],
+      ["providentFund", "PF"],
+      ["uan", "UAN"],
+      ["esic", "ESIC"],
+      ["esiNumber", "ESI Number"],
+      ["address", "Address"]
+    ]
+  },
+  {
+    title: "Bank Details",
+    fields: [
+      ["bankName", "Bank Name"],
+      ["branchName", "Branch Name"],
+      ["accountNo", "Account No"],
+      ["ifscCode", "IFSC Code"]
+    ]
+  },
+  {
+    title: "Legal Documents",
+    fields: [
+      ["aadharCard", "Aadhar Card"],
+      ["drivingLicence", "Driving Licence"],
+      ["panCard", "PAN Card"],
+      ["passportSizePhoto", "Passport Size Photo"]
+    ]
+  },
+  {
+    title: "Emergency Contact Information",
+    fields: [
+      ["emergencyNumber", "Contact Number"],
+      ["emergencyPersonName", "Contact Person Name"],
+      ["emergencyRelation", "Relation"],
+      ["emergencyAddress", "Address"]
+    ]
+  },
+  {
+    title: "Personal Information",
+    fields: [
+      ["dateOfBirth", "Date of Birth"],
+      ["dateOfJoining", "Date of Joining"]
+    ]
+  },
+  {
+    title: "Reference",
+    fields: [
+      ["referenceName", "Name"],
+      ["referenceNumber", "Contact Number"]
+    ]
+  }
+];
+
+function createEmployeeFormState() {
+  return {
+    ...employeeCreateSeed,
+    legalDocuments: { ...employeeCreateSeed.legalDocuments }
+  };
+}
 
 const leaveSeed = {
   employee: "",
@@ -111,10 +194,11 @@ export default function HrmsPageClient({ data }) {
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [employeeEdit, setEmployeeEdit] = useState(null);
+  const [employeeDetail, setEmployeeDetail] = useState(null);
   const [leaveEdit, setLeaveEdit] = useState(null);
   const [leaveToAccept, setLeaveToAccept] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
-  const [employeeForm, setEmployeeForm] = useState({ ...employeeCreateSeed });
+  const [employeeForm, setEmployeeForm] = useState(createEmployeeFormState);
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
   const [attendanceForm, setAttendanceForm] = useState(attendanceSeed);
   const [shareSummary, setShareSummary] = useState(null);
@@ -204,7 +288,7 @@ export default function HrmsPageClient({ data }) {
           <button
             className="mini-button"
             onClick={() => {
-              setEmployeeForm({ ...employeeCreateSeed });
+              setEmployeeForm(createEmployeeFormState());
               setEmployeeModalOpen(true);
             }}
             type="button"
@@ -235,9 +319,9 @@ export default function HrmsPageClient({ data }) {
                 <td><StatusBadge tone={employee.tone}>{employee.status}</StatusBadge></td>
                 <td>
                   <div className="row-actions">
-                    <Link className="mini-button" href={`/employees/${employee.id}`}>
-                      View
-                    </Link>
+                    <button className="mini-button" onClick={() => setEmployeeDetail(employee)} type="button">
+                      Details
+                    </button>
                     <button
                       className="mini-button"
                       onClick={() => setEmployeeEdit(employee)}
@@ -508,10 +592,15 @@ export default function HrmsPageClient({ data }) {
           startTransition(async () => {
             const created = await createEmployeeAction(toEmployeePayload(employeeForm));
             setEmployees((current) => [created, ...current]);
-            setEmployeeForm({ ...employeeCreateSeed });
+            setEmployeeForm(createEmployeeFormState());
             setEmployeeModalOpen(false);
           })
         }
+      />
+
+      <EmployeeDetailsModal
+        employee={employeeDetail}
+        onClose={() => setEmployeeDetail(null)}
       />
 
       <EntityModal
@@ -685,6 +774,7 @@ function toEmployeePayload(form) {
   const location = form.punchInBranch || form.masterBranch || "Head Office";
   const monthlyCtc = form.approvedMonthlyCtc || form.salaryAmount;
   const salaryBand = [form.salaryType, monthlyCtc ? `INR ${monthlyCtc}` : ""].filter(Boolean).join(" - ");
+  const employeeDetails = buildEmployeeDetails(form);
 
   return {
     employeeId: form.employeeCode || String(Date.now()),
@@ -699,8 +789,68 @@ function toEmployeePayload(form) {
     salaryNetPay: Number(form.salaryNetPay) || 0,
     bankStatus: form.bankName || form.accountNo ? "Bank Added" : "Pending",
     status: "Active",
-    tone: "gold"
+    tone: "gold",
+    employeeDetails
   };
+}
+
+function buildEmployeeDetails(form) {
+  return {
+    employeeCode: form.employeeCode,
+    employeeName: form.employeeName,
+    displayName: form.displayName,
+    mobileNumber: [form.mobileCountry, form.mobileNumber].filter(Boolean).join(" "),
+    email: form.email,
+    gender: form.gender,
+    punchInBranch: form.punchInBranch,
+    masterBranch: form.masterBranch,
+    department: form.department,
+    designation: form.designation,
+    employeeType: form.employeeType,
+    doorLockPermission: form.doorLockPermission,
+    salaryType: form.salaryType,
+    salaryAmount: form.salaryAmount,
+    approvedMonthlyCtc: form.approvedMonthlyCtc,
+    salaryNetPay: form.salaryNetPay,
+    payrollGroup: form.payrollGroup,
+    providentFund: form.providentFund,
+    uan: form.uan,
+    esic: form.esic,
+    esiNumber: form.esiNumber,
+    address: form.address,
+    bankName: form.bankName,
+    branchName: form.branchName,
+    accountNo: form.accountNo,
+    ifscCode: form.ifscCode,
+    aadharCard: form.legalDocuments?.aadharCard,
+    drivingLicence: form.legalDocuments?.drivingLicence,
+    panCard: form.legalDocuments?.panCard,
+    passportSizePhoto: form.legalDocuments?.passportSizePhoto,
+    emergencyNumber: [form.emergencyCountry, form.emergencyNumber].filter(Boolean).join(" "),
+    emergencyPersonName: form.emergencyPersonName,
+    emergencyRelation: form.emergencyRelation,
+    emergencyAddress: form.emergencyAddress,
+    dateOfBirth: form.dateOfBirth,
+    dateOfJoining: form.dateOfJoining,
+    referenceName: form.referenceName,
+    referenceNumber: [form.referenceCountry, form.referenceNumber].filter(Boolean).join(" ")
+  };
+}
+
+function getEmployeeDetailValue(employee, key) {
+  const details = employee?.employeeDetails || {};
+  const fallback = {
+    employeeCode: employee?.employeeId,
+    employeeName: employee?.name,
+    email: employee?.email,
+    department: employee?.department,
+    designation: employee?.grade,
+    dateOfJoining: employee?.joiningDate,
+    salaryNetPay: employee?.salaryNetPay,
+    bankName: employee?.bankStatus
+  };
+
+  return details[key] ?? fallback[key] ?? "-";
 }
 
 const inrFormatter = new Intl.NumberFormat("en-IN", {
@@ -1030,6 +1180,16 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
   const update = (key) => (event) => {
     setState((current) => ({ ...current, [key]: event.target.value }));
   };
+  const updateLegalDocument = (key) => (event) => {
+    const file = event.target.files?.[0];
+    setState((current) => ({
+      ...current,
+      legalDocuments: {
+        ...(current.legalDocuments || {}),
+        [key]: file?.name || ""
+      }
+    }));
+  };
 
   const toggle = (key) => {
     setOpenSections((current) => ({ ...current, [key]: !current[key] }));
@@ -1095,9 +1255,10 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
 
             <EmployeeSection title="Legal Documents" open={openSections.legal} onToggle={() => toggle("legal")}>
               <div className="pooja-form-grid">
-                {["Aadhar Card", "Driving Licence", "PAN Card", "Passport Size Photo"].map((label) => (
-                  <FileField key={label} label={label} />
-                ))}
+                <FileField label="Aadhar Card" fileName={state.legalDocuments?.aadharCard} onChange={updateLegalDocument("aadharCard")} />
+                <FileField label="Driving Licence" fileName={state.legalDocuments?.drivingLicence} onChange={updateLegalDocument("drivingLicence")} />
+                <FileField label="PAN Card" fileName={state.legalDocuments?.panCard} onChange={updateLegalDocument("panCard")} />
+                <FileField label="Passport Size Photo" fileName={state.legalDocuments?.passportSizePhoto} onChange={updateLegalDocument("passportSizePhoto")} />
               </div>
             </EmployeeSection>
 
@@ -1132,7 +1293,7 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
             <button className="pooja-outline-button" onClick={onClose} type="button">
               Cancel
             </button>
-            <button className="pooja-secondary-button" type="button" onClick={() => setState({ ...employeeCreateSeed })}>
+            <button className="pooja-secondary-button" type="button" onClick={() => setState(createEmployeeFormState())}>
               Reset
             </button>
             <button className="pooja-primary-button" disabled={isPending} type="submit">
@@ -1231,12 +1392,37 @@ function PhoneField({ label, required, country, number, onCountryChange, onNumbe
   );
 }
 
-function FileField({ label }) {
+function FileField({ label, fileName, onChange }) {
   return (
     <label className="pooja-file-field full-span">
       <span>{label}</span>
-      <input type="file" />
+      <input type="file" onChange={onChange} />
+      {fileName ? <small>{fileName}</small> : null}
     </label>
+  );
+}
+
+function EmployeeDetailsModal({ employee, onClose }) {
+  return (
+    <Modal open={!!employee} eyebrow="Employee Master" title={employee?.name || "Employee Details"} onClose={onClose}>
+      {employee ? (
+        <div className="employee-detail-grid">
+          {employeeDetailSections.map((section) => (
+            <section className="employee-detail-section" key={section.title}>
+              <h4>{section.title}</h4>
+              <div className="doc-stack">
+                {section.fields.map(([key, label]) => (
+                  <div className="doc-line" key={key}>
+                    <span>{label}</span>
+                    <strong>{String(getEmployeeDetailValue(employee, key) || "-")}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : null}
+    </Modal>
   );
 }
 

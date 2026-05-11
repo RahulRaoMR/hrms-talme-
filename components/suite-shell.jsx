@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
+import { apiUrl } from "@/lib/api-client";
 import { canAccess, resolveRole } from "@/lib/permissions";
+import { clearSuiteSession, getSuiteSession, saveSuiteSession } from "@/lib/auth-session";
 
 export default function SuiteShell({
   eyebrow,
@@ -19,15 +21,63 @@ export default function SuiteShell({
   const router = useRouter();
   const [focusMode, setFocusMode] = useState(false);
   const [lightMode, setLightMode] = useState(false);
-  const role = resolveRole("Enterprise Admin") || "Enterprise Admin";
+  const [session, setSession] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const role = resolveRole(session?.user?.role || "Enterprise Admin") || "Enterprise Admin";
   const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function verifySession() {
+      const currentSession = getSuiteSession();
+
+      if (!currentSession) {
+        router.replace("/");
+        return;
+      }
+
+      try {
+        const response = await fetch(apiUrl("/api/auth/session"), {
+          headers: {
+            Authorization: `Bearer ${currentSession.token}`
+          },
+          cache: "no-store"
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Session expired. Please sign in again.");
+        }
+
+        const verifiedSession = {
+          ...currentSession,
+          user: payload.user
+        };
+
+        saveSuiteSession(verifiedSession);
+
+        if (!cancelled) {
+          setSession(verifiedSession);
+          setCheckingSession(false);
+        }
+      } catch {
+        clearSuiteSession();
+        router.replace("/");
+      }
+    }
+
+    verifySession();
+
     const isFocus = window.localStorage.getItem("talme-focus-mode") === "on";
     const isLight = window.localStorage.getItem("talme-theme-mode") === "light";
     setFocusMode(isFocus);
     setLightMode(isLight);
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   useEffect(() => {
     document.body.classList.toggle("focus-mode", focusMode);
@@ -51,6 +101,20 @@ export default function SuiteShell({
     window.addEventListener("popstate", sendBackToHrms);
     return () => window.removeEventListener("popstate", sendBackToHrms);
   }, [pathname, router]);
+
+  if (checkingSession) {
+    return (
+      <main className="landing-body">
+        <section className="landing-shell">
+          <article className="landing-card">
+            <div className="landing-badge">Secure Enterprise Access</div>
+            <h1>Checking Access</h1>
+            <p>Verifying your signed-in session before opening the suite.</p>
+          </article>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -124,7 +188,10 @@ export default function SuiteShell({
             </button>
             <button
               className="ghost-button"
-              onClick={() => router.push("/login")}
+              onClick={() => {
+                clearSuiteSession();
+                router.push("/");
+              }}
               type="button"
             >
               Log Out

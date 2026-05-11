@@ -170,6 +170,7 @@ model Employee {
   bankStatus  String
   status      String
   tone        String
+  employeeDetails Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

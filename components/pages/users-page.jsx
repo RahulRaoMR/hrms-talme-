@@ -36,7 +36,7 @@ export default function UsersPageClient() {
     name: "Operations Admin",
     email: "ops@talme.ai",
     role: "Operations Manager",
-    password: "talme123",
+    password: "",
     active: true
   });
 

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiUrl } from "@/lib/api-client";
+import { saveSuiteSession } from "@/lib/auth-session";
 
 const roleOptions = {
   admin: {
@@ -93,15 +94,55 @@ export default function LandingPage() {
     }
   }
 
+  async function parseAuthResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    return {
+      error: "Login service is not available. Check the backend API URL and try again."
+    };
+  }
+
   async function enterSuite() {
     setSubmitting(true);
     setError("");
 
     try {
+      if (!selectedCredentials.email.trim()) {
+        throw new Error(formState.role === "employee" ? "Enter Employee ID." : "Enter corporate email.");
+      }
+
+      if (!selectedCredentials.password.trim()) {
+        throw new Error("Enter your password.");
+      }
+
+      const response = await fetch(apiUrl("/api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: selectedCredentials.email,
+          password: selectedCredentials.password,
+          role: formState.role
+        })
+      });
+      const payload = await parseAuthResponse(response);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Invalid email or password.");
+      }
+
+      saveSuiteSession({
+        token: payload.token,
+        user: payload.user,
+        destination: selectedCredentials.destination
+      });
       router.push(selectedCredentials.destination);
       router.refresh();
-    } catch {
-      setError("Unable to sign in. Please check the selected role and ID.");
+    } catch (loginError) {
+      setError(loginError.message || "Unable to sign in. Please check the selected role and password.");
     } finally {
       setSubmitting(false);
     }

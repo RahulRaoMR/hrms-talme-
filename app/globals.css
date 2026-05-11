@@ -1241,6 +1241,30 @@ small {
   cursor: pointer;
 }
 
+.pooja-file-field small {
+  color: var(--hrms-accent-strong);
+  font-size: 0.82rem;
+}
+
+.employee-detail-grid {
+  display: grid;
+  gap: 18px;
+  max-height: min(68vh, 720px);
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.employee-detail-section {
+  display: grid;
+  gap: 12px;
+}
+
+.employee-detail-section h4 {
+  color: var(--gold);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+}
+
 .pooja-add-more,
 .pooja-outline-button,
 .pooja-secondary-button,

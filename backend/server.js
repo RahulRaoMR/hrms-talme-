@@ -1,6 +1,8 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 
 const databaseUrl =
@@ -18,6 +20,9 @@ const app = express();
 const hostname = "0.0.0.0";
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const allowedOrigin = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || "*";
+const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
+const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
+const defaultHrPassword = process.env.DEFAULT_HR_PASSWORD || "hr123";
 const databaseStatus = process.env.DATABASE_URL
   ? `${new URL(process.env.DATABASE_URL).protocol.replace(":", "")} configured`
   : "missing";
@@ -29,8 +34,8 @@ const resourceMap = {
   "harmonized-roles": { model: "harmonizedRole", orderBy: { position: "asc" }, fields: ["position", "harmonizedRole"] },
   vendors: { model: "vendor", orderBy: { createdAt: "desc" }, fields: ["vendor", "category", "sites", "rating", "status", "tone"] },
   invoices: { model: "invoice", orderBy: { createdAt: "desc" }, fields: ["vendor", "invoiceNo", "attendance", "amount", "status", "tone"] },
-  users: { model: "user", orderBy: { createdAt: "desc" }, fields: ["name", "email", "role", "passwordHash", "active"] },
-  employees: { model: "employee", orderBy: { createdAt: "desc" }, fields: ["employeeId", "email", "name", "department", "location", "manager", "grade", "joiningDate", "salaryBand", "salaryNetPay", "bankStatus", "status", "tone"] },
+  users: { model: "user", orderBy: { createdAt: "desc" }, fields: ["name", "email", "role", "active"] },
+  employees: { model: "employee", orderBy: { createdAt: "desc" }, fields: ["employeeId", "email", "name", "department", "location", "manager", "grade", "joiningDate", "salaryBand", "salaryNetPay", "bankStatus", "status", "tone", "employeeDetails"] },
   "leave-requests": { model: "leaveRequest", orderBy: { createdAt: "desc" }, fields: ["employee", "leaveType", "dates", "balance", "approver", "status", "tone"] },
   "attendance-records": { model: "attendanceRecord", orderBy: { createdAt: "desc" }, fields: ["employee", "salaryNetPay", "month", "monthDays", "sundays", "holidays", "paidLeaves", "otHours", "present", "leaves", "overtime", "shift", "lockState", "tone"] },
   "vendor-workers": { model: "vendorWorker", orderBy: { createdAt: "desc" }, fields: ["workerId", "name", "vendor", "site", "skill", "wageRate", "attendance", "status", "tone"] },
@@ -51,6 +56,105 @@ app.get("/health", (_req, res) => {
 
 app.get("/api/test", (_req, res) => {
   res.json({ message: "API working" });
+});
+
+app.post("/api/auth/login", asyncHandler(async (req, res) => {
+  const identifier = String(req.body?.email || "").trim();
+  const password = String(req.body?.password || "").trim();
+  const expectedRole = normalizeLoginRole(req.body?.role);
+
+  if (!identifier || !password) {
+    return res.status(400).json({ error: "Email or employee ID and password are required." });
+  }
+
+  if (!databaseUrl) {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(503).json({ error: "Login database is not configured." });
+    }
+
+    const fallbackUser = getFallbackLoginUser(identifier, password, expectedRole);
+
+    if (!fallbackUser) {
+      return res.status(401).json({ error: "Invalid email, role, or password." });
+    }
+
+    return res.json({
+      token: createSessionToken(fallbackUser),
+      user: fallbackUser
+    });
+  }
+
+  let employee = null;
+  let user = null;
+
+  try {
+    employee =
+      expectedRole === "Employee" || !identifier.includes("@")
+        ? await prisma.employee.findFirst({
+            where: {
+              employeeId: {
+                equals: identifier,
+                mode: "insensitive"
+              }
+            },
+            select: { id: true, employeeId: true, email: true, name: true }
+          })
+        : null;
+    const loginEmail = String(employee?.email || identifier).trim().toLowerCase();
+
+    user = await prisma.user.findUnique({
+      where: { email: loginEmail }
+    });
+  } catch (loginError) {
+    if (process.env.NODE_ENV !== "production" && loginError?.code === "EPERM") {
+      const fallbackUser = getFallbackLoginUser(identifier, password, expectedRole);
+
+      if (fallbackUser) {
+        return res.json({
+          token: createSessionToken(fallbackUser),
+          user: fallbackUser
+        });
+      }
+
+      return res.status(401).json({ error: "Invalid email, role, or password." });
+    }
+
+    throw loginError;
+  }
+
+  if (!user || !user.active || (expectedRole && user.role !== expectedRole)) {
+    return res.status(401).json({ error: "Invalid email, role, or password." });
+  }
+
+  const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+
+  if (!passwordMatches) {
+    return res.status(401).json({ error: "Invalid email, role, or password." });
+  }
+
+  const sessionUser = {
+    id: user.id,
+    name: employee?.name || user.name,
+    email: user.email,
+    role: user.role,
+    employeeId: employee?.employeeId || null
+  };
+
+  res.json({
+    token: createSessionToken(sessionUser),
+    user: sessionUser
+  });
+}));
+
+app.get("/api/auth/session", (req, res) => {
+  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const user = verifySessionToken(token);
+
+  if (!user) {
+    return res.status(401).json({ error: "Session expired. Please sign in again." });
+  }
+
+  res.json({ user });
 });
 
 app.get(["/api/bootstrap", "/api/dashboard"], asyncHandler(async (_req, res) => {
@@ -156,6 +260,60 @@ app.post("/api/payroll/release", (_req, res) => {
   res.json({ released: true, message: "Payroll release accepted." });
 });
 
+app.get("/api/users", asyncHandler(async (_req, res) => {
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "desc" }
+  });
+
+  res.json(users.map(safeUser));
+}));
+
+app.post("/api/users", asyncHandler(async (req, res) => {
+  const password = String(req.body?.password || "").trim();
+
+  if (!password) {
+    return res.status(400).json({ error: "Password is required to create a user." });
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      name: String(req.body?.name || "").trim(),
+      email: String(req.body?.email || "").trim().toLowerCase(),
+      role: String(req.body?.role || "HR").trim(),
+      active: req.body?.active !== false,
+      passwordHash: await bcrypt.hash(password, 10)
+    }
+  });
+
+  res.status(201).json(safeUser(user));
+}));
+
+app.patch("/api/users/:id", asyncHandler(async (req, res) => {
+  const data = {
+    name: String(req.body?.name || "").trim(),
+    email: String(req.body?.email || "").trim().toLowerCase(),
+    role: String(req.body?.role || "HR").trim(),
+    active: req.body?.active !== false
+  };
+  const password = String(req.body?.password || "").trim();
+
+  if (password) {
+    data.passwordHash = await bcrypt.hash(password, 10);
+  }
+
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data
+  });
+
+  res.json(safeUser(user));
+}));
+
+app.delete("/api/users/:id", asyncHandler(async (req, res) => {
+  await prisma.user.delete({ where: { id: req.params.id } });
+  res.json({ id: req.params.id });
+}));
+
 app.all("/api/pdf/:kind", (req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.json({ kind: req.params.kind, message: "PDF endpoint is available on the Express backend." });
@@ -237,4 +395,90 @@ function pick(payload, fields) {
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function normalizeLoginRole(role) {
+  const roles = {
+    admin: "Enterprise Admin",
+    hr: "HR",
+    employee: "Employee"
+  };
+
+  return roles[role] || role || "";
+}
+
+function safeUser(user) {
+  const { passwordHash, ...safe } = user;
+  return safe;
+}
+
+function getFallbackLoginUser(identifier, password, expectedRole) {
+  const normalizedIdentifier = identifier.toLowerCase();
+  const fallbackUsers = [
+    {
+      id: "fallback-admin",
+      name: "Talme Director",
+      email: "director@talme.ai",
+      role: "Enterprise Admin",
+      password: defaultAdminPassword,
+      employeeId: null
+    },
+    {
+      id: "fallback-hr",
+      name: "Talme HR",
+      email: "hr@talme.ai",
+      role: "HR",
+      password: defaultHrPassword,
+      employeeId: null
+    }
+  ];
+  const user = fallbackUsers.find(
+    (entry) =>
+      entry.email === normalizedIdentifier &&
+      entry.password === password &&
+      (!expectedRole || entry.role === expectedRole)
+  );
+
+  if (!user) return null;
+
+  const { password: _password, ...safe } = user;
+  return safe;
+}
+
+function createSessionToken(user) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      user,
+      expiresAt: Date.now() + 12 * 60 * 60 * 1000
+    })
+  ).toString("base64url");
+  const signature = crypto.createHmac("sha256", authSecret).update(payload).digest("base64url");
+
+  return `${payload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+
+  if (!payload || !signature) return null;
+
+  const expectedSignature = crypto.createHmac("sha256", authSecret).update(payload).digest("base64url");
+  const provided = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+
+  if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
+    return null;
+  }
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+
+    if (!session?.user?.email || Date.now() > Number(session.expiresAt || 0)) {
+      return null;
+    }
+
+    return session.user;
+  } catch {
+    return null;
+  }
 }

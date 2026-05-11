@@ -64,6 +64,16 @@ function optionalBoolean(value) {
   throw new ApiRouteError("Active must be true or false.", 400);
 }
 
+function optionalJson(payload, field) {
+  const value = payload?.[field];
+
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  return value;
+}
+
 function candidateExtraFields(payload) {
   return {
     jobId: optionalString(payload, "jobId"),
@@ -380,7 +390,8 @@ const resourceConfigs = {
         salaryNetPay: optionalNumber(payload, "salaryNetPay", "Salary net pay") || 0,
         bankStatus: requiredString(payload, "bankStatus", "Bank status"),
         status: requiredString(payload, "status", "Status"),
-        tone: optionalString(payload, "tone") || "gold"
+        tone: optionalString(payload, "tone") || "gold",
+        employeeDetails: optionalJson(payload, "employeeDetails")
       };
     },
     async updateData(payload) {
@@ -397,7 +408,8 @@ const resourceConfigs = {
         salaryNetPay: optionalNumber(payload, "salaryNetPay", "Salary net pay"),
         bankStatus: optionalString(payload, "bankStatus"),
         status: optionalString(payload, "status"),
-        tone: optionalString(payload, "tone")
+        tone: optionalString(payload, "tone"),
+        employeeDetails: optionalJson(payload, "employeeDetails")
       };
     },
     audit: {

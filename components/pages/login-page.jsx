@@ -2,20 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/api-client";
+import { saveSuiteSession } from "@/lib/auth-session";
 
 const roleOptions = {
   admin: {
     label: "Enterprise Admin",
     identifierLabel: "Corporate Email",
     identifier: "director@talme.ai",
-    password: "talme123",
+    password: "",
     destination: "/dashboard"
   },
   hr: {
     label: "HR",
     identifierLabel: "Corporate Email",
     identifier: "hr@talme.ai",
-    password: "hr123",
+    password: "",
     destination: "/dashboard"
   },
   employee: {
@@ -61,10 +63,40 @@ export default function LoginPageClient() {
               setError("");
 
               try {
+                if (!selectedCredentials.email.trim()) {
+                  throw new Error(formState.role === "employee" ? "Enter Employee ID." : "Enter corporate email.");
+                }
+
+                if (!selectedCredentials.password.trim()) {
+                  throw new Error("Enter your password.");
+                }
+
+                const response = await fetch(apiUrl("/api/auth/login"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    email: selectedCredentials.email,
+                    password: selectedCredentials.password,
+                    role: formState.role
+                  })
+                });
+                const payload = await response.json().catch(() => ({
+                  error: "Login service is not available. Check the backend API URL and try again."
+                }));
+
+                if (!response.ok) {
+                  throw new Error(payload?.error || "Invalid email or password.");
+                }
+
+                saveSuiteSession({
+                  token: payload.token,
+                  user: payload.user,
+                  destination: selectedCredentials.destination
+                });
                 router.push(selectedCredentials.destination);
                 router.refresh();
-              } catch {
-                setError("Unable to sign in. Please retry.");
+              } catch (loginError) {
+                setError(loginError.message || "Unable to sign in. Please retry.");
               } finally {
                 setSubmitting(false);
               }
