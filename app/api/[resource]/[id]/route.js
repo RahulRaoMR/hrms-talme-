@@ -1,8 +1,20 @@
 import { deleteResource, getResource, updateResource } from "@/lib/local-api-store";
+import {
+  deletePersistentResource,
+  getPersistentResource,
+  hasPersistentDatabase,
+  updatePersistentResource
+} from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
 export async function GET(request, context) {
   const { resource, id } = await context.params;
+  const persistentRow = await getPersistentResource(resource, id);
+
+  if (persistentRow) {
+    return Response.json(persistentRow);
+  }
+
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}${new URL(request.url).search}`);
 
   if (proxiedResponse) {
@@ -21,13 +33,25 @@ export async function GET(request, context) {
 
 export async function PATCH(request, context) {
   const { resource, id } = await context.params;
+
+  let payload;
+
+  if (hasPersistentDatabase) {
+    payload = await request.json().catch(() => ({}));
+    const persistentRow = await updatePersistentResource(resource, id, payload);
+
+    if (persistentRow) {
+      return Response.json(persistentRow);
+    }
+  }
+
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
 
   if (proxiedResponse) {
     return proxiedResponse;
   }
 
-  const payload = await request.json().catch(() => ({}));
+  payload ||= await request.json().catch(() => ({}));
   const row = updateResource(resource, id, payload);
 
   if (!row) {
@@ -39,6 +63,12 @@ export async function PATCH(request, context) {
 
 export async function DELETE(request, context) {
   const { resource, id } = await context.params;
+  const persistentRow = await deletePersistentResource(resource, id);
+
+  if (persistentRow) {
+    return Response.json(persistentRow);
+  }
+
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
 
   if (proxiedResponse) {

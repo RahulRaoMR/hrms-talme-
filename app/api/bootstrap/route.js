@@ -4,9 +4,16 @@ import {
   getFrontendInvoices,
   getFrontendVendors
 } from "@/lib/frontend-data";
+import { getPersistentBootstrapMetrics } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
 export async function GET(request) {
+  const persistentMetrics = await getPersistentBootstrapMetrics();
+
+  if (persistentMetrics) {
+    return Response.json({ metrics: persistentMetrics });
+  }
+
   const proxiedResponse = await proxyToConfiguredApi(request, "/api/bootstrap");
 
   if (proxiedResponse) {
