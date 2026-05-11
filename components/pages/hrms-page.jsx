@@ -199,6 +199,7 @@ export default function HrmsPageClient({ data }) {
   const [leaveToAccept, setLeaveToAccept] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
   const [employeeForm, setEmployeeForm] = useState(createEmployeeFormState);
+  const [employeeFormError, setEmployeeFormError] = useState("");
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
   const [attendanceForm, setAttendanceForm] = useState(attendanceSeed);
   const [shareSummary, setShareSummary] = useState(null);
@@ -586,14 +587,24 @@ export default function HrmsPageClient({ data }) {
         open={employeeModalOpen}
         state={employeeForm}
         setState={setEmployeeForm}
+        error={employeeFormError}
         isPending={isPending}
-        onClose={() => setEmployeeModalOpen(false)}
+        onClose={() => {
+          setEmployeeFormError("");
+          setEmployeeModalOpen(false);
+        }}
         onSubmit={() =>
           startTransition(async () => {
-            const created = await createEmployeeAction(toEmployeePayload(employeeForm));
-            setEmployees((current) => [created, ...current]);
-            setEmployeeForm(createEmployeeFormState());
-            setEmployeeModalOpen(false);
+            setEmployeeFormError("");
+
+            try {
+              const created = await createEmployeeAction(toEmployeePayload(employeeForm));
+              setEmployees((current) => [created, ...current]);
+              setEmployeeForm(createEmployeeFormState());
+              setEmployeeModalOpen(false);
+            } catch (error) {
+              setEmployeeFormError(error?.message || "Unable to save employee. Please check the details and try again.");
+            }
           })
         }
       />
@@ -1159,7 +1170,7 @@ function downloadCsv(fileName, rows) {
   URL.revokeObjectURL(url);
 }
 
-function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPending }) {
+function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose, isPending }) {
   const [openSections, setOpenSections] = useState({
     basic: true,
     bank: false,
@@ -1217,6 +1228,8 @@ function EmployeeCreateDrawer({ open, state, setState, onSubmit, onClose, isPend
           </header>
 
           <div className="employee-accordion">
+            {error ? <p className="employee-drawer-error">{error}</p> : null}
+
             <EmployeeSection title="Basic Details" open={openSections.basic} onToggle={() => toggle("basic")}>
               <div className="pooja-form-grid">
                 <TextField label="Employee Code" required value={state.employeeCode} onChange={update("employeeCode")} />

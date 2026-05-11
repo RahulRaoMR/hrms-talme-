@@ -1046,12 +1046,15 @@ textarea {
 .workspace-head {
   display: grid;
   gap: 6px;
+  min-width: min(32rem, 100%);
 }
 
 .workspace-topbar h1 {
   font-size: clamp(2.2rem, 4vw, 3.3rem);
-  max-width: 12ch;
-  overflow-wrap: anywhere;
+  max-width: 16ch;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 
 .search-pill {
@@ -1701,6 +1704,17 @@ small {
   overflow-y: auto;
   background: var(--hrms-surface);
   scrollbar-color: rgba(214, 176, 106, 0.5) transparent;
+}
+
+.employee-drawer-error {
+  margin: 16px 22px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(242, 180, 164, 0.35);
+  border-radius: 5px;
+  background: rgba(242, 180, 164, 0.1);
+  color: #ffd1c5;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .employee-section {

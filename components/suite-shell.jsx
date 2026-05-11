@@ -21,6 +21,7 @@ export default function SuiteShell({
   const router = useRouter();
   const [focusMode, setFocusMode] = useState(false);
   const [lightMode, setLightMode] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -74,6 +75,7 @@ export default function SuiteShell({
     const isLight = window.localStorage.getItem("talme-theme-mode") === "light";
     setFocusMode(isFocus);
     setLightMode(isLight);
+    setPreferencesLoaded(true);
 
     return () => {
       cancelled = true;
@@ -81,14 +83,18 @@ export default function SuiteShell({
   }, [router]);
 
   useEffect(() => {
+    if (!preferencesLoaded) return;
+
     document.body.classList.toggle("focus-mode", focusMode);
     window.localStorage.setItem("talme-focus-mode", focusMode ? "on" : "off");
-  }, [focusMode]);
+  }, [focusMode, preferencesLoaded]);
 
   useEffect(() => {
+    if (!preferencesLoaded) return;
+
     document.body.classList.toggle("light-mode", lightMode);
     window.localStorage.setItem("talme-theme-mode", lightMode ? "light" : "dark");
-  }, [lightMode]);
+  }, [lightMode, preferencesLoaded]);
 
   useEffect(() => {
     if (pathname !== "/dashboard") return undefined;
