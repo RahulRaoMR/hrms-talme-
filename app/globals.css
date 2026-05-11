@@ -366,12 +366,68 @@ textarea {
   margin-top: 18px;
 }
 
+.nav-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .nav-label {
   margin-bottom: 10px;
   color: var(--muted);
   font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+}
+
+.mobile-core-button,
+.mobile-nav-close,
+.mobile-nav-backdrop {
+  display: none;
+}
+
+.mobile-core-button {
+  width: max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mobile-core-button span {
+  width: 18px;
+  height: 12px;
+  position: relative;
+  display: inline-block;
+  border-top: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
+.mobile-core-button span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 2px solid currentColor;
+  transform: translateY(-50%);
+}
+
+.mobile-nav-close {
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
 }
 
 .nav-link {
@@ -2568,7 +2624,39 @@ small {
   }
 
   .sidebar {
-    position: static;
+    width: min(330px, calc(100vw - 34px));
+    height: calc(100dvh - 24px);
+    position: fixed;
+    z-index: 80;
+    top: 12px;
+    left: 12px;
+    transform: translateX(calc(-100% - 24px));
+    transition: transform 200ms ease;
+  }
+
+  .app-shell.nav-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .mobile-core-button {
+    display: inline-flex;
+  }
+
+  .mobile-nav-close {
+    display: grid;
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: rgba(3, 8, 14, 0.58);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+  }
+
+  .app-shell.nav-open .mobile-nav-backdrop {
+    display: block;
   }
 }
 
@@ -2620,7 +2708,9 @@ small {
   }
 
   .sidebar {
-    max-height: none;
+    max-height: calc(100dvh - 14px);
+    top: 7px;
+    left: 7px;
   }
 
   .workspace-topbar h1,

@@ -12,6 +12,7 @@ dist/
 # local env files
 .env
 .env*.local
+.talme-local-api-store.json
 
 # prisma local databases
 prisma/*.db

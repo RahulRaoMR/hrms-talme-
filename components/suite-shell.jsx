@@ -21,6 +21,7 @@ export default function SuiteShell({
   const router = useRouter();
   const [focusMode, setFocusMode] = useState(false);
   const [lightMode, setLightMode] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const role = resolveRole(session?.user?.role || "Enterprise Admin") || "Enterprise Admin";
@@ -102,6 +103,10 @@ export default function SuiteShell({
     return () => window.removeEventListener("popstate", sendBackToHrms);
   }, [pathname, router]);
 
+  useEffect(() => {
+    setNavOpen(false);
+  }, [pathname]);
+
   if (checkingSession) {
     return (
       <main className="landing-body">
@@ -117,7 +122,13 @@ export default function SuiteShell({
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${navOpen ? "nav-open" : ""}`}>
+      <button
+        className="mobile-nav-backdrop"
+        onClick={() => setNavOpen(false)}
+        type="button"
+        aria-label="Close Core menu"
+      />
       <aside className="sidebar">
         <div className="brand-block">
           <div className="brand-mark" style={{ background: 'transparent' }}>
@@ -130,12 +141,18 @@ export default function SuiteShell({
         </div>
 
         <div className="nav-group">
-          <div className="nav-label">Core</div>
+          <div className="nav-label-row">
+            <div className="nav-label">Core</div>
+            <button className="mobile-nav-close" onClick={() => setNavOpen(false)} type="button" aria-label="Close Core menu">
+              x
+            </button>
+          </div>
           {visibleNavItems.map((item) => (
             <Link
               key={item.href}
               className={`nav-link ${pathname === item.href ? "active" : ""}`}
               href={item.href}
+              onClick={() => setNavOpen(false)}
             >
               <span>{item.index}</span>
               <div>
@@ -153,6 +170,16 @@ export default function SuiteShell({
       <main className="workspace">
         <header className="workspace-topbar">
           <div className="workspace-head">
+            <button
+              className="mobile-core-button"
+              onClick={() => setNavOpen(true)}
+              type="button"
+              aria-label="Open Core menu"
+              aria-expanded={navOpen}
+            >
+              <span aria-hidden="true" />
+              <strong>Core</strong>
+            </button>
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
             <p className="session-note">

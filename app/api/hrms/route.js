@@ -1,4 +1,5 @@
 import { getEnterpriseSuiteData } from "@/lib/frontend-data";
+import { getLocalSuiteData } from "@/lib/local-api-store";
 import { getPersistentHrmsData } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
@@ -15,5 +16,5 @@ export async function GET(request) {
     return proxiedResponse;
   }
 
-  return Response.json(getEnterpriseSuiteData());
+  return Response.json(getLocalSuiteData() || getEnterpriseSuiteData());
 }
