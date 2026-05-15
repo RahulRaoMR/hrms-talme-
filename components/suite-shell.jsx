@@ -153,14 +153,14 @@ export default function SuiteShell({
               x
             </button>
           </div>
-          {visibleNavItems.map((item) => (
+          {visibleNavItems.map((item, index) => (
             <Link
               key={item.href}
               className={`nav-link ${pathname === item.href ? "active" : ""}`}
               href={item.href}
               onClick={() => setNavOpen(false)}
             >
-              <span>{item.index}</span>
+              <span>{String(index + 1).padStart(2, "0")}</span>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <strong>{item.label}</strong>

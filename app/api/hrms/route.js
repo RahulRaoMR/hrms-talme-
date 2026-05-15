@@ -1,5 +1,5 @@
 import { getEnterpriseSuiteData } from "@/lib/frontend-data";
-import { getLocalSuiteData } from "@/lib/local-api-store";
+import { getLocalSuiteData, getResource } from "@/lib/local-api-store";
 import { getPersistentHrmsData } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
@@ -7,7 +7,10 @@ export async function GET(request) {
   const persistentData = await getPersistentHrmsData();
 
   if (persistentData) {
-    return Response.json(persistentData);
+    return Response.json({
+      ...persistentData,
+      shiftAssignments: getResource("shift-assignments") || []
+    });
   }
 
   const proxiedResponse = await proxyToConfiguredApi(request, "/api/hrms");

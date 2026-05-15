@@ -28,6 +28,7 @@ const roleOptions = {
     destination: "/employee-app"
   }
 };
+const employeeSessionKey = "talme-employee-app-employee-id";
 
 export default function LoginPageClient() {
   const router = useRouter();
@@ -88,12 +89,24 @@ export default function LoginPageClient() {
                   throw new Error(payload?.error || "Invalid email or password.");
                 }
 
+                const loginEmployeeId =
+                  formState.role === "employee"
+                    ? payload?.user?.employeeId || selectedCredentials.email.trim()
+                    : "";
+                const loginDestination = loginEmployeeId
+                  ? `/employee-app?employeeId=${encodeURIComponent(loginEmployeeId)}`
+                  : selectedCredentials.destination;
+
+                if (loginEmployeeId) {
+                  window.localStorage.setItem(employeeSessionKey, loginEmployeeId);
+                }
+
                 saveSuiteSession({
                   token: payload.token,
                   user: payload.user,
-                  destination: selectedCredentials.destination
+                  destination: loginDestination
                 });
-                router.push(selectedCredentials.destination);
+                router.push(loginDestination);
                 router.refresh();
               } catch (loginError) {
                 setError(loginError.message || "Unable to sign in. Please retry.");

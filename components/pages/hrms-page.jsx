@@ -184,10 +184,44 @@ const attendanceSeed = {
   tone: "gold"
 };
 
+function getEmployeeIdSortParts(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(.*?)(\d+)\s*$/);
+
+  return {
+    prefix: (match?.[1] || raw).toLowerCase(),
+    number: match ? Number(match[2]) : Number.POSITIVE_INFINITY,
+    raw: raw.toLowerCase()
+  };
+}
+
+function sortEmployeesById(rows = []) {
+  return [...rows].sort((left, right) => {
+    const leftId = getEmployeeIdSortParts(left.employeeId || left.id);
+    const rightId = getEmployeeIdSortParts(right.employeeId || right.id);
+    const prefixOrder = leftId.prefix.localeCompare(rightId.prefix);
+
+    if (prefixOrder) return prefixOrder;
+    if (leftId.number !== rightId.number) return leftId.number - rightId.number;
+
+    return leftId.raw.localeCompare(rightId.raw);
+  });
+}
+
 export default function HrmsPageClient({ data }) {
   const [employees, setEmployees] = useState(data?.employees || []);
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
   const [attendanceRecords, setAttendanceRecords] = useState(data?.attendanceRecords || []);
+  const [quickAttendance, setQuickAttendance] = useState(() => ({
+    dateLabel: "Today",
+    rows: [],
+    summary: {
+      total: 0,
+      checkedIn: 0,
+      punchedOut: 0,
+      noPunch: 0
+    }
+  }));
   const [documents] = useState(data?.documents || []);
   const [salarySheet, setSalarySheet] = useState({ rows: [], generated: false, monthLabel: "" });
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
@@ -195,6 +229,8 @@ export default function HrmsPageClient({ data }) {
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [employeeEdit, setEmployeeEdit] = useState(null);
   const [employeeDetail, setEmployeeDetail] = useState(null);
+  const [attendanceMasterEmployee, setAttendanceMasterEmployee] = useState(null);
+  const [attendanceMasterMonth, setAttendanceMasterMonth] = useState(() => getMonthInputValue(new Date()));
   const [leaveEdit, setLeaveEdit] = useState(null);
   const [leaveToAccept, setLeaveToAccept] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
@@ -206,9 +242,28 @@ export default function HrmsPageClient({ data }) {
   const [isSharingPayslips, setIsSharingPayslips] = useState(false);
   const [isPending, startTransition] = useTransition();
   const salarySheetTotal = salarySheet.rows.reduce((total, row) => total + row.totalPay, 0);
+  const sortedEmployees = sortEmployeesById(employees);
+
+  useEffect(() => {
+    const syncQuickAttendance = () => {
+      setQuickAttendance(buildQuickAttendanceDashboard(sortEmployeesById(employees)));
+    };
+
+    syncQuickAttendance();
+    window.addEventListener("storage", syncQuickAttendance);
+    window.addEventListener("focus", syncQuickAttendance);
+
+    const refreshTimer = window.setInterval(syncQuickAttendance, 30000);
+
+    return () => {
+      window.removeEventListener("storage", syncQuickAttendance);
+      window.removeEventListener("focus", syncQuickAttendance);
+      window.clearInterval(refreshTimer);
+    };
+  }, [employees]);
 
   const generateSalarySheet = () => {
-    setSalarySheet(generateSalaryRows(employees, attendanceRecords));
+    setSalarySheet(generateSalaryRows(sortedEmployees, attendanceRecords));
   };
 
   const downloadSalarySheet = () => {
@@ -297,6 +352,77 @@ export default function HrmsPageClient({ data }) {
             Add Employee
           </button>
         </div>
+        <div className="quick-attendance-board">
+          <div className="quick-attendance-head">
+            <div>
+              <p className="eyebrow">Today Punch Activity</p>
+              <h4>Employee check-in and punch-out status</h4>
+            </div>
+            <span>{quickAttendance.dateLabel}</span>
+          </div>
+          <div className="quick-attendance-summary">
+            <div className="quick-attendance-card">
+              <span className="dot blue" />
+              <strong>{quickAttendance.summary.total}</strong>
+              <small>Total Employees</small>
+            </div>
+            <div className="quick-attendance-card">
+              <span className="dot green" />
+              <strong>{quickAttendance.summary.checkedIn}</strong>
+              <small>Checked In</small>
+            </div>
+            <div className="quick-attendance-card">
+              <span className="dot orange" />
+              <strong>{quickAttendance.summary.punchedOut}</strong>
+              <small>Punched Out</small>
+            </div>
+            <div className="quick-attendance-card">
+              <span className="dot red" />
+              <strong>{quickAttendance.summary.noPunch}</strong>
+              <small>Not Yet</small>
+            </div>
+          </div>
+          <div className="quick-attendance-table-wrap">
+            <table className="data-table quick-attendance-table">
+              <thead>
+                <tr>
+                  <th>Employee ID</th>
+                  <th>Employee Name</th>
+                  <th>Department</th>
+                  <th>Designation</th>
+                  <th>First Punch</th>
+                  <th>Last Punch</th>
+                  <th>Total Working Hours</th>
+                  <th>Total Break Hours</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quickAttendance.rows.length ? quickAttendance.rows.map((row) => (
+                  <tr
+                    className="openable-row"
+                    key={row.employeeId}
+                    onClick={() => setAttendanceMasterEmployee(findEmployeeByAttendanceName(row.employeeId, employees))}
+                  >
+                    <td>{row.employeeId}</td>
+                    <td>{row.name}</td>
+                    <td>{row.department}</td>
+                    <td>{row.designation}</td>
+                    <td>{row.firstPunch}</td>
+                    <td>{row.lastPunch}</td>
+                    <td>{row.workingHours}</td>
+                    <td>{row.breakHours}</td>
+                    <td><StatusBadge tone={row.tone}>{row.status}</StatusBadge></td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="9">No employee punch activity found for today.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
         <table className="data-table">
           <thead>
             <tr>
@@ -310,8 +436,8 @@ export default function HrmsPageClient({ data }) {
             </tr>
           </thead>
           <tbody>
-            {employees.length ? employees.map((employee) => (
-              <tr key={employee.id}>
+            {sortedEmployees.length ? sortedEmployees.map((employee) => (
+              <tr className="openable-row" key={employee.id} onClick={() => setAttendanceMasterEmployee(employee)}>
                 <td>{employee.employeeId}</td>
                 <td>{employee.name}</td>
                 <td>{employee.department}</td>
@@ -319,7 +445,10 @@ export default function HrmsPageClient({ data }) {
                 <td>{employee.bankStatus}</td>
                 <td><StatusBadge tone={employee.tone}>{employee.status}</StatusBadge></td>
                 <td>
-                  <div className="row-actions">
+                  <div className="row-actions" onClick={(event) => event.stopPropagation()}>
+                    <button className="mini-button" onClick={() => setAttendanceMasterEmployee(employee)} type="button">
+                      Attendance
+                    </button>
                     <button className="mini-button" onClick={() => setEmployeeDetail(employee)} type="button">
                       Details
                     </button>
@@ -570,7 +699,8 @@ export default function HrmsPageClient({ data }) {
               </div>
               {shareSummary ? (
                 <p className="empty-state">
-                  {shareSummary.sent} payslip email{shareSummary.sent === 1 ? "" : "s"} sent for {shareSummary.periodLabel}.
+                  {shareSummary.stored || 0} payslip{shareSummary.stored === 1 ? "" : "s"} shared for {shareSummary.periodLabel}.
+                  {` ${shareSummary.sent} email${shareSummary.sent === 1 ? "" : "s"} sent.`}
                   {shareSummary.skipped ? ` ${shareSummary.skipped} skipped because registered email is missing.` : ""}
                   {shareSummary.failed ? ` ${shareSummary.failed} failed.` : ""}
                   {shareSummary.error ? ` ${shareSummary.error}` : ""}
@@ -612,6 +742,14 @@ export default function HrmsPageClient({ data }) {
       <EmployeeDetailsModal
         employee={employeeDetail}
         onClose={() => setEmployeeDetail(null)}
+      />
+
+      <AttendanceMasterModal
+        employee={attendanceMasterEmployee}
+        month={attendanceMasterMonth}
+        onClose={() => setAttendanceMasterEmployee(null)}
+        records={attendanceRecords}
+        setMonth={setAttendanceMasterMonth}
       />
 
       <EntityModal
@@ -778,6 +916,282 @@ export default function HrmsPageClient({ data }) {
       />
     </SuiteShell>
   );
+}
+
+function buildQuickAttendanceDashboard(employees) {
+  const now = new Date();
+  const rows = employees.map((employee) => buildQuickAttendanceRow(employee, now));
+
+  return {
+    dateLabel: formatAttendanceDate(now),
+    rows,
+    summary: {
+      total: employees.length,
+      checkedIn: rows.filter((row) => row.status === "Checked In").length,
+      punchedOut: rows.filter((row) => row.status === "Punched Out").length,
+      noPunch: rows.filter((row) => row.status === "Not Yet").length
+    }
+  };
+}
+
+function buildQuickAttendanceRow(employee, now) {
+  const activity = readEmployeePunchActivity(employee.employeeId, now);
+  const sortedActivity = sortPunchActivity(activity);
+  const firstPunch = sortedActivity[0];
+  const lastPunch = sortedActivity[sortedActivity.length - 1];
+  const lastType = lastPunch?.type;
+  const status = !lastPunch ? "Not Yet" : lastType === "Punch In" ? "Checked In" : "Punched Out";
+  const tone = status === "Checked In" ? "teal" : status === "Punched Out" ? "gold" : "slate";
+
+  return {
+    employeeId: employee.employeeId || employee.id || "-",
+    name: employee.name || "-",
+    department: employee.department || "-",
+    designation: employee.grade || getEmployeeDetailValue(employee, "designation") || "-",
+    firstPunch: firstPunch ? formatPunchTime(firstPunch.timestamp) : "-",
+    lastPunch: lastPunch ? formatPunchTime(lastPunch.timestamp) : "-",
+    workingHours: sortedActivity.length ? formatDuration(calculatePunchWorkingSeconds(sortedActivity, now)) : "-",
+    breakHours: sortedActivity.length ? formatDuration(calculatePunchBreakSeconds(sortedActivity, now)) : "-",
+    status,
+    tone
+  };
+}
+
+function readEmployeePunchActivity(employeeId, date) {
+  if (typeof window === "undefined" || !employeeId) {
+    return [];
+  }
+
+  const storageKey = `talme-employee-phone-activity-${employeeId}-${formatAttendanceStorageDate(date)}`;
+
+  try {
+    const storedActivity = window.localStorage.getItem(storageKey);
+    const parsedActivity = storedActivity ? JSON.parse(storedActivity) : [];
+
+    return Array.isArray(parsedActivity) ? parsedActivity : [];
+  } catch {
+    return [];
+  }
+}
+
+function sortPunchActivity(records = []) {
+  return [...records].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+}
+
+function calculatePunchWorkingSeconds(records, now) {
+  let activePunchIn = null;
+  let totalSeconds = 0;
+
+  records.forEach((entry) => {
+    if (entry.type === "Punch In") {
+      activePunchIn = new Date(entry.timestamp);
+      return;
+    }
+
+    if (entry.type === "Punch Out" && activePunchIn) {
+      const punchOut = new Date(entry.timestamp);
+      totalSeconds += Math.max(0, Math.floor((punchOut.getTime() - activePunchIn.getTime()) / 1000));
+      activePunchIn = null;
+    }
+  });
+
+  if (activePunchIn) {
+    totalSeconds += Math.max(0, Math.floor((now.getTime() - activePunchIn.getTime()) / 1000));
+  }
+
+  return totalSeconds;
+}
+
+function calculatePunchBreakSeconds(records, now) {
+  let totalSeconds = 0;
+
+  records.forEach((entry, index) => {
+    if (entry.type !== "Punch Out") {
+      return;
+    }
+
+    const nextPunchIn = records.slice(index + 1).find((item) => item.type === "Punch In");
+    const breakEnd = nextPunchIn ? new Date(nextPunchIn.timestamp) : now;
+    const breakStart = new Date(entry.timestamp);
+
+    totalSeconds += Math.max(0, Math.floor((breakEnd.getTime() - breakStart.getTime()) / 1000));
+  });
+
+  return totalSeconds;
+}
+
+function formatAttendanceStorageDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatAttendanceDate(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatPunchTime(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function formatDuration(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+  if (!hours && !minutes) {
+    return "00h 00m";
+  }
+
+  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function buildEmployeeAttendanceMasterRows(employee, month) {
+  const { year, monthIndex } = parseMonthValue(month);
+  const monthDays = new Date(year, monthIndex + 1, 0).getDate();
+  const now = new Date();
+  const rows = [];
+
+  for (let day = monthDays; day >= 1; day -= 1) {
+    const date = new Date(year, monthIndex, day);
+    const activity = sortPunchActivity(readEmployeePunchActivity(employee.employeeId, date));
+    const punchIn = activity.find((entry) => entry.type === "Punch In");
+    const punchOut = [...activity].reverse().find((entry) => entry.type === "Punch Out");
+    const hasActivity = Boolean(activity.length);
+
+    rows.push({
+      employeeId: employee.employeeId || employee.id || "-",
+      name: employee.name || "-",
+      department: employee.department || "-",
+      designation: employee.grade || getEmployeeDetailValue(employee, "designation") || "-",
+      date: formatAttendanceStorageDate(date),
+      displayDate: formatAttendanceMasterDate(date),
+      day: new Intl.DateTimeFormat("en-IN", { weekday: "long" }).format(date),
+      punchIn: punchIn ? formatPunchTime(punchIn.timestamp) : "-",
+      punchInGeo: punchIn ? formatPunchGeo(punchIn, employee) : "-",
+      punchOut: punchOut ? formatPunchTime(punchOut.timestamp) : "-",
+      punchOutGeo: punchOut ? formatPunchGeo(punchOut, employee) : "-",
+      workingHours: hasActivity ? formatDuration(calculateAttendanceMasterWorkingSeconds(activity, date, now)) : "-",
+      breakHours: hasActivity ? formatDuration(calculateAttendanceMasterBreakSeconds(activity)) : "-"
+    });
+  }
+
+  return rows;
+}
+
+function calculateAttendanceMasterWorkingSeconds(records, rowDate, now) {
+  let activePunchIn = null;
+  let totalSeconds = 0;
+  const isToday = formatAttendanceStorageDate(rowDate) === formatAttendanceStorageDate(now);
+
+  records.forEach((entry) => {
+    if (entry.type === "Punch In") {
+      activePunchIn = new Date(entry.timestamp);
+      return;
+    }
+
+    if (entry.type === "Punch Out" && activePunchIn) {
+      const punchOut = new Date(entry.timestamp);
+      totalSeconds += Math.max(0, Math.floor((punchOut.getTime() - activePunchIn.getTime()) / 1000));
+      activePunchIn = null;
+    }
+  });
+
+  if (activePunchIn && isToday) {
+    totalSeconds += Math.max(0, Math.floor((now.getTime() - activePunchIn.getTime()) / 1000));
+  }
+
+  return totalSeconds;
+}
+
+function calculateAttendanceMasterBreakSeconds(records) {
+  let totalSeconds = 0;
+
+  records.forEach((entry, index) => {
+    if (entry.type !== "Punch Out") {
+      return;
+    }
+
+    const nextPunchIn = records.slice(index + 1).find((item) => item.type === "Punch In");
+
+    if (!nextPunchIn) {
+      return;
+    }
+
+    const breakStart = new Date(entry.timestamp);
+    const breakEnd = new Date(nextPunchIn.timestamp);
+
+    totalSeconds += Math.max(0, Math.floor((breakEnd.getTime() - breakStart.getTime()) / 1000));
+  });
+
+  return totalSeconds;
+}
+
+function findEmployeeMonthAttendanceRecord(employee, month, records = []) {
+  const employeeKeys = [employee?.name, employee?.employeeId].map(normalizeLookup);
+
+  return records.find((record) =>
+    record.month === month &&
+    employeeKeys.includes(normalizeLookup(record.employee))
+  );
+}
+
+function formatAttendanceMasterDate(date) {
+  return [
+    String(date.getDate()).padStart(2, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    date.getFullYear()
+  ].join("-");
+}
+
+function formatPunchGeo(entry, employee) {
+  const coordinates =
+    entry.geoCoordinates ||
+    entry.coordinates ||
+    entry.geo ||
+    entry.location ||
+    entry.address;
+
+  if (coordinates && typeof coordinates === "object") {
+    const latitude = coordinates.latitude ?? coordinates.lat;
+    const longitude = coordinates.longitude ?? coordinates.lng ?? coordinates.lon;
+
+    if (latitude && longitude) {
+      return `${latitude}, ${longitude}`;
+    }
+
+    return Object.values(coordinates).filter(Boolean).join(", ") || "-";
+  }
+
+  if (coordinates) {
+    return String(coordinates);
+  }
+
+  const fallbackLocation =
+    employee.location ||
+    cleanDashValue(getEmployeeDetailValue(employee, "punchInBranch")) ||
+    cleanDashValue(getEmployeeDetailValue(employee, "masterBranch"));
+
+  return fallbackLocation || "-";
+}
+
+function cleanDashValue(value) {
+  return value && value !== "-" ? value : "";
 }
 
 function toEmployeePayload(form) {
@@ -1074,6 +1488,7 @@ function generateSalaryRows(employees, attendanceRecords) {
       const salaryNetPay = Number(attendance.salaryNetPay) || Number(employee.salaryNetPay) || monthlyNetPay;
       const month = attendance.month || defaultMonth;
       const monthLabel = calculateMonthMeta(month).label;
+      const employeeDetails = employee.employeeDetails || {};
       const calculated = calculateAttendancePay({
         ...attendance,
         month,
@@ -1087,7 +1502,11 @@ function generateSalaryRows(employees, attendanceRecords) {
         designation: employee.grade,
         department: employee.department,
         joiningDate: employee.joiningDate,
-        bankName: /^(bank added|pending)$/i.test(employee.bankStatus || "") ? "" : employee.bankStatus,
+        pan: employeeDetails.panCard || "",
+        uan: employeeDetails.uan || "",
+        bankName: employeeDetails.bankName ||
+          (/^(bank added|pending)$/i.test(employee.bankStatus || "") ? "" : employee.bankStatus),
+        bankAccountNumber: employeeDetails.accountNo || "",
         monthlyCtc,
         monthlyNetPay: salaryNetPay,
         month: monthLabel,
@@ -1439,6 +1858,148 @@ function EmployeeDetailsModal({ employee, onClose }) {
   );
 }
 
+function AttendanceMasterModal({ employee, month, onClose, records, setMonth }) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const rows = employee ? buildEmployeeAttendanceMasterRows(employee, month) : [];
+  const monthRecord = employee ? findEmployeeMonthAttendanceRecord(employee, month, records) : null;
+  const monthLabel = formatMonthLabel(month);
+
+  if (!employee) {
+    return null;
+  }
+
+  const downloadPdf = async () => {
+    setIsDownloading(true);
+
+    try {
+      const response = await fetch(apiUrl("/api/pdf/attendance-master"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee: {
+            employeeId: employee.employeeId,
+            name: employee.name,
+            department: employee.department,
+            designation: employee.grade || getEmployeeDetailValue(employee, "designation")
+          },
+          monthLabel,
+          summary: {
+            presentDays: monthRecord?.present || 0,
+            paidLeave: monthRecord?.paidLeaves ?? monthRecord?.leaves ?? 0,
+            otHours: monthRecord?.otHours ?? monthRecord?.overtime ?? 0
+          },
+          rows
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to download Attendance Master PDF.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `attendance-master-${employee.employeeId || employee.name || "employee"}-${month}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <div className="attendance-master-screen" role="dialog" aria-modal="true" aria-label="Attendance Master">
+      <div className="attendance-master-topbar">
+        <button className="ghost-button" onClick={onClose} type="button">
+          <span aria-hidden="true">{"<"}</span>
+          Back
+        </button>
+        <div>
+          <p className="eyebrow">Attendance Master</p>
+          <h2>{employee.name}</h2>
+        </div>
+        <button className="primary-button" disabled={isDownloading} onClick={downloadPdf} type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14" />
+          </svg>
+          {isDownloading ? "Downloading..." : "Download PDF"}
+        </button>
+      </div>
+
+      <div className="attendance-master-fullbody">
+        <div className="attendance-master-view">
+          <header className="attendance-master-brand">
+            <img src="/talme-logo.png" alt="Talme Technologies Pvt Ltd" />
+            <div>
+              <h2>Talme HRMS Suite</h2>
+              <h3>Attendance Master</h3>
+            </div>
+          </header>
+
+          <div className="attendance-master-toolbar">
+            <div>
+              <strong>{employee.employeeId}</strong>
+              <span>{employee.name} - {employee.department || "-"} - {employee.grade || "-"}</span>
+            </div>
+            <label>
+              <span>Month</span>
+              <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+            </label>
+          </div>
+
+          <div className="attendance-master-summary">
+            <div><strong>{monthLabel}</strong><small>Attendance period</small></div>
+            <div><strong>{monthRecord?.present || 0}</strong><small>Present days</small></div>
+            <div><strong>{monthRecord?.paidLeaves ?? monthRecord?.leaves ?? 0}</strong><small>Paid leave</small></div>
+            <div><strong>{monthRecord?.otHours ?? monthRecord?.overtime ?? 0}</strong><small>OT hours</small></div>
+          </div>
+
+          <div className="attendance-master-table-wrap">
+            <table className="attendance-master-table">
+              <thead>
+                <tr>
+                  <th>Employee ID</th>
+                  <th>Employee Name</th>
+                  <th>Department</th>
+                  <th>Designation</th>
+                  <th>Date</th>
+                  <th>Day</th>
+                  <th>Punch In</th>
+                  <th>Geo Coordinates<br />(After Punch In)</th>
+                  <th>Punch Out</th>
+                  <th>Geo Coordinates<br />(After Punch Out)</th>
+                  <th>Total Working Hours</th>
+                  <th>Total Break</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.date}>
+                    <td>{row.employeeId}</td>
+                    <td>{row.name}</td>
+                    <td>{row.department}</td>
+                    <td>{row.designation}</td>
+                    <td>{row.displayDate}</td>
+                    <td>{row.day}</td>
+                    <td>{row.punchIn}</td>
+                    <td>{row.punchInGeo}</td>
+                    <td>{row.punchOut}</td>
+                    <td>{row.punchOutGeo}</td>
+                    <td>{row.workingHours}</td>
+                    <td>{row.breakHours}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EntityModal({ open, title, eyebrow, state, setState, onSubmit, onClose, isPending, fields }) {
   return (
     <Modal open={open} eyebrow={eyebrow} title={title} onClose={onClose}>
@@ -1546,7 +2107,7 @@ function AttendanceModal({ open, title, eyebrow, state, setState, onSubmit, onCl
             <span>Employee</span>
             <input list="attendance-employees" value={state.employee ?? ""} onChange={update("employee")} />
             <datalist id="attendance-employees">
-              {employees.map((employee) => (
+              {sortEmployeesById(employees).map((employee) => (
                 <option key={employee.id} value={employee.name}>
                   {employee.employeeId}
                 </option>

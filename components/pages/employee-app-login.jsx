@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { apiUrl } from "@/lib/api-client";
+import { saveSuiteSession } from "@/lib/auth-session";
+
+const employeeSessionKey = "talme-employee-app-employee-id";
 
 export default function EmployeeAppLogin() {
   const router = useRouter();
@@ -33,10 +37,46 @@ export default function EmployeeAppLogin() {
     setError("");
 
     try {
-      router.push("/employee-app");
+      const employeeId = formState.employeeId.trim();
+
+      if (!employeeId) {
+        throw new Error("Employee ID is required.");
+      }
+
+      if (!formState.password.trim()) {
+        throw new Error("Password is required.");
+      }
+
+      const response = await fetch(apiUrl("/api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: employeeId,
+          password: formState.password,
+          role: "employee"
+        })
+      });
+      const payload = await response.json().catch(() => ({
+        error: "Login service is not available. Check the backend API URL and try again."
+      }));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Invalid employee ID or password.");
+      }
+
+      const loginEmployeeId = payload?.user?.employeeId || employeeId;
+      const destination = `/employee-app?employeeId=${encodeURIComponent(loginEmployeeId)}`;
+
+      window.localStorage.setItem(employeeSessionKey, loginEmployeeId);
+      saveSuiteSession({
+        token: payload.token,
+        user: payload.user,
+        destination
+      });
+      router.push(destination);
       router.refresh();
-    } catch {
-      setError("Invalid employee ID or password.");
+    } catch (loginError) {
+      setError(loginError?.message || "Invalid employee ID or password.");
     } finally {
       setSubmitting(false);
     }

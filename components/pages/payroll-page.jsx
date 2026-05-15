@@ -1,85 +1,123 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
-import {
-  approveInvoiceAction,
-  bulkDeleteInvoicesAction,
-  createInvoiceAction,
-  deleteInvoiceAction,
-  importInvoicesAction,
-  releasePayrollAction,
-  updateInvoiceAction
-} from "@/lib/api-actions";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import BarChart from "@/components/bar-chart";
-import CsvActions from "@/components/csv-actions";
 import FilterChips from "@/components/filter-chips";
-import Modal from "@/components/modal";
 import EmployeeCtcBreakdownPanel from "@/components/features/payroll/employee-ctc-breakdown-panel";
+import PayrollOverview from "@/components/features/payroll/payroll-overview";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
-import PayrollOverview from "@/components/features/payroll/payroll-overview";
-import { demoSeed, payrollChartSets, storeKeys } from "@/lib/demo-data";
-import { useDemoStore } from "@/lib/use-demo-store";
+import { apiUrl } from "@/lib/api-client";
+import { releasePayrollAction } from "@/lib/api-actions";
+import { payrollChartSets } from "@/lib/demo-data";
+
+const fallbackSummary = {
+  metrics: [],
+  stages: [],
+  financialControl: [],
+  readiness: [],
+  notifications: [],
+  activityFeed: [],
+  aiInsights: [],
+  approvalFlow: [],
+  sla: [],
+  paymentQueue: [],
+  salaryWorkflow: [],
+  charts: {
+    payrollTrend: payrollChartSets.Monthly.disbursement,
+    salaryAging: payrollChartSets.Monthly.aging,
+    taxBreakdown: []
+  }
+};
+
+function toneForStatus(status) {
+  const normalized = String(status || "").toLowerCase();
+
+  if (normalized.includes("ready") || normalized.includes("released") || normalized.includes("validated")) return "teal";
+  if (normalized.includes("hold") || normalized.includes("failed")) return "slate";
+  return "gold";
+}
 
 export default function PayrollPageClient() {
-  const { items: invoices, prepend, reload, replace, remove } = useDemoStore(
-    storeKeys.invoices,
-    demoSeed.invoices,
-    "/api/invoices"
-  );
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [invoiceFilter, setInvoiceFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [range, setRange] = useState("Monthly");
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState({ key: "vendor", direction: "asc" });
+  const [sort, setSort] = useState({ key: "employee", direction: "asc" });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [statusOverrides, setStatusOverrides] = useState({});
   const [isPending, startTransition] = useTransition();
   const [releaseSummary, setReleaseSummary] = useState(null);
-  const [formState, setFormState] = useState({
-    vendor: "PrimeServe Infra",
-    invoiceNo: "INV-5511",
-    attendance: "April locked",
-    amount: "INR 11,40,000"
-  });
-  const [editState, setEditState] = useState(null);
+  const [summary, setSummary] = useState(fallbackSummary);
+  const [lastUpdated, setLastUpdated] = useState("");
 
-  const normalizedInvoices = useMemo(
+  async function refreshPayrollSummary() {
+    try {
+      const response = await fetch(apiUrl("/api/payroll/summary"), { cache: "no-store" });
+      const payload = await response.json();
+      setSummary({ ...fallbackSummary, ...payload });
+      setLastUpdated(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+    } catch {
+      setSummary(fallbackSummary);
+    }
+  }
+
+  useEffect(() => {
+    refreshPayrollSummary();
+    const timer = window.setInterval(refreshPayrollSummary, 10000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const paymentRows = useMemo(
     () =>
-      invoices.map((invoice) => ({
-        ...invoice,
-        label: invoice.label || invoice.status,
-        tone: invoice.tone || "slate"
-      })),
-    [invoices]
+      summary.paymentQueue.map((row) => {
+        const override = statusOverrides[row.id];
+        const status = override?.status || row.status;
+
+        return {
+          ...row,
+          ...override,
+          status,
+          tone: toneForStatus(status)
+        };
+      }),
+    [statusOverrides, summary.paymentQueue]
   );
 
-  const visibleInvoices = useMemo(() => {
-    const filtered = normalizedInvoices.filter((invoice) => {
-      const matchesFilter = invoiceFilter === "All" || invoice.label === invoiceFilter;
+  const visiblePayments = useMemo(() => {
+    const filtered = paymentRows.filter((row) => {
+      const matchesStatus = statusFilter === "All" || row.status === statusFilter;
       const q = query.trim().toLowerCase();
       const matchesQuery =
         !q ||
-        invoice.vendor.toLowerCase().includes(q) ||
-        invoice.invoiceNo.toLowerCase().includes(q) ||
-        invoice.amount.toLowerCase().includes(q);
-      return matchesFilter && matchesQuery;
+        row.employee.toLowerCase().includes(q) ||
+        row.employeeId.toLowerCase().includes(q) ||
+        row.department.toLowerCase().includes(q) ||
+        row.bankStatus.toLowerCase().includes(q);
+
+      return matchesStatus && matchesQuery;
     });
 
     return filtered.sort((a, b) => {
       const aValue = String(a[sort.key] || "").toLowerCase();
       const bValue = String(b[sort.key] || "").toLowerCase();
-      return sort.direction === "asc"
-        ? aValue.localeCompare(bValue)
-        : bValue.localeCompare(aValue);
+      return sort.direction === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
     });
-  }, [invoiceFilter, normalizedInvoices, query, sort]);
+  }, [paymentRows, query, sort, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(visibleInvoices.length / 5));
-  const pagedInvoices = visibleInvoices.slice((page - 1) * 5, page * 5);
-  const pagedIds = pagedInvoices.map((invoice) => invoice.id);
+  const totalPages = Math.max(1, Math.ceil(visiblePayments.length / 6));
+  const pagedPayments = visiblePayments.slice((page - 1) * 6, page * 6);
+  const pagedIds = pagedPayments.map((row) => row.id);
+
+  const chartSet =
+    range === "Monthly"
+      ? {
+          disbursement: summary.charts.payrollTrend || payrollChartSets.Monthly.disbursement,
+          aging: summary.charts.salaryAging || payrollChartSets.Monthly.aging
+        }
+      : payrollChartSets.Quarterly;
+
   const toggleSort = (key) => {
     setSort((current) => ({
       key,
@@ -87,19 +125,25 @@ export default function PayrollPageClient() {
     }));
   };
 
-  const chartSet = payrollChartSets[range];
+  const updatePaymentStatus = (ids, status) => {
+    setStatusOverrides((current) => {
+      const next = { ...current };
+      ids.forEach((id) => {
+        next[id] = { status, tone: toneForStatus(status) };
+      });
+      return next;
+    });
+  };
 
   return (
     <SuiteShell
       eyebrow="Payroll Module"
-      title="Payroll, Payroll Tax, Invoice Control, and Salary Payment"
-      primaryHref="/vms"
-      primaryLabel="Open VMS"
+      title="Payroll, Payroll Tax, and Salary Payment"
       brandEyebrow="Payroll Suite"
       actions={
         <div className="row-actions">
-          <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-            Add Invoice
+          <button className="ghost-button notification-action" type="button">
+            Alerts {summary.notifications.length}
           </button>
           <button
             className="primary-button"
@@ -108,6 +152,8 @@ export default function PayrollPageClient() {
               startTransition(async () => {
                 const result = await releasePayrollAction();
                 setReleaseSummary(result);
+                updatePaymentStatus(paymentRows.map((row) => row.id), "Released");
+                await refreshPayrollSummary();
               })
             }
             type="button"
@@ -117,20 +163,8 @@ export default function PayrollPageClient() {
         </div>
       }
     >
-      <PayrollOverview />
+      <PayrollOverview summary={summary} />
       <EmployeeCtcBreakdownPanel />
-
-      {releaseSummary ? (
-        <section className="page-section panel">
-          <div className="signal-row">
-            <span className="teal">
-              {releaseSummary.sent} salary email{releaseSummary.sent === 1 ? "" : "s"} sent
-            </span>
-            <span>{releaseSummary.eligible} eligible employees</span>
-            <span>{releaseSummary.periodLabel}</span>
-          </div>
-        </section>
-      ) : null}
 
       {releaseSummary ? (
         <section className="page-section panel">
@@ -148,22 +182,22 @@ export default function PayrollPageClient() {
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Invoice Queue</p>
-              <h3>Vendor-linked finance</h3>
+              <p className="eyebrow">Salary Payment Queue</p>
+              <h3>Employee payroll release control</h3>
             </div>
           </div>
           <div className="table-toolbar">
             <FilterChips
-              options={["All", "Approved", "Finance Review", "Pending Docs", "Queued"]}
-              value={invoiceFilter}
+              options={["All", "Ready", "Review", "Hold", "Released"]}
+              value={statusFilter}
               onChange={(value) => {
-                setInvoiceFilter(value);
+                setStatusFilter(value);
                 setPage(1);
               }}
             />
             <input
               className="search-input"
-              placeholder="Search vendor, invoice, or amount"
+              placeholder="Search employee, ID, bank, or department"
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -171,41 +205,29 @@ export default function PayrollPageClient() {
               }}
             />
             <button
-              className="mini-button danger-button"
-              disabled={selectedIds.length === 0 || isPending}
-              onClick={() =>
-                startTransition(async () => {
-                  await bulkDeleteInvoicesAction(selectedIds);
-                  selectedIds.forEach((id) => remove(id));
-                  setSelectedIds([]);
-                  await reload();
-                })
-              }
+              className="mini-button"
+              disabled={selectedIds.length === 0}
+              onClick={() => updatePaymentStatus(selectedIds, "Ready")}
               type="button"
             >
-              Delete Selected ({selectedIds.length})
+              Validate Selected ({selectedIds.length})
             </button>
-            <CsvActions
-              filename="talme-invoices.csv"
-              rows={visibleInvoices}
-              columns={[
-                { key: "vendor", label: "Vendor" },
-                { key: "invoiceNo", label: "Invoice No." },
-                { key: "attendance", label: "Attendance" },
-                { key: "amount", label: "Amount" },
-                { key: "label", label: "Status" }
-              ]}
-              sample={"PrimeServe Infra,INV-5511,April locked,\"INR 11,40,000\",Queued"}
-              onImport={importInvoicesAction}
-              onImported={reload}
-            />
+            <button
+              className="mini-button danger-button"
+              disabled={selectedIds.length === 0}
+              onClick={() => updatePaymentStatus(selectedIds, "Hold")}
+              type="button"
+            >
+              Hold Selected
+            </button>
+            {lastUpdated ? <span className="pagination-note">Live sync {lastUpdated}</span> : null}
           </div>
-          <table className="data-table">
+          <table className="data-table payroll-payment-table">
             <thead>
               <tr>
                 <th>
                   <input
-                    aria-label="Select visible invoices"
+                    aria-label="Select visible salary payments"
                     checked={pagedIds.length > 0 && pagedIds.every((id) => selectedIds.includes(id))}
                     onChange={(event) =>
                       setSelectedIds((current) =>
@@ -217,80 +239,53 @@ export default function PayrollPageClient() {
                     type="checkbox"
                   />
                 </th>
-                <th><button className="table-sort" onClick={() => toggleSort("vendor")} type="button">Vendor</button></th>
-                <th><button className="table-sort" onClick={() => toggleSort("invoiceNo")} type="button">Invoice No.</button></th>
-                <th><button className="table-sort" onClick={() => toggleSort("attendance")} type="button">Attendance</button></th>
-                <th><button className="table-sort" onClick={() => toggleSort("amount")} type="button">Amount</button></th>
-                <th><button className="table-sort" onClick={() => toggleSort("label")} type="button">Approval</button></th>
+                <th><button className="table-sort" onClick={() => toggleSort("employee")} type="button">Employee</button></th>
+                <th><button className="table-sort" onClick={() => toggleSort("department")} type="button">Department</button></th>
+                <th><button className="table-sort" onClick={() => toggleSort("netPay")} type="button">Net Pay</button></th>
+                <th><button className="table-sort" onClick={() => toggleSort("tax")} type="button">Payroll Tax</button></th>
+                <th>Bank Status</th>
+                <th>Workflow</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {pagedInvoices.map((invoice) => (
-                <tr key={invoice.id || `${invoice.invoiceNo}-${invoice.vendor}`}>
+              {pagedPayments.map((row) => (
+                <tr key={row.id}>
                   <td>
                     <input
-                      aria-label={`Select ${invoice.invoiceNo}`}
-                      checked={selectedIds.includes(invoice.id)}
+                      aria-label={`Select ${row.employee}`}
+                      checked={selectedIds.includes(row.id)}
                       onChange={(event) =>
                         setSelectedIds((current) =>
-                          event.target.checked
-                            ? [...current, invoice.id]
-                            : current.filter((id) => id !== invoice.id)
+                          event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id)
                         )
                       }
                       type="checkbox"
                     />
                   </td>
-                  <td>{invoice.vendor}</td>
-                  <td>{invoice.invoiceNo}</td>
-                  <td>{invoice.attendance}</td>
-                  <td>{invoice.amount}</td>
                   <td>
-                    <StatusBadge tone={invoice.tone}>{invoice.label}</StatusBadge>
+                    <strong>{row.employee}</strong>
+                    <small>{row.employeeId}</small>
+                  </td>
+                  <td>{row.department}</td>
+                  <td>{row.netPay}</td>
+                  <td>{row.tax}</td>
+                  <td>{row.bankStatus}</td>
+                  <td>{row.workflow}</td>
+                  <td>
+                    <StatusBadge tone={row.tone}>{row.status}</StatusBadge>
                   </td>
                   <td>
                     <div className="row-actions">
-                      <Link className="mini-button" href={`/invoices/${invoice.id}`}>
-                        View
-                      </Link>
-                      <button
-                        className="mini-button"
-                        onClick={() => {
-                          setEditState(invoice);
-                          setEditModalOpen(true);
-                        }}
-                        type="button"
-                      >
-                        Edit
+                      <button className="mini-button" onClick={() => updatePaymentStatus([row.id], "Ready")} type="button">
+                        Validate
                       </button>
-                      <button
-                        className="mini-button"
-                        disabled={isPending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            const approved = await approveInvoiceAction(invoice.id);
-                            replace(invoice.id, approved);
-                            await reload();
-                          })
-                        }
-                        type="button"
-                      >
-                        Approve
+                      <button className="mini-button danger-button" onClick={() => updatePaymentStatus([row.id], "Hold")} type="button">
+                        Hold
                       </button>
-                      <button
-                        className="mini-button danger-button"
-                        disabled={isPending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            await deleteInvoiceAction(invoice.id);
-                            remove(invoice.id);
-                            await reload();
-                          })
-                        }
-                        type="button"
-                      >
-                        Delete
+                      <button className="mini-button" onClick={() => updatePaymentStatus([row.id], "Released")} type="button">
+                        Release
                       </button>
                     </div>
                   </td>
@@ -300,7 +295,7 @@ export default function PayrollPageClient() {
           </table>
           <div className="pagination-row">
             <span className="pagination-note">
-              Showing {pagedInvoices.length} of {visibleInvoices.length} invoices
+              Showing {pagedPayments.length} of {visiblePayments.length} salary payments
             </span>
             <div className="row-actions">
               <button
@@ -328,15 +323,17 @@ export default function PayrollPageClient() {
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Aggregator Model</p>
-              <h3>Payment management</h3>
+              <p className="eyebrow">Payroll Workflow</p>
+              <h3>Salary release pipeline</h3>
             </div>
           </div>
           <div className="flow-grid">
-            <div className="flow-card"><strong>Attendance</strong><small>Reconciled</small></div>
-            <div className="flow-card"><strong>Invoice</strong><small>Validated</small></div>
-            <div className="flow-card"><strong>Statutory Hold</strong><small>Controlled</small></div>
-            <div className="flow-card"><strong>Release</strong><small>Salary / Vendor Payment</small></div>
+            {summary.salaryWorkflow.map((item) => (
+              <div className="flow-card" key={item.label}>
+                <strong>{item.label}</strong>
+                <StatusBadge tone={item.tone}>{item.status}</StatusBadge>
+              </div>
+            ))}
           </div>
         </article>
       </section>
@@ -344,7 +341,7 @@ export default function PayrollPageClient() {
       <section className="page-section panel chart-filter-panel">
         <div className="panel-head">
           <div>
-            <p className="eyebrow">Finance View</p>
+            <p className="eyebrow">Payroll Analytics</p>
             <h3>Choose reporting window</h3>
           </div>
         </div>
@@ -353,14 +350,14 @@ export default function PayrollPageClient() {
 
       <section className="page-section split-grid">
         <BarChart
-          eyebrow="Disbursement Trend"
-          title="Monthly salary release confidence"
+          eyebrow="Payroll Trend"
+          title="Jan to May salary release"
           summary={chartSet.disbursement.summary}
           items={chartSet.disbursement.items}
         />
         <BarChart
-          eyebrow="Invoice Aging"
-          title="Finance backlog by bucket"
+          eyebrow="Salary Release Aging"
+          title="Payroll queue by status"
           summary={chartSet.aging.summary}
           items={chartSet.aging.items}
         />
@@ -370,186 +367,47 @@ export default function PayrollPageClient() {
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Compliance</p>
-              <h3>Tax and bank controls</h3>
+              <p className="eyebrow">Payroll Tax Split</p>
+              <h3>PF, ESI, TDS, and professional tax</h3>
             </div>
           </div>
-          <div className="doc-stack">
-            <div className="doc-line"><span>PF / ESI Checks</span><strong>Closed</strong></div>
-            <div className="doc-line"><span>TDS Validation</span><strong>Closed</strong></div>
-            <div className="doc-line"><span>Bank Advice File</span><strong>Pending</strong></div>
+          <div className="payroll-donut-chart">
+            <div
+              className="spend-donut"
+              style={{
+                background: `conic-gradient(var(--teal) 0 ${summary.charts.taxBreakdown[0]?.percent || 0}%, var(--gold) 0 ${
+                  (summary.charts.taxBreakdown[0]?.percent || 0) + (summary.charts.taxBreakdown[1]?.percent || 0)
+                }%, #c2ccd7 0 100%)`
+              }}
+            />
+            <div className="doc-stack">
+              {summary.charts.taxBreakdown.length ? (
+                summary.charts.taxBreakdown.map((item) => (
+                  <div className="doc-line" key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.percent}%</strong>
+                  </div>
+                ))
+              ) : (
+                <p className="empty-state">Payroll tax split appears after salary data is available.</p>
+              )}
+            </div>
           </div>
         </article>
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Salary Payment</p>
-              <h3>Release readiness</h3>
+              <p className="eyebrow">Download Center</p>
+              <h3>Reports and salary payment controls</h3>
             </div>
           </div>
           <div className="doc-stack">
-            <div className="doc-line"><span>Worker Bank Validation</span><strong>98.7%</strong></div>
-            <div className="doc-line"><span>Payment Advice</span><strong>Queued</strong></div>
-            <div className="doc-line"><span>Post-Payment Reconciliation</span><strong>Scheduled</strong></div>
+            <div className="doc-line"><span>Payroll Register</span><strong>Ready</strong></div>
+            <div className="doc-line"><span>Tax Working</span><strong>Auto-calculated</strong></div>
+            <div className="doc-line"><span>Bank Advice File</span><strong>{releaseSummary ? "Released" : "Queued"}</strong></div>
           </div>
         </article>
       </section>
-
-      <Modal
-        open={modalOpen}
-        eyebrow="Create Invoice"
-        title="Add to Payment Queue"
-        onClose={() => setModalOpen(false)}
-      >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            startTransition(async () => {
-              const created = await createInvoiceAction({
-                ...formState,
-                status: "Queued",
-                tone: "gold"
-              });
-              prepend(created);
-              await reload();
-              setModalOpen(false);
-            });
-          }}
-        >
-          <div className="form-grid">
-            <label>
-              <span>Vendor</span>
-              <input
-                value={formState.vendor}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, vendor: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Invoice No.</span>
-              <input
-                value={formState.invoiceNo}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, invoiceNo: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Attendance</span>
-              <input
-                value={formState.attendance}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, attendance: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Amount</span>
-              <input
-                value={formState.amount}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, amount: event.target.value }))
-                }
-              />
-            </label>
-          </div>
-          <div className="modal-actions">
-            <button className="ghost-button" onClick={() => setModalOpen(false)} type="button">
-              Cancel
-            </button>
-            <button className="primary-button" disabled={isPending} type="submit">
-              {isPending ? "Saving..." : "Save Invoice"}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        open={editModalOpen && !!editState}
-        eyebrow="Update Invoice"
-        title="Edit Payment Queue Record"
-        onClose={() => {
-          setEditModalOpen(false);
-          setEditState(null);
-        }}
-      >
-        {editState ? (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              startTransition(async () => {
-                const updated = await updateInvoiceAction(editState.id, {
-                  vendor: editState.vendor,
-                  invoiceNo: editState.invoiceNo,
-                  attendance: editState.attendance,
-                  amount: editState.amount,
-                  status: editState.label,
-                  tone: editState.tone
-                });
-                replace(editState.id, updated);
-                await reload();
-                setEditModalOpen(false);
-                setEditState(null);
-              });
-            }}
-          >
-            <div className="form-grid">
-              <label>
-                <span>Vendor</span>
-                <input
-                  value={editState.vendor}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, vendor: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Invoice No.</span>
-                <input
-                  value={editState.invoiceNo}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, invoiceNo: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Attendance</span>
-                <input
-                  value={editState.attendance}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, attendance: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Amount</span>
-                <input
-                  value={editState.amount}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, amount: event.target.value }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button
-                className="ghost-button"
-                onClick={() => {
-                  setEditModalOpen(false);
-                  setEditState(null);
-                }}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button className="primary-button" disabled={isPending} type="submit">
-                {isPending ? "Updating..." : "Update Invoice"}
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </Modal>
     </SuiteShell>
   );
 }

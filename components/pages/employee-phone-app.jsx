@@ -21,6 +21,18 @@ const dayStatus = {
   28: "late", 29: "present", 30: "present"
 };
 
+const shiftAssignmentsStorageKey = "talme-employee-shift-assignments";
+const employeeSessionStorageKey = "talme-employee-app-employee-id";
+
+const defaultShiftAssignment = {
+  shiftName: "General",
+  start: "09:00",
+  end: "18:00",
+  breakMinutes: "60",
+  weekOff: "Sunday",
+  status: "Assigned"
+};
+
 const loanProfile = {
   hasLoan: true,
   loanId: "LN1023",
@@ -242,7 +254,70 @@ function parseMonthStart(value, fallback = new Date(2026, 3, 1)) {
 
   const parsed = new Date(`1 ${normalized}`);
 
-  return Number.isNaN(parsed.getTime()) ? fallback : getMonthStart(parsed);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback ? getMonthStart(fallback) : null;
+  }
+
+  return getMonthStart(parsed);
+}
+
+function normalizeShiftAssignments(rows = []) {
+  return rows.reduce((assignments, row) => {
+    if (!row?.employeeId) {
+      return assignments;
+    }
+
+    assignments[row.employeeId] = row;
+    return assignments;
+  }, {});
+}
+
+function readShiftAssignments(serverAssignments = []) {
+  try {
+    return {
+      ...JSON.parse(window.localStorage.getItem(shiftAssignmentsStorageKey) || "{}"),
+      ...normalizeShiftAssignments(serverAssignments)
+    };
+  } catch {
+    return normalizeShiftAssignments(serverAssignments);
+  }
+}
+
+function employeeShiftKey(employee) {
+  return employee?.employeeId || employee?.id || "";
+}
+
+function getEmployeeShiftAssignment(employee, assignments = {}) {
+  const key = employeeShiftKey(employee);
+
+  return assignments[key] || defaultShiftAssignment;
+}
+
+function formatShiftTime(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+
+  if (!match) {
+    return "--:--";
+  }
+
+  const hour = Number(match[1]);
+  const minute = match[2];
+  const period = hour >= 12 ? "pm" : "am";
+  const displayHour = hour % 12 || 12;
+
+  return `${String(displayHour).padStart(2, "0")}:${minute} ${period}`;
+}
+
+function formatShiftTiming(assignment) {
+  const shiftName = assignment?.shiftName || "General";
+  const start = formatShiftTime(assignment?.start);
+  const end = formatShiftTime(assignment?.end);
+
+  return `${shiftName} shift timing is ${start} - ${end}`;
+}
+
+function getMonthIndex(date) {
+  return date.getFullYear() * 12 + date.getMonth();
 }
 
 function parseSalaryAmount(value) {
@@ -384,9 +459,71 @@ function StatLine({ label, value }) {
   );
 }
 
+function normalizeEmployeeId(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildEmployeeFromPayslip(record) {
+  if (!record?.employeeId) {
+    return null;
+  }
+
+  const monthlyCtc = Number(record.monthlyCtc) || 0;
+
+  return {
+    id: record.employeeId,
+    employeeId: record.employeeId,
+    email: record.email || "",
+    name: record.name || record.employee || record.employeeId,
+    department: record.department || "General",
+    location: record.location || "Head Office",
+    manager: record.manager || "Not Assigned",
+    grade: record.designation || record.grade || "Employee",
+    joiningDate: record.joiningDate || "",
+    salaryBand: monthlyCtc ? `Monthly - INR ${monthlyCtc}` : record.salaryBand || "Monthly - INR 0",
+    salaryNetPay: Number(record.monthlyNetPay) || Number(record.salaryNetPay) || 0,
+    bankStatus: record.bankName || "Pending",
+    status: "Active",
+    tone: "gold",
+    employeeDetails: {
+      employeeCode: record.employeeId,
+      employeeName: record.name || record.employee || record.employeeId,
+      email: record.email || "",
+      department: record.department || "General",
+      designation: record.designation || record.grade || "Employee",
+      dateOfJoining: record.joiningDate || "",
+      salaryNetPay: Number(record.monthlyNetPay) || Number(record.salaryNetPay) || 0,
+      bankName: record.bankName || "",
+      accountNo: record.bankAccountNumber || record.accountNo || ""
+    }
+  };
+}
+
+function buildEmployeeRoster(employees = [], payslips = []) {
+  const roster = new Map();
+
+  payslips.map(buildEmployeeFromPayslip).filter(Boolean).forEach((employee) => {
+    roster.set(normalizeEmployeeId(employee.employeeId), employee);
+  });
+
+  employees.forEach((employee) => {
+    const key = normalizeEmployeeId(employee.employeeId || employee.id);
+
+    if (key) {
+      roster.set(key, employee);
+    }
+  });
+
+  return Array.from(roster.values());
+}
+
 export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }) {
   const router = useRouter();
-  const employee = data.employees.find((item) => item.employeeId === sessionEmployeeId) || data.employees[0] || {};
+  const [activeSessionEmployeeId, setActiveSessionEmployeeId] = useState(sessionEmployeeId || "");
+  const normalizedSessionEmployeeId = normalizeEmployeeId(activeSessionEmployeeId);
+  const employeeRoster = buildEmployeeRoster(data.employees, data.payslips);
+  const matchedEmployee = employeeRoster.find((item) => normalizeEmployeeId(item.employeeId) === normalizedSessionEmployeeId);
+  const employee = normalizedSessionEmployeeId ? matchedEmployee || {} : employeeRoster[0] || {};
   const attendance = data.attendanceRecords.find((record) => record.employee === employee.name) || {};
   const [activeTab, setActiveTab] = useState("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -394,7 +531,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const [workSession, setWorkSession] = useState(null);
   const [currentTime, setCurrentTime] = useState(null);
   const [visibleMonth, setVisibleMonth] = useState(() => getMonthStart());
-  const [payslipMonth, setPayslipMonth] = useState(() => parseMonthStart(attendance.month));
+  const [payslipMonth, setPayslipMonth] = useState(() => getMonthStart());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
   const [calendarActivityByDate, setCalendarActivityByDate] = useState({});
   const [leaveTab, setLeaveTab] = useState("pending");
@@ -413,29 +550,53 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const [language, setLanguage] = useState("en");
   const [draftLanguage, setDraftLanguage] = useState("en");
   const [languageMessage, setLanguageMessage] = useState("");
+  const [shiftAssignments, setShiftAssignments] = useState(() => normalizeShiftAssignments(data.shiftAssignments || []));
   const swipeStartX = useRef(0);
   const swipeMaxOffset = useRef(0);
   const employeeName = employee.name || "Employee";
-  const employeeId = employee.employeeId || "TLM-0001";
+  const employeeId = employee.employeeId || activeSessionEmployeeId || "TLM-0001";
   const salaryBand = employee.salaryBand || "INR 0";
+  const today = currentTime || new Date();
+  const currentPayslipMonth = getMonthStart(today);
+  const joiningMonth = parseMonthStart(employee.joiningDate, null);
+  const earliestPayslipMonth = joiningMonth || currentPayslipMonth;
+  const payslipMonthIndex = getMonthIndex(payslipMonth);
+  const earliestPayslipMonthIndex = getMonthIndex(earliestPayslipMonth);
+  const currentPayslipMonthIndex = getMonthIndex(currentPayslipMonth);
+  const canMovePayslipPrevious = payslipMonthIndex > earliestPayslipMonthIndex;
+  const canMovePayslipNext = payslipMonthIndex < currentPayslipMonthIndex;
   const employeeAttendanceRecords = data.attendanceRecords.filter((record) =>
     [employee.name, employee.employeeId].includes(record.employee)
   );
+  const sharedPayslips = (data.payslips || []).filter((record) =>
+    record.status === "Shared" &&
+    [employee.name, employee.employeeId].includes(record.employee || record.name || record.employeeId)
+  ).sort((a, b) => String(b.monthKey || "").localeCompare(String(a.monthKey || "")));
   const payslipMonthKey = getMonthInputValue(payslipMonth);
   const payslipMonthTitle = formatMonthTitle(payslipMonth);
+  const sharedPayslip = sharedPayslips.find((record) => record.monthKey === payslipMonthKey);
+  const payslipIsInEmploymentWindow =
+    payslipMonthIndex >= earliestPayslipMonthIndex &&
+    payslipMonthIndex <= currentPayslipMonthIndex;
   const matchingPayslipAttendance = employeeAttendanceRecords.find((record) => record.month === payslipMonthKey);
-  const payslipAttendance = matchingPayslipAttendance || (!attendance.month ? attendance : {});
+  const payslipAttendance = sharedPayslip || matchingPayslipAttendance || (!attendance.month ? attendance : {});
+  const payslipIsShared = Boolean(sharedPayslip && payslipIsInEmploymentWindow);
   const payslipMonthDays =
     Number(payslipAttendance.monthDays) ||
     new Date(payslipMonth.getFullYear(), payslipMonth.getMonth() + 1, 0).getDate();
-  const payslipMonthlyCtc = parseSalaryAmount(salaryBand) || Number(employee.salaryNetPay) || 0;
-  const payslipMonthlyNetPay = Number(payslipAttendance.salaryNetPay) || Number(employee.salaryNetPay) || payslipMonthlyCtc;
-  const payslipPresentDays = Number(payslipAttendance.present) || 0;
+  const payslipMonthlyCtc = Number(payslipAttendance.monthlyCtc) || parseSalaryAmount(salaryBand) || Number(employee.salaryNetPay) || 0;
+  const payslipMonthlyNetPay =
+    Number(payslipAttendance.monthlyNetPay) ||
+    Number(payslipAttendance.salaryNetPay) ||
+    Number(employee.salaryNetPay) ||
+    payslipMonthlyCtc;
+  const payslipPresentDays = Number(payslipAttendance.presentDays ?? payslipAttendance.present) || 0;
   const payslipPaidLeaves = Number(payslipAttendance.paidLeaves ?? payslipAttendance.leaves) || 0;
   const payslipSundays = Number(payslipAttendance.sundays) || 0;
   const payslipHolidays = Number(payslipAttendance.holidays) || 0;
   const payslipSalaryDays = payslipPresentDays + payslipSundays + payslipHolidays + payslipPaidLeaves;
   const payslipLopDays = Math.max(0, payslipMonthDays - payslipSalaryDays);
+  const employeeDetails = employee.employeeDetails || {};
   const payslipParams = new URLSearchParams({
     employee: employeeName,
     employeeId,
@@ -444,7 +605,10 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     designation: employee.grade || "",
     department: employee.department || "",
     joiningDate: employee.joiningDate || "",
+    pan: employeeDetails.panCard || "",
+    uan: employeeDetails.uan || "",
     bankName: /^(bank added|pending)$/i.test(employee.bankStatus || "") ? "" : employee.bankStatus || "",
+    bankAccountNumber: employeeDetails.accountNo || "",
     monthDays: String(payslipMonthDays),
     presentDays: String(payslipPresentDays),
     paidLeaves: String(payslipPaidLeaves),
@@ -452,13 +616,12 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     monthlyCtc: String(payslipMonthlyCtc),
     monthlyNetPay: String(payslipMonthlyNetPay),
     salaryDays: String(payslipSalaryDays || payslipPresentDays),
-    salaryExcludingOt: String(payslipMonthlyNetPay),
+    salaryExcludingOt: String(Number(payslipAttendance.salaryExcludingOt) || payslipMonthlyNetPay),
     otHours: String(Number(payslipAttendance.otHours ?? payslipAttendance.overtime) || 0),
-    otAmount: "0",
-    totalPay: String(payslipMonthlyNetPay)
+    otAmount: String(Number(payslipAttendance.otAmount) || 0),
+    totalPay: String(Number(payslipAttendance.totalPay) || payslipMonthlyNetPay)
   });
   const payslipDownloadUrl = apiUrl(`/api/pdf/payslip?${payslipParams.toString()}`);
-  const today = currentTime || new Date();
   const todayKey = formatStorageDate(today);
   const activityStorageKey = getActivityStorageKey(employeeId, today);
   const sessionStorageKey = `talme-employee-phone-session-${employeeId}-${todayKey}`;
@@ -479,7 +642,19 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     : formatClockParts(selectedActivitySeconds);
   const loanPaidAmount = loanProfile.totalAmount - loanProfile.remainingBalance;
   const loanPaidPercent = Math.round((loanPaidAmount / loanProfile.totalAmount) * 100);
+  const notificationCount = 2 + (sharedPayslips[0] ? 1 : 0);
+  const shiftAssignment = getEmployeeShiftAssignment(employee, shiftAssignments);
+  const shiftTimingText = formatShiftTiming(shiftAssignment);
   const t = (key) => translate(language, key);
+
+  useEffect(() => {
+    const storedEmployeeId = window.localStorage.getItem(employeeSessionStorageKey);
+    const nextEmployeeId = sessionEmployeeId || storedEmployeeId || "";
+
+    if (nextEmployeeId) {
+      setActiveSessionEmployeeId(nextEmployeeId);
+    }
+  }, [sessionEmployeeId]);
 
   useEffect(() => {
     setCurrentTime(new Date());
@@ -501,6 +676,42 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     setLanguage(storedLanguage);
     setDraftLanguage(storedLanguage);
   }, []);
+
+  useEffect(() => {
+    setLeaveRequests(data.leaveRequests.filter((leave) => leave.employee === employee.name));
+    setDocuments(data.documents.filter((document) => document.owner === employee.name));
+  }, [data.documents, data.leaveRequests, employee.name]);
+
+  useEffect(() => {
+    const syncShiftAssignments = async () => {
+      const localAssignments = readShiftAssignments(data.shiftAssignments || []);
+
+      setShiftAssignments(localAssignments);
+
+      try {
+        const response = await fetch(apiUrl("/api/shift-assignments"));
+
+        if (response.ok) {
+          const rows = await response.json();
+          setShiftAssignments({
+            ...localAssignments,
+            ...normalizeShiftAssignments(rows)
+          });
+        }
+      } catch {
+        setShiftAssignments(localAssignments);
+      }
+    };
+
+    syncShiftAssignments();
+    window.addEventListener("storage", syncShiftAssignments);
+    window.addEventListener("focus", syncShiftAssignments);
+
+    return () => {
+      window.removeEventListener("storage", syncShiftAssignments);
+      window.removeEventListener("focus", syncShiftAssignments);
+    };
+  }, [data.shiftAssignments]);
 
   useEffect(() => {
     const storedActivity = window.localStorage.getItem(activityStorageKey);
@@ -615,7 +826,15 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   }
 
   function movePayslipMonth(direction) {
-    setPayslipMonth((current) => new Date(current.getFullYear(), current.getMonth() + direction, 1));
+    setPayslipMonth((current) => {
+      const next = new Date(current.getFullYear(), current.getMonth() + direction, 1);
+      const nextIndex = getMonthIndex(next);
+
+      if (nextIndex < earliestPayslipMonthIndex) return earliestPayslipMonth;
+      if (nextIndex > currentPayslipMonthIndex) return currentPayslipMonth;
+
+      return next;
+    });
   }
 
   function resetSwipe() {
@@ -752,7 +971,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                 <div className="break-pill">{t("totalBreak")} {formatBreakTime(elapsedBreakSeconds)}</div>
               </article>
 
-              <div className="shift-card">{t("firstShift")}</div>
+              <div className="shift-card">{shiftTimingText}</div>
 
               <section className="phone-section">
                 <h2>{t("todaysActivity")}</h2>
@@ -808,7 +1027,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                   <div className="time-labels"><span>Hour</span><span>Min</span><span>Sec</span></div>
                   <div className="break-pill">Total Break Time {selectedDateActivity.length ? formatBreakTime(selectedBreakSeconds) : "--h:--m"}</div>
                 </article>
-                <div className="shift-card">First shift timing is 08:00 am - 05:30 pm</div>
+                <div className="shift-card">{shiftTimingText}</div>
 
                 {selectedActivityState.hasError ? (
                   <div className="regularization-error">⚠ Punch Out is missing for this date.</div>
@@ -925,25 +1144,34 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
           <section className="phone-screen">
             <header className="phone-page-head"><h1>{t("payslips")}</h1></header>
             <div className="month-row">
-              <button onClick={() => movePayslipMonth(-1)} type="button">&lt;</button>
+              <button disabled={!canMovePayslipPrevious} onClick={() => movePayslipMonth(-1)} type="button">&lt;</button>
               <h2>{payslipMonth.getFullYear()}</h2>
-              <button onClick={() => movePayslipMonth(1)} type="button">&gt;</button>
+              <button disabled={!canMovePayslipNext} onClick={() => movePayslipMonth(1)} type="button">&gt;</button>
             </div>
             <div className="payslip-card">
               <h2>{payslipMonthTitle}</h2>
-              <StatLine label="Employee" value={employeeName} />
-              <StatLine label="Band" value={salaryBand} />
-              <StatLine label="Present Days" value={payslipPresentDays} />
-              <a className="phone-primary" href={payslipDownloadUrl} target="_blank" rel="noreferrer">{t("downloadPayslip")}</a>
+              {payslipIsShared ? (
+                <>
+                  <StatLine label="Employee" value={employeeName} />
+                  <StatLine label="Band" value={salaryBand} />
+                  <StatLine label="Present Days" value={payslipPresentDays} />
+                  <a className="phone-primary" href={payslipDownloadUrl} target="_blank" rel="noreferrer">{t("downloadPayslip")}</a>
+                </>
+              ) : (
+                <>
+                  <EmptyState compact />
+                  <p className="payslip-note">Payslip will appear after payroll shares it for this month.</p>
+                </>
+              )}
             </div>
           </section>
         )}
 
         {activeTab === "notifications" && (
           <section className="phone-screen">
-            <header className="phone-page-head"><h1>{t("notifications")} <span>(3)</span></h1></header>
+            <header className="phone-page-head"><h1>{t("notifications")} <span>({notificationCount})</span></h1></header>
             <div className="phone-list">
-              <StatLine label="April payslip is ready for download" value="Payroll" />
+              {sharedPayslips[0] ? <StatLine label={`${sharedPayslips[0].monthLabel} payslip is ready for download`} value="Payroll" /> : null}
               <StatLine label="Punch regularization closes today" value="Attendance" />
               <StatLine label="Holiday list updated for May" value="HR" />
             </div>
@@ -1043,7 +1271,16 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
               <small>{t("benefits")}</small>
               <button type="button">Deals</button>
               <button type="button">Check Update</button>
-              <button className="logout" onClick={() => router.push("/login")} type="button">{t("logout")} <em>v 2.0.9</em></button>
+              <button
+                className="logout"
+                onClick={() => {
+                  window.localStorage.removeItem(employeeSessionStorageKey);
+                  router.push("/employee-app/login");
+                }}
+                type="button"
+              >
+                {t("logout")} <em>v 2.0.9</em>
+              </button>
             </div>
           </aside>
         )}

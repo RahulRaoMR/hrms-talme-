@@ -1,4 +1,4 @@
-import LeavesPageClient from "@/components/pages/leaves-page";
+import PerformanceRatingsPage from "@/components/pages/performance-ratings-page";
 import { getEnterpriseSuiteData } from "@/lib/frontend-data";
 import { getLocalSuiteData } from "@/lib/local-api-store";
 import { getPersistentHrmsData } from "@/lib/prisma-store";
@@ -6,7 +6,7 @@ import { fetchServerApiJson } from "@/lib/server-api";
 
 export const dynamic = "force-dynamic";
 
-export default async function LeavesPage() {
+export default async function PerformanceRatingsRoute() {
   let data;
 
   try {
@@ -16,12 +16,8 @@ export default async function LeavesPage() {
       getLocalSuiteData() ||
       getEnterpriseSuiteData();
   } catch {
-    data = {
-      employees: [],
-      leaveRequests: [],
-      attendanceRecords: []
-    };
+    data = getLocalSuiteData() || getEnterpriseSuiteData();
   }
 
-  return <LeavesPageClient data={JSON.parse(JSON.stringify(data))} />;
+  return <PerformanceRatingsPage employees={JSON.parse(JSON.stringify(data.employees || []))} />;
 }

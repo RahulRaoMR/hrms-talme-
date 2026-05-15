@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
+import { getLocalLoginAccount, hasLocalPasswordOverride } from "@/lib/password-reset-store";
+import { hasPersistentDatabase, prisma } from "@/lib/prisma-store";
 
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
@@ -17,7 +20,8 @@ export async function POST(request) {
     );
   }
 
-  const user = getLocalLoginUser(identifier, password, expectedRole);
+  const persistentUser = await getPersistentLoginUser(identifier, password, expectedRole);
+  const user = persistentUser || await getLocalLoginUser(identifier, password, expectedRole);
 
   if (!user) {
     return Response.json(
@@ -32,6 +36,45 @@ export async function POST(request) {
   });
 }
 
+async function getPersistentLoginUser(identifier, password, expectedRole) {
+  if (!hasPersistentDatabase) return null;
+
+  const employee =
+    expectedRole === "Employee" || !identifier.includes("@")
+      ? await prisma.employee.findFirst({
+          where: {
+            employeeId: {
+              equals: identifier,
+              mode: "insensitive"
+            }
+          },
+          select: { id: true, employeeId: true, email: true, name: true }
+        })
+      : null;
+  const loginEmail = String(employee?.email || identifier).trim().toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: loginEmail }
+  });
+
+  if (!user || !user.active || (expectedRole && user.role !== expectedRole)) {
+    return null;
+  }
+
+  const matches = await bcrypt.compare(password, user.passwordHash);
+
+  if (!matches) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    name: employee?.name || user.name,
+    email: user.email,
+    role: user.role,
+    employeeId: employee?.employeeId || null
+  };
+}
+
 function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
@@ -42,7 +85,17 @@ function normalizeLoginRole(role) {
   return roles[role] || role || "";
 }
 
-function getLocalLoginUser(identifier, password, expectedRole) {
+async function getLocalLoginUser(identifier, password, expectedRole) {
+  const resetAccount = await getLocalLoginAccount(identifier, password, expectedRole);
+
+  if (resetAccount) {
+    return resetAccount;
+  }
+
+  if (await hasLocalPasswordOverride(identifier)) {
+    return null;
+  }
+
   const users = [
     {
       id: "local-admin",
