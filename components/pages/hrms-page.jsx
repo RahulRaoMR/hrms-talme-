@@ -150,9 +150,10 @@ const employeeDetailSections = [
   }
 ];
 
-function createEmployeeFormState() {
+function createEmployeeFormState(employeeCode = employeeCreateSeed.employeeCode) {
   return {
     ...employeeCreateSeed,
+    employeeCode,
     legalDocuments: { ...employeeCreateSeed.legalDocuments }
   };
 }
@@ -208,6 +209,30 @@ function sortEmployeesById(rows = []) {
   });
 }
 
+function normalizeEmployeeCode(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function hasDuplicateEmployeeCode(rows = [], employeeCode) {
+  const normalizedCode = normalizeEmployeeCode(employeeCode);
+
+  if (!normalizedCode) return false;
+
+  return rows.some((employee) => normalizeEmployeeCode(employee.employeeId) === normalizedCode);
+}
+
+function getNextEmployeeCode(rows = []) {
+  const prefix = "TTPL-";
+  const nextNumber = rows.reduce((highest, employee) => {
+    const employeeId = String(employee.employeeId || "").trim();
+    const match = employeeId.match(/^TTPL-(\d+)$/i);
+
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0) + 1;
+
+  return `${prefix}${String(nextNumber).padStart(4, "0")}`;
+}
+
 export default function HrmsPageClient({ data }) {
   const [employees, setEmployees] = useState(data?.employees || []);
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
@@ -234,7 +259,7 @@ export default function HrmsPageClient({ data }) {
   const [leaveEdit, setLeaveEdit] = useState(null);
   const [leaveToAccept, setLeaveToAccept] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
-  const [employeeForm, setEmployeeForm] = useState(createEmployeeFormState);
+  const [employeeForm, setEmployeeForm] = useState(() => createEmployeeFormState(getNextEmployeeCode(data?.employees || [])));
   const [employeeFormError, setEmployeeFormError] = useState("");
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
   const [attendanceForm, setAttendanceForm] = useState(attendanceSeed);
@@ -344,7 +369,7 @@ export default function HrmsPageClient({ data }) {
           <button
             className="mini-button"
             onClick={() => {
-              setEmployeeForm(createEmployeeFormState());
+              setEmployeeForm(createEmployeeFormState(getNextEmployeeCode(employees)));
               setEmployeeModalOpen(true);
             }}
             type="button"
@@ -719,6 +744,7 @@ export default function HrmsPageClient({ data }) {
         setState={setEmployeeForm}
         error={employeeFormError}
         isPending={isPending}
+        suggestedEmployeeCode={getNextEmployeeCode(employees)}
         onClose={() => {
           setEmployeeFormError("");
           setEmployeeModalOpen(false);
@@ -728,9 +754,23 @@ export default function HrmsPageClient({ data }) {
             setEmployeeFormError("");
 
             try {
+              if (hasDuplicateEmployeeCode(employees, employeeForm.employeeCode)) {
+                setEmployeeFormError("Employee Code already exists. Please use a different code.");
+                return;
+              }
+
               const created = await createEmployeeAction(toEmployeePayload(employeeForm));
-              setEmployees((current) => [created, ...current]);
-              setEmployeeForm(createEmployeeFormState());
+              const { onboarding, ...employeeRecord } = created;
+              const nextEmployees = [employeeRecord, ...employees];
+
+              setEmployees((current) => [employeeRecord, ...current]);
+              setEmployeeForm(createEmployeeFormState(getNextEmployeeCode(nextEmployees)));
+
+              if (onboarding && !onboarding.emailSent) {
+                setEmployeeFormError(`Employee saved in Employee Master, but welcome email was not sent: ${onboarding.reason || "Email delivery failed."}`);
+                return;
+              }
+
               setEmployeeModalOpen(false);
             } catch (error) {
               setEmployeeFormError(error?.message || "Unable to save employee. Please check the details and try again.");
@@ -1589,7 +1629,7 @@ function downloadCsv(fileName, rows) {
   URL.revokeObjectURL(url);
 }
 
-function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose, isPending }) {
+function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose, isPending, suggestedEmployeeCode }) {
   const [openSections, setOpenSections] = useState({
     basic: true,
     bank: false,
@@ -1601,9 +1641,9 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
 
   useEffect(() => {
     if (open && state.employeeCode === "37") {
-      setState((current) => ({ ...current, employeeCode: employeeCreateSeed.employeeCode }));
+      setState((current) => ({ ...current, employeeCode: suggestedEmployeeCode || employeeCreateSeed.employeeCode }));
     }
-  }, [open, setState, state.employeeCode]);
+  }, [open, setState, state.employeeCode, suggestedEmployeeCode]);
 
   if (!open) return null;
 
@@ -1657,17 +1697,17 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
                 <PhoneField label="Mobile Number" required country={state.mobileCountry} number={state.mobileNumber} onCountryChange={update("mobileCountry")} onNumberChange={update("mobileNumber")} />
                 <TextField label="Email" type="email" placeholder="Enter Employee Email" value={state.email} onChange={update("email")} />
                 <RadioGroup label="Gender" required name="gender" value={state.gender} options={["Male", "Female", "Other"]} onChange={update("gender")} />
-                <SelectField label="Punch In Branch" required placeholder="Select Branches" value={state.punchInBranch} onChange={update("punchInBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
-                <SelectField label="Master Branch" required placeholder="Select Master Branches" value={state.masterBranch} onChange={update("masterBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
-                <SelectField label="Department" required placeholder="Select/Create Department" value={state.department} onChange={update("department")} options={["HR", "Operations", "Finance", "Sales", "Technology"]} />
-                <SelectField label="Designation" required placeholder="Select/Create Designation" value={state.designation} onChange={update("designation")} options={["Associate", "Executive", "Manager", "Lead", "Admin"]} />
-                <SelectField label="Employee Type" placeholder="Select Employee Type" value={state.employeeType} onChange={update("employeeType")} options={["Full Time", "Part Time", "Contract", "Intern"]} />
+                <SelectField label="Punch In Branch" required allowManual placeholder="Select Branches" value={state.punchInBranch} onChange={update("punchInBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
+                <SelectField label="Master Branch" required allowManual placeholder="Select Master Branches" value={state.masterBranch} onChange={update("masterBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
+                <SelectField label="Department" required allowManual placeholder="Select/Create Department" value={state.department} onChange={update("department")} options={["HR", "Operations", "Finance", "Sales", "Technology"]} />
+                <SelectField label="Designation" required allowManual placeholder="Select/Create Designation" value={state.designation} onChange={update("designation")} options={["Associate", "Executive", "Manager", "Lead", "Admin"]} />
+                <SelectField label="Employee Type" allowManual placeholder="Select Employee Type" value={state.employeeType} onChange={update("employeeType")} options={["Full Time", "Part Time", "Contract", "Intern"]} />
                 <RadioGroup label="Door Lock Permission" required name="door-lock" value={state.doorLockPermission} options={["Yes", "No"]} onChange={update("doorLockPermission")} />
                 <RadioGroup label="Salary Type" required name="salary-type" value={state.salaryType} options={["Monthly", "Hourly", "Compliance"]} onChange={update("salaryType")} />
                 <TextField label="" type="number" value={state.salaryAmount} onChange={update("salaryAmount")} />
                 <TextField label="Approved Monthly CTC" type="number" placeholder="Enter Approved Monthly CTC" value={state.approvedMonthlyCtc} onChange={update("approvedMonthlyCtc")} />
                 <TextField label="Salary Net Pay" type="number" placeholder="Enter Monthly Net Pay" value={state.salaryNetPay} onChange={update("salaryNetPay")} />
-                <SelectField label="Payroll Group" required placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
+                <SelectField label="Payroll Group" required allowManual placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
                 <TextField label="Provident Fund (PF)" placeholder="Enter PF Account Number" value={state.providentFund} onChange={update("providentFund")} />
                 <TextField label="Universal Account Number (UAN)" placeholder="Enter 12-Digit UAN Number" value={state.uan} onChange={update("uan")} />
                 <TextField label="Employee State Insurance Corporation (ESIC)" placeholder="Enter 10-Digit ESIC IP Number" value={state.esic} onChange={update("esic")} />
@@ -1725,7 +1765,7 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
             <button className="pooja-outline-button" onClick={onClose} type="button">
               Cancel
             </button>
-            <button className="pooja-secondary-button" type="button" onClick={() => setState(createEmployeeFormState())}>
+            <button className="pooja-secondary-button" type="button" onClick={() => setState(createEmployeeFormState(suggestedEmployeeCode))}>
               Reset
             </button>
             <button className="pooja-primary-button" disabled={isPending} type="submit">
@@ -1772,16 +1812,49 @@ function TextareaField({ label, required, ...props }) {
   );
 }
 
-function SelectField({ label, required, placeholder, value, onChange, options }) {
+const manualSelectValue = "__manual__";
+
+function SelectField({ label, required, placeholder, value, onChange, options, allowManual = false }) {
+  const [manualEntry, setManualEntry] = useState(false);
+  const hasCustomValue = allowManual && Boolean(value && !options.includes(value));
+  const showManualInput = allowManual && (manualEntry || hasCustomValue);
+  const selectValue = showManualInput ? manualSelectValue : value;
+
+  const updateValue = (nextValue) => {
+    onChange({ target: { value: nextValue } });
+  };
+
+  const handleSelectChange = (event) => {
+    if (event.target.value === manualSelectValue) {
+      setManualEntry(true);
+      updateValue(hasCustomValue ? value : "");
+      return;
+    }
+
+    setManualEntry(false);
+    onChange(event);
+  };
+
   return (
     <label className="pooja-field full-span">
       <span>{label}<RequiredMark required={required} /></span>
-      <select required={required} value={value} onChange={onChange}>
+      <select required={required && !showManualInput} value={selectValue} onChange={handleSelectChange}>
         <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option} value={option}>{option}</option>
         ))}
+        {allowManual ? <option value={manualSelectValue}>+ Add manually</option> : null}
       </select>
+      {showManualInput ? (
+        <input
+          autoFocus
+          className="pooja-manual-input"
+          placeholder={`Enter ${label}`}
+          required={required}
+          value={value}
+          onChange={onChange}
+        />
+      ) : null}
     </label>
   );
 }

@@ -2966,6 +2966,10 @@ body:not(.light-mode) .performance-avatar.small {
   color: var(--hrms-ink);
 }
 
+.pooja-field .pooja-manual-input {
+  margin-top: 10px;
+}
+
 .pooja-field textarea {
   min-height: 96px;
   resize: vertical;
