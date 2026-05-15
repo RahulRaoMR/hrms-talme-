@@ -3364,6 +3364,10 @@ small {
   font-size: 1.35rem;
 }
 
+.invoice-list-message {
+  margin: -4px 20px 14px;
+}
+
 .credit-toggle {
   display: flex;
   align-items: center;

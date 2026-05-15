@@ -13,16 +13,24 @@ const sections = [
   ["approvals", "Approvals", (item) => `${item.title} - ${item.owner}`]
 ];
 
+const emptyResults = {
+  employees: [],
+  candidates: [],
+  vendors: [],
+  invoices: [],
+  documents: [],
+  approvals: []
+};
+
+function normalizeResults(payload) {
+  return Object.fromEntries(
+    Object.keys(emptyResults).map((key) => [key, Array.isArray(payload?.[key]) ? payload[key] : []])
+  );
+}
+
 export default function SearchPageClient() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState({
-    employees: [],
-    candidates: [],
-    vendors: [],
-    invoices: [],
-    documents: [],
-    approvals: []
-  });
+  const [results, setResults] = useState(emptyResults);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,7 +40,7 @@ export default function SearchPageClient() {
         cache: "no-store"
       });
       const payload = await response.json();
-      if (!cancelled) setResults(payload);
+      if (!cancelled) setResults(normalizeResults(payload));
     }
 
     runSearch();
@@ -68,16 +76,20 @@ export default function SearchPageClient() {
 
       <section className="page-section panel-grid">
         {sections.map(([key, label, render]) => (
+          (() => {
+            const matches = results[key] || [];
+
+            return (
           <article className="panel" key={key}>
             <div className="panel-head">
               <div>
                 <p className="eyebrow">{label}</p>
-                <h3>{results[key].length} matches</h3>
+                <h3>{matches.length} matches</h3>
               </div>
             </div>
             <div className="doc-stack">
-              {results[key].length ? (
-                results[key].map((item) => (
+              {matches.length ? (
+                matches.map((item) => (
                   <div className="doc-line" key={item.id}>
                     <span>{render(item)}</span>
                     <strong>Found</strong>
@@ -91,6 +103,8 @@ export default function SearchPageClient() {
               )}
             </div>
           </article>
+            );
+          })()
         ))}
       </section>
     </SuiteShell>

@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "postinstall": "prisma generate --schema backend/prisma/schema.prisma",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "prisma:generate": "prisma generate --schema backend/prisma/schema.prisma",
     "build": "next build",
     "start": "next start"
