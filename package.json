@@ -2,7 +2,7 @@
   "name": "talme-hrms-suite",
   "private": true,
   "scripts": {
-    "postinstall": "prisma generate --schema backend/prisma/schema.prisma",
+    "postinstall": "node -e \"const fs = require('fs'); if (!process.env.DATABASE_URL) { process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/dummy'; } require('child_process').execSync('npx prisma generate --schema backend/prisma/schema.prisma', { stdio: 'inherit', env: process.env });\"",
     "dev": "next dev",
     "prisma:generate": "prisma generate --schema backend/prisma/schema.prisma",
     "build": "next build",

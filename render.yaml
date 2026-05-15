@@ -1,5 +1,17 @@
 services:
   - type: web
+    name: hrms-talme-frontend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+
+  - type: web
     name: talme-hrms-backend
     runtime: node
     rootDir: backend
