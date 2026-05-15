@@ -57,6 +57,30 @@ export const rolePermissions = {
     "/notifications",
     "/activity"
   ],
+  "Employee HRMS": [
+    "/dashboard",
+    "/hrms",
+    "/leaves",
+    "/timesheet",
+    "/documents",
+    "/employee-portal",
+    "/employee-app",
+    "/search",
+    "/notifications",
+    "/activity"
+  ],
+  Payroll: [
+    "/dashboard",
+    "/hrms",
+    "/leaves",
+    "/payroll",
+    "/reports",
+    "/documents",
+    "/search",
+    "/exports",
+    "/notifications",
+    "/activity"
+  ],
   "Operations Manager": [
     "/dashboard",
     "/ats",
