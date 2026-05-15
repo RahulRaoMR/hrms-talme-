@@ -163,6 +163,7 @@ const leaveSeed = {
   leaveType: "",
   dates: "",
   balance: "",
+  reason: "",
   approver: "",
   status: "",
   tone: "gold"
@@ -835,6 +836,7 @@ export default function HrmsPageClient({ data }) {
           ["leaveType", "Leave Type"],
           ["dates", "Dates"],
           ["balance", "Balance"],
+          ["reason", "Reason"],
           ["approver", "Approver"],
           ["status", "Status"],
           ["tone", "Tone"]
@@ -862,6 +864,7 @@ export default function HrmsPageClient({ data }) {
           ["leaveType", "Leave Type"],
           ["dates", "Dates"],
           ["balance", "Balance"],
+          ["reason", "Reason"],
           ["approver", "Approver"],
           ["status", "Status"],
           ["tone", "Tone"]
@@ -891,6 +894,10 @@ export default function HrmsPageClient({ data }) {
             <span>{leaveToAccept?.leaveType}</span>
             <strong>{leaveToAccept?.dates}</strong>
             <small>{leaveToAccept?.balance}</small>
+            <div className="approval-reason">
+              <span>Reason</span>
+              <p>{leaveToAccept?.reason || "No reason provided"}</p>
+            </div>
           </div>
           <div className="modal-actions">
             <button className="ghost-button" onClick={() => setLeaveToAccept(null)} type="button">

@@ -943,6 +943,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       leaveType: leaveForm.leaveType,
       dates: `${leaveForm.from} to ${leaveForm.to}`,
       balance: "Submitted from employee app",
+      reason: leaveForm.reason.trim(),
       approver: employee.manager || "Manager",
       status: "Pending",
       tone: "gold"

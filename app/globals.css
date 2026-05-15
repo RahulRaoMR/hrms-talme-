@@ -2723,6 +2723,25 @@ body:not(.light-mode) .performance-avatar.small {
   color: var(--muted);
 }
 
+.approval-reason {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.approval-reason span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--gold);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.approval-reason p {
+  margin: 0;
+  color: var(--text);
+}
+
 .reset-target-card {
   display: grid;
   gap: 6px;

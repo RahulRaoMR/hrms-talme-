@@ -181,6 +181,7 @@ model LeaveRequest {
   leaveType String
   dates     String
   balance   String
+  reason    String   @default("")
   approver  String
   status    String
   tone      String
