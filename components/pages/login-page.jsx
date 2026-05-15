@@ -20,6 +20,20 @@ const roleOptions = {
     password: "",
     destination: "/dashboard"
   },
+  employeeHrms: {
+    label: "Employee HRMS",
+    identifierLabel: "Corporate Email",
+    identifier: "",
+    password: "",
+    destination: "/hrms"
+  },
+  payroll: {
+    label: "Payroll",
+    identifierLabel: "Corporate Email",
+    identifier: "",
+    password: "",
+    destination: "/payroll"
+  },
   employee: {
     label: "Employee",
     identifierLabel: "Employee ID",
@@ -132,6 +146,8 @@ export default function LoginPageClient() {
                 >
                   <option value="admin">Enterprise Admin</option>
                   <option value="hr">HR</option>
+                  <option value="employeeHrms">Employee HRMS</option>
+                  <option value="payroll">Payroll</option>
                   <option value="employee">Employee</option>
                 </select>
               </label>

@@ -79,6 +79,8 @@ function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
     hr: "HR",
+    employeeHrms: "Employee HRMS",
+    payroll: "Payroll",
     employee: "Employee"
   };
 

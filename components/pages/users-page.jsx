@@ -21,6 +21,8 @@ const seedUsers = [
   }
 ];
 
+const accessRoles = ["Enterprise Admin", "HR", "Employee HRMS", "Payroll", "Employee"];
+
 export default function UsersPageClient() {
   const { items: users, prepend, reload, replace, remove } = useDemoStore(
     "talme-users",
@@ -35,7 +37,7 @@ export default function UsersPageClient() {
   const [formState, setFormState] = useState({
     name: "Operations Admin",
     email: "ops@talme.ai",
-    role: "Operations Manager",
+    role: "Employee HRMS",
     password: "",
     active: true
   });
@@ -206,12 +208,16 @@ function UserModal({ open, title, state, setState, onSubmit, onClose, isPending 
             </label>
             <label>
               <span>Role</span>
-              <input
+              <select
                 value={state.role}
                 onChange={(event) =>
                   setState((current) => ({ ...current, role: event.target.value }))
                 }
-              />
+              >
+                {accessRoles.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
             </label>
             <label>
               <span>Password</span>

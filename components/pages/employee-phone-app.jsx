@@ -459,8 +459,31 @@ function StatLine({ label, value }) {
   );
 }
 
+function normalizeStatus(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isAcceptedLeaveStatus(status) {
+  return ["accepted", "leave accepted", "approved"].includes(normalizeStatus(status));
+}
+
+function isPendingLeaveStatus(status) {
+  const normalized = normalizeStatus(status);
+  return !isAcceptedLeaveStatus(normalized) && !["rejected", "declined", "cancelled", "canceled"].includes(normalized);
+}
+
+function formatLeaveStatus(status) {
+  if (isAcceptedLeaveStatus(status)) return "Accepted";
+  return status || "Pending";
+}
+
 function normalizeEmployeeId(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isEmployeeLeave(leave, employee) {
+  const leaveEmployee = normalizeEmployeeId(leave?.employee);
+  return [employee?.name, employee?.employeeId, employee?.email].some((value) => normalizeEmployeeId(value) === leaveEmployee);
 }
 
 function buildEmployeeFromPayslip(record) {
@@ -541,7 +564,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     to: formatStorageDate(new Date()),
     reason: ""
   }));
-  const [leaveRequests, setLeaveRequests] = useState(data.leaveRequests.filter((leave) => leave.employee === employee.name));
+  const [leaveRequests, setLeaveRequests] = useState(data.leaveRequests.filter((leave) => isEmployeeLeave(leave, employee)));
   const [documents, setDocuments] = useState(data.documents.filter((document) => document.owner === employee.name));
   const [uploading, setUploading] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -645,6 +668,9 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const notificationCount = 2 + (sharedPayslips[0] ? 1 : 0);
   const shiftAssignment = getEmployeeShiftAssignment(employee, shiftAssignments);
   const shiftTimingText = formatShiftTiming(shiftAssignment);
+  const pendingLeaveRequests = leaveRequests.filter((leave) => isPendingLeaveStatus(leave.status));
+  const historyLeaveRequests = leaveRequests.filter((leave) => !isPendingLeaveStatus(leave.status));
+  const visibleLeaveRequests = leaveTab === "history" ? historyLeaveRequests : pendingLeaveRequests;
   const t = (key) => translate(language, key);
 
   useEffect(() => {
@@ -678,9 +704,35 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   }, []);
 
   useEffect(() => {
-    setLeaveRequests(data.leaveRequests.filter((leave) => leave.employee === employee.name));
+    setLeaveRequests(data.leaveRequests.filter((leave) => isEmployeeLeave(leave, employee)));
     setDocuments(data.documents.filter((document) => document.owner === employee.name));
-  }, [data.documents, data.leaveRequests, employee.name]);
+  }, [data.documents, data.leaveRequests, employee.name, employee.employeeId, employee.email]);
+
+  useEffect(() => {
+    if (activeTab !== "leave") return undefined;
+
+    const syncLeaveRequests = async () => {
+      try {
+        const response = await fetch(apiUrl("/api/hrms"), { cache: "no-store" });
+
+        if (!response.ok) return;
+
+        const latestData = await response.json();
+        setLeaveRequests((latestData.leaveRequests || []).filter((leave) => isEmployeeLeave(leave, employee)));
+      } catch {
+        // Keep the current in-memory list if the refresh fails.
+      }
+    };
+
+    syncLeaveRequests();
+    window.addEventListener("focus", syncLeaveRequests);
+    const timer = window.setInterval(syncLeaveRequests, 15000);
+
+    return () => {
+      window.removeEventListener("focus", syncLeaveRequests);
+      window.clearInterval(timer);
+    };
+  }, [activeTab, employee.name, employee.employeeId, employee.email]);
 
   useEffect(() => {
     const syncShiftAssignments = async () => {
@@ -891,6 +943,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       leaveType: leaveForm.leaveType,
       dates: `${leaveForm.from} to ${leaveForm.to}`,
       balance: "Submitted from employee app",
+      reason: leaveForm.reason.trim(),
       approver: employee.manager || "Manager",
       status: "Pending",
       tone: "gold"
@@ -1132,9 +1185,11 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                 <label>Reason<textarea value={leaveForm.reason} onChange={(event) => setLeaveForm((current) => ({ ...current, reason: event.target.value }))} /></label>
                 <button className="phone-primary" type="submit">Apply Leave</button>
               </form>
-            ) : leaveRequests.length ? (
+            ) : visibleLeaveRequests.length ? (
               <div className="phone-list">
-                {leaveRequests.map((leave) => <StatLine key={leave.id} label={`${leave.leaveType} - ${leave.dates}`} value={leave.status} />)}
+                {visibleLeaveRequests.map((leave) => (
+                  <StatLine key={leave.id} label={`${leave.leaveType} - ${leave.dates}`} value={formatLeaveStatus(leave.status)} />
+                ))}
               </div>
             ) : <EmptyState />}
           </section>
