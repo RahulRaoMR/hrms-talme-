@@ -428,6 +428,7 @@ const resourceConfigs = {
         leaveType: requiredString(payload, "leaveType", "Leave type"),
         dates: requiredString(payload, "dates", "Dates"),
         balance: requiredString(payload, "balance", "Balance"),
+        reason: optionalString(payload, "reason") || "",
         approver: requiredString(payload, "approver", "Approver"),
         status: requiredString(payload, "status", "Status"),
         tone: optionalString(payload, "tone") || "gold"
@@ -439,6 +440,7 @@ const resourceConfigs = {
         leaveType: optionalString(payload, "leaveType"),
         dates: optionalString(payload, "dates"),
         balance: optionalString(payload, "balance"),
+        reason: optionalString(payload, "reason"),
         approver: optionalString(payload, "approver"),
         status: optionalString(payload, "status"),
         tone: optionalString(payload, "tone")

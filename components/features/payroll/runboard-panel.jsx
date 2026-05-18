@@ -1,30 +1,34 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import StatusBadge from "@/components/status-badge";
 
-export default function RunboardPanel() {
+const fallbackStages = [
+  { id: 1, label: "Attendance", status: "In Review", owner: "HR Admin", timestamp: "Pending", tone: "gold" },
+  { id: 2, label: "Earnings", status: "Pending", owner: "Payroll Lead", timestamp: "Pending", tone: "slate" },
+  { id: 3, label: "Payroll Tax", status: "Pending", owner: "Finance Control", timestamp: "Pending", tone: "slate" },
+  { id: 4, label: "Bank Release", status: "Pending", owner: "Treasury", timestamp: "Pending", tone: "slate" }
+];
+
+function stageComplete(stage) {
+  return ["completed", "released", "approved"].some((value) =>
+    String(stage.status || "").toLowerCase().includes(value)
+  );
+}
+
+export default function RunboardPanel({ stages = fallbackStages }) {
+  const resolvedStages = stages.length ? stages : fallbackStages;
   const [activeStage, setActiveStage] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("talme-payroll-stage");
-    if (saved) {
-      setActiveStage(parseInt(saved, 10));
-    }
+    const nextActive =
+      resolvedStages.find((stage) => !stageComplete(stage))?.id ||
+      resolvedStages[resolvedStages.length - 1]?.id ||
+      1;
+    setActiveStage(nextActive);
     setIsLoaded(true);
-  }, []);
-
-  const handleStageClick = (id) => {
-    setActiveStage(id);
-    localStorage.setItem("talme-payroll-stage", id.toString());
-  };
-
-  const stages = [
-    { id: 1, label: "Attendance Locked" },
-    { id: 2, label: "Earnings & Deductions" },
-    { id: 3, label: "Payroll Tax Validation" },
-    { id: 4, label: "Bank File Release" },
-  ];
+  }, [resolvedStages]);
 
   return (
     <article className="panel">
@@ -35,26 +39,28 @@ export default function RunboardPanel() {
         </div>
       </div>
       <div className="runboard">
-        {isLoaded && stages.map((stage) => {
-          const isActive = activeStage === stage.id;
+        {isLoaded &&
+          resolvedStages.map((stage) => {
+            const isActive = activeStage === stage.id;
+            const isCompleted = stageComplete(stage);
 
-          const isCompleted = activeStage > stage.id;
-          
-          return (
-            <div 
-              key={stage.id} 
-              className={`flow-card ${isActive ? 'active-stage' : ''} ${isCompleted ? 'completed-stage' : ''}`}
-              onClick={() => handleStageClick(stage.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              <strong>{stage.id}</strong>
-              <small>{stage.label}</small>
-              {isCompleted && <span className="stage-check">✓</span>}
-            </div>
-          );
-        })}
+            return (
+              <button
+                key={stage.id}
+                className={`flow-card ${isActive ? "active-stage" : ""} ${isCompleted ? "completed-stage" : ""}`}
+                onClick={() => setActiveStage(stage.id)}
+                type="button"
+              >
+                <strong>{stage.id}</strong>
+                <small>{stage.label}</small>
+                <StatusBadge tone={stage.tone}>{stage.status}</StatusBadge>
+                <small>{stage.owner}</small>
+                <small>{stage.timestamp}</small>
+                {isCompleted ? <span className="stage-check">Done</span> : null}
+              </button>
+            );
+          })}
       </div>
     </article>
   );
 }
-

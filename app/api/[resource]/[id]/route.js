@@ -6,6 +6,16 @@ import {
   updatePersistentResource
 } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
+import { sendLeaveStatusNotification } from "@/lib/leave-notifications";
+
+async function attachLeaveNotification(resource, previousRow, nextRow) {
+  if (resource !== "leave-requests" || !nextRow) {
+    return nextRow;
+  }
+
+  const leaveNotification = await sendLeaveStatusNotification(previousRow, nextRow);
+  return { ...nextRow, leaveNotification };
+}
 
 export async function GET(request, context) {
   const { resource, id } = await context.params;
@@ -38,10 +48,11 @@ export async function PATCH(request, context) {
 
   if (hasPersistentDatabase) {
     payload = await request.json().catch(() => ({}));
+    const previousRow = await getPersistentResource(resource, id);
     const persistentRow = await updatePersistentResource(resource, id, payload);
 
     if (persistentRow) {
-      return Response.json(persistentRow);
+      return Response.json(await attachLeaveNotification(resource, previousRow, persistentRow));
     }
   }
 
@@ -52,13 +63,14 @@ export async function PATCH(request, context) {
   }
 
   payload ||= await request.json().catch(() => ({}));
+  const previousRow = getResource(resource)?.find((item) => String(item.id) === String(id));
   const row = updateResource(resource, id, payload);
 
   if (!row) {
     return Response.json({ error: "Record not found." }, { status: 404 });
   }
 
-  return Response.json(row);
+  return Response.json(await attachLeaveNotification(resource, previousRow, row));
 }
 
 export async function DELETE(request, context) {

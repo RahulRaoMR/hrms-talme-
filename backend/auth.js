@@ -7,6 +7,8 @@ import { ensureSeedData } from "@/lib/seed-db";
 const credentialRoles = {
   admin: "Enterprise Admin",
   hr: "HR",
+  employeeHrms: "Employee HRMS",
+  payroll: "Payroll",
   employee: "Employee"
 };
 
