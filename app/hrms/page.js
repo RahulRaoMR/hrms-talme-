@@ -11,8 +11,8 @@ export default async function HrmsPage() {
 
   try {
     data =
-      (await getPersistentHrmsData()) ||
       (await fetchServerApiJson("/api/hrms")) ||
+      (await getPersistentHrmsData()) ||
       getLocalSuiteData() ||
       getEnterpriseSuiteData();
   } catch {

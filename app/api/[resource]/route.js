@@ -3,6 +3,20 @@ import { createPersistentResource, hasPersistentDatabase, listPersistentResource
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import { onboardEmployee } from "@/lib/employee-onboarding";
 
+function shouldUseLocalMutationFallback() {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
+}
+
+function missingPersistentStoreResponse() {
+  return Response.json(
+    {
+      error:
+        "Persistent API storage is not configured. Set NEXT_PUBLIC_API_URL/API_BASE_URL to the backend URL, or set DATABASE_URL to a PostgreSQL database."
+    },
+    { status: 503 }
+  );
+}
+
 function getUniqueFieldLabel(error) {
   const target = Array.isArray(error?.meta?.target) ? error.meta.target[0] : "";
 
@@ -36,16 +50,16 @@ async function attachEmployeeOnboarding(resource, row) {
 
 export async function GET(request, context) {
   const { resource } = await context.params;
-  const persistentRows = await listPersistentResource(resource);
-
-  if (persistentRows) {
-    return Response.json(persistentRows);
-  }
-
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}${new URL(request.url).search}`);
 
   if (proxiedResponse) {
     return proxiedResponse;
+  }
+
+  const persistentRows = await listPersistentResource(resource);
+
+  if (persistentRows) {
+    return Response.json(persistentRows);
   }
 
   const rows = getResource(resource);
@@ -62,6 +76,12 @@ export async function POST(request, context) {
 
   let payload;
 
+  const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}`);
+
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   if (hasPersistentDatabase) {
     payload = await request.json().catch(() => ({}));
     const persistentRow = await createPersistentResource(resource, payload).catch((error) => persistentErrorResponse(error));
@@ -75,10 +95,8 @@ export async function POST(request, context) {
     }
   }
 
-  const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}`);
-
-  if (proxiedResponse) {
-    return proxiedResponse;
+  if (!shouldUseLocalMutationFallback()) {
+    return missingPersistentStoreResponse();
   }
 
   payload ||= await request.json().catch(() => ({}));

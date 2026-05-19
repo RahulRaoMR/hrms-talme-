@@ -8,6 +8,20 @@ import {
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import { sendLeaveStatusNotification } from "@/lib/leave-notifications";
 
+function shouldUseLocalMutationFallback() {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
+}
+
+function missingPersistentStoreResponse() {
+  return Response.json(
+    {
+      error:
+        "Persistent API storage is not configured. Set NEXT_PUBLIC_API_URL/API_BASE_URL to the backend URL, or set DATABASE_URL to a PostgreSQL database."
+    },
+    { status: 503 }
+  );
+}
+
 async function attachLeaveNotification(resource, previousRow, nextRow) {
   if (resource !== "leave-requests" || !nextRow) {
     return nextRow;
@@ -19,16 +33,16 @@ async function attachLeaveNotification(resource, previousRow, nextRow) {
 
 export async function GET(request, context) {
   const { resource, id } = await context.params;
-  const persistentRow = await getPersistentResource(resource, id);
-
-  if (persistentRow) {
-    return Response.json(persistentRow);
-  }
-
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}${new URL(request.url).search}`);
 
   if (proxiedResponse) {
     return proxiedResponse;
+  }
+
+  const persistentRow = await getPersistentResource(resource, id);
+
+  if (persistentRow) {
+    return Response.json(persistentRow);
   }
 
   const rows = getResource(resource);
@@ -46,6 +60,12 @@ export async function PATCH(request, context) {
 
   let payload;
 
+  const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
+
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   if (hasPersistentDatabase) {
     payload = await request.json().catch(() => ({}));
     const previousRow = await getPersistentResource(resource, id);
@@ -56,10 +76,8 @@ export async function PATCH(request, context) {
     }
   }
 
-  const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
-
-  if (proxiedResponse) {
-    return proxiedResponse;
+  if (!shouldUseLocalMutationFallback()) {
+    return missingPersistentStoreResponse();
   }
 
   payload ||= await request.json().catch(() => ({}));
@@ -75,16 +93,20 @@ export async function PATCH(request, context) {
 
 export async function DELETE(request, context) {
   const { resource, id } = await context.params;
+  const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
+
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   const persistentRow = await deletePersistentResource(resource, id);
 
   if (persistentRow) {
     return Response.json(persistentRow);
   }
 
-  const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
-
-  if (proxiedResponse) {
-    return proxiedResponse;
+  if (!shouldUseLocalMutationFallback()) {
+    return missingPersistentStoreResponse();
   }
 
   if (!deleteResource(resource, id)) {
