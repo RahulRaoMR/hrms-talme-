@@ -67,6 +67,10 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Email or employee ID and password are required." });
   }
 
+  if (expectedRole === "Employee HRMS" && identifier.includes("@")) {
+    return res.status(400).json({ error: "Employee HRMS login requires Employee ID, not email." });
+  }
+
   if (!databaseUrl) {
     if (process.env.NODE_ENV === "production") {
       return res.status(503).json({ error: "Login database is not configured." });
@@ -89,7 +93,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
 
   try {
     employee =
-      expectedRole === "Employee" || !identifier.includes("@")
+      ["Employee", "Employee HRMS"].includes(expectedRole) || !identifier.includes("@")
         ? await prisma.employee.findFirst({
             where: {
               employeeId: {

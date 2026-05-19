@@ -32,6 +32,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const expectedRole = credentialRoles[credentials.role] || credentials.role;
 
         if (!identifier || !password) return null;
+        if (expectedRole === "Employee HRMS" && identifier.includes("@")) return null;
 
         await ensureSeedData();
 

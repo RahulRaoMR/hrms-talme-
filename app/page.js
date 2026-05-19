@@ -20,7 +20,7 @@ const roleOptions = {
   },
   employeeHrms: {
     label: "Employee HRMS",
-    identifierLabel: "Corporate Email",
+    identifierLabel: "Employee ID",
     identifier: "",
     destination: "/hrms"
   },
@@ -65,8 +65,9 @@ export default function LandingPage() {
     password: formState.password,
     destination: selectedRole.destination
   };
-  const resetIdentifierLabel = formState.role === "employee" ? "Employee ID" : "Email Account";
-  const resetTargetHint = formState.role === "employee"
+  const usesEmployeeIdLogin = ["employee", "employeeHrms"].includes(formState.role);
+  const resetIdentifierLabel = usesEmployeeIdLogin ? "Employee ID" : "Email Account";
+  const resetTargetHint = usesEmployeeIdLogin
     ? "OTP will be sent to the registered mail saved for this Employee ID."
     : "OTP will be sent to this email account.";
 
@@ -125,7 +126,11 @@ export default function LandingPage() {
 
     try {
       if (!selectedCredentials.email.trim()) {
-        throw new Error(formState.role === "employee" ? "Enter Employee ID." : "Enter corporate email.");
+        throw new Error(usesEmployeeIdLogin ? "Enter Employee ID." : "Enter corporate email.");
+      }
+
+      if (usesEmployeeIdLogin && selectedCredentials.email.includes("@")) {
+        throw new Error("Enter Employee ID, not email.");
       }
 
       if (!selectedCredentials.password.trim()) {
@@ -183,7 +188,11 @@ export default function LandingPage() {
 
     try {
       if (!formState.identifier.trim()) {
-        throw new Error(formState.role === "employee" ? "Enter Employee ID first." : "Enter your email first.");
+        throw new Error(usesEmployeeIdLogin ? "Enter Employee ID first." : "Enter your email first.");
+      }
+
+      if (usesEmployeeIdLogin && formState.identifier.includes("@")) {
+        throw new Error("Enter Employee ID, not email.");
       }
 
       const response = await fetchResetApi("/api/auth/password-reset/request", {

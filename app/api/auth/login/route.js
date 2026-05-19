@@ -20,6 +20,13 @@ export async function POST(request) {
     );
   }
 
+  if (expectedRole === "Employee HRMS" && identifier.includes("@")) {
+    return Response.json(
+      { error: "Employee HRMS login requires Employee ID, not email." },
+      { status: 400 }
+    );
+  }
+
   const persistentUser = await getPersistentLoginUser(identifier, password, expectedRole);
   const user = persistentUser || await getLocalLoginUser(identifier, password, expectedRole);
 

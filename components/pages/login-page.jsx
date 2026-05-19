@@ -22,7 +22,7 @@ const roleOptions = {
   },
   employeeHrms: {
     label: "Employee HRMS",
-    identifierLabel: "Corporate Email",
+    identifierLabel: "Employee ID",
     identifier: "",
     password: "",
     destination: "/hrms"
@@ -59,6 +59,7 @@ export default function LoginPageClient() {
     password: formState.password,
     destination: selectedRole.destination
   };
+  const usesEmployeeIdLogin = ["employee", "employeeHrms"].includes(formState.role);
 
   return (
     <main className="landing-body">
@@ -79,7 +80,11 @@ export default function LoginPageClient() {
 
               try {
                 if (!selectedCredentials.email.trim()) {
-                  throw new Error(formState.role === "employee" ? "Enter Employee ID." : "Enter corporate email.");
+                  throw new Error(usesEmployeeIdLogin ? "Enter Employee ID." : "Enter corporate email.");
+                }
+
+                if (usesEmployeeIdLogin && selectedCredentials.email.includes("@")) {
+                  throw new Error("Enter Employee ID, not email.");
                 }
 
                 if (!selectedCredentials.password.trim()) {

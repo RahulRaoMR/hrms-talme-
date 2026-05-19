@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
   approveCandidateAction,
   bulkDeleteCandidatesAction,
   createCandidateAction,
+  createJobOpeningAction,
   deleteCandidateAction,
   importCandidatesAction,
   updateCandidateAction
@@ -19,7 +20,132 @@ import SuiteShell from "@/components/suite-shell";
 import { demoSeed, storeKeys } from "@/lib/demo-data";
 import { useDemoStore } from "@/lib/use-demo-store";
 
-export default function AtsPageClient() {
+const requirementSeed = {
+  agingDays: "",
+  hireType: "New Hire",
+  jobId: "",
+  postedDate: "",
+  businessUnit: "Manufacturing HR",
+  department: "",
+  client: "",
+  domain: "",
+  position: "",
+  priority: "Medium",
+  numberOfOpenings: "",
+  status: "Open",
+  remarks: "",
+  candidateConcerned: "",
+  holdDate: "",
+  offerStageDate: "",
+  offerDate: "",
+  joiningDate: "",
+  candidateCtc: "",
+  source: "Direct ATS",
+  harmonizedRole: "",
+  recruiterTagged: "",
+  originalJobPostDate: ""
+};
+
+const requirementFields = [
+  { key: "agingDays", label: "Aging", type: "number" },
+  { key: "hireType", label: "Type of Hire", type: "select", options: ["New Hire", "Replacement", "Contract", "Internal Movement"] },
+  { key: "jobId", label: "Job ID", required: true },
+  { key: "postedDate", label: "Job Posted Date", type: "date" },
+  { key: "businessUnit", label: "Business Unit" },
+  { key: "department", label: "Department" },
+  { key: "client", label: "Client" },
+  { key: "domain", label: "Domain" },
+  { key: "position", label: "Position", required: true },
+  { key: "priority", label: "Priority", type: "select", options: ["High", "Medium", "Low", "Critical"] },
+  { key: "numberOfOpenings", label: "Number of Openings", type: "number" },
+  { key: "status", label: "Position Current Status", type: "select", options: ["Open", "Hold", "Closed", "Offer Stage", "Joined"] },
+  { key: "remarks", label: "Remarks" },
+  { key: "candidateConcerned", label: "Candidate Concerned" },
+  { key: "holdDate", label: "Date of Hold", type: "date" },
+  { key: "offerStageDate", label: "Date of Offer Stage", type: "date" },
+  { key: "offerDate", label: "Date of Offer", type: "date" },
+  { key: "joiningDate", label: "Date of Joining", type: "date" },
+  { key: "candidateCtc", label: "CTC of Candidate" },
+  { key: "source", label: "Source" },
+  { key: "harmonizedRole", label: "Harmonized Role" },
+  { key: "recruiterTagged", label: "Recruiter tagged" },
+  { key: "originalJobPostDate", label: "Original Job Post Date", type: "date" }
+];
+
+const requirementDateFields = new Set([
+  "postedDate",
+  "holdDate",
+  "offerStageDate",
+  "offerDate",
+  "joiningDate",
+  "originalJobPostDate"
+]);
+
+const dateMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function formatRequirementDate(value) {
+  if (!value) return "-";
+
+  const dateValue = String(value).slice(0, 10);
+  const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) return String(value);
+
+  const [, year, month, day] = match;
+  return `${Number(day)}-${dateMonths[Number(month) - 1]}-${year.slice(-2)}`;
+}
+
+function formatRequirementValue(opening, field) {
+  const value = opening[field.key];
+
+  if (requirementDateFields.has(field.key)) {
+    return formatRequirementDate(value);
+  }
+
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  return value;
+}
+
+function statusTone(status, fallback = "gold") {
+  const normalized = String(status || "").toLowerCase();
+
+  if (normalized === "open" || normalized === "joined") return "teal";
+  if (normalized === "hold" || normalized === "offer stage") return "gold";
+  if (normalized === "closed") return "slate";
+
+  return fallback;
+}
+
+function formatCandidateNameFromFile(fileName) {
+  return String(fileName || "")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function parseCandidateCvText(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+  const roleLine = lines.find((line) => /^(role|title|position|designation)\s*:/i.test(line));
+  const role = roleLine?.replace(/^(role|title|position|designation)\s*:\s*/i, "") || "";
+  const name = lines.find((line) =>
+    !line.includes("@") &&
+    !/^(role|title|position|designation|phone|mobile|email|summary|experience)\b/i.test(line) &&
+    line.split(/\s+/).length <= 4
+  );
+
+  return { email, name, role };
+}
+
+export default function AtsPageClient({ data = {} }) {
   const { items: candidates, prepend, reload, replace, remove } = useDemoStore(
     storeKeys.candidates,
     demoSeed.candidates,
@@ -34,6 +160,7 @@ export default function AtsPageClient() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const cvInputRef = useRef(null);
   const [formState, setFormState] = useState({
     name: "Asha Verma",
     email: "asha.verma@talme.ai",
@@ -41,7 +168,35 @@ export default function AtsPageClient() {
     stage: "Screening",
     source: "Direct ATS"
   });
+  const [cvFileName, setCvFileName] = useState("");
+  const [jobOpenings, setJobOpenings] = useState(data.jobOpenings || []);
+  const [requirementModalOpen, setRequirementModalOpen] = useState(false);
+  const [requirementForm, setRequirementForm] = useState(requirementSeed);
+  const [requirementMessage, setRequirementMessage] = useState("");
   const [editState, setEditState] = useState(null);
+
+  const importCandidateFromCv = async (file) => {
+    if (!file) return;
+
+    const fileName = file.name || "";
+    const fallbackName = formatCandidateNameFromFile(fileName);
+    let parsed = {};
+
+    if (/\.txt$/i.test(fileName) || file.type.startsWith("text/")) {
+      const text = await file.text();
+      parsed = parseCandidateCvText(text);
+    }
+
+    setCvFileName(fileName);
+    setFormState((current) => ({
+      ...current,
+      name: parsed.name || fallbackName || current.name,
+      email: parsed.email || current.email,
+      role: parsed.role || current.role,
+      stage: current.stage || "Screening",
+      source: "CV Import"
+    }));
+  };
 
   const normalizedCandidates = useMemo(
     () =>
@@ -85,6 +240,37 @@ export default function AtsPageClient() {
     }));
   };
 
+  const updateRequirementField = (key) => (event) => {
+    setRequirementMessage("");
+    setRequirementForm((current) => ({ ...current, [key]: event.target.value }));
+  };
+
+  const saveRequirement = (event) => {
+    event.preventDefault();
+    setRequirementMessage("");
+
+    startTransition(async () => {
+      try {
+        const created = await createJobOpeningAction({
+          ...requirementForm,
+          agingDays: requirementForm.agingDays ? Number(requirementForm.agingDays) : undefined,
+          numberOfOpenings: requirementForm.numberOfOpenings ? Number(requirementForm.numberOfOpenings) : undefined,
+          tone: String(requirementForm.status || "").toLowerCase() === "open" ? "teal" : "gold"
+        });
+        setJobOpenings((current) => [created, ...current]);
+        setRequirementMessage("Requirement saved to database.");
+        setRequirementForm(requirementSeed);
+        setRequirementModalOpen(false);
+      } catch (error) {
+        setRequirementMessage(error?.message || "Unable to save requirement.");
+      }
+    });
+  };
+
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <SuiteShell
       eyebrow="ATS Module"
@@ -92,51 +278,116 @@ export default function AtsPageClient() {
       primaryHref="/hrms"
       primaryLabel="Go To HRMS"
       actions={
-        <button
-          className="ghost-button"
-          onClick={() => setDrawerOpen(true)}
-          type="button"
-        >
-          Pipeline Insight
-        </button>
+        <>
+          <button
+            className="ghost-button"
+            onClick={() => setDrawerOpen(true)}
+            type="button"
+          >
+            Pipeline Insight
+          </button>
+          <button
+            className="ghost-button"
+            onClick={() => scrollToSection("requirement-overview")}
+            type="button"
+          >
+            Requirement Overview
+          </button>
+          <button
+            className="ghost-button"
+            onClick={() => scrollToSection("candidate-shortlist")}
+            type="button"
+          >
+            Candidate Shortlist
+          </button>
+        </>
       }
       brandEyebrow="ATS Suite"
     >
-      <section className="page-section split-grid">
-        <article className="panel">
+      <section className="page-section panel" id="requirement-overview">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Pipeline</p>
-              <h3>Hiring flow</h3>
+              <p className="eyebrow">Requirement Overview</p>
+              <h3>Registered details</h3>
             </div>
-            <button className="mini-button" onClick={() => setModalOpen(true)} type="button">
-              Add Candidate
+            <button
+              className="mini-button"
+              onClick={() => {
+                setRequirementMessage("");
+                setRequirementForm(requirementSeed);
+                setRequirementModalOpen(true);
+              }}
+              type="button"
+            >
+              Add
             </button>
           </div>
-          <div className="flow-grid">
-            <div className="flow-card"><strong>Requisition</strong><small>Plant HR Manager</small></div>
-            <div className="flow-card"><strong>Sourcing</strong><small>64 profiles</small></div>
-            <div className="flow-card"><strong>Interview</strong><small>12 scheduled</small></div>
-            <div className="flow-card"><strong>Offer</strong><small>4 released</small></div>
-          </div>
-        </article>
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Requisition Brief</p>
-              <h3>Current role</h3>
+          {jobOpenings.length ? (
+            <div className="requirement-register">
+              <table className="data-table requirement-table">
+                <thead>
+                  <tr>
+                    {requirementFields.map((field) => (
+                      <th key={field.key}>{field.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobOpenings.map((opening, index) => (
+                    <tr key={opening.id || opening.jobId || `${opening.position}-${index}`}>
+                      {requirementFields.map((field) => (
+                        <td
+                          className={field.key === "position" ? "requirement-position-cell" : undefined}
+                          key={field.key}
+                        >
+                          {field.key === "status" ? (
+                            <StatusBadge tone={statusTone(opening.status, opening.tone)}>
+                              {opening.status || "Open"}
+                            </StatusBadge>
+                          ) : field.key === "position" ? (
+                            <strong>{opening.position || "Untitled position"}</strong>
+                          ) : (
+                            formatRequirementValue(opening, field)
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="requirement-count">Showing all {jobOpenings.length} registered requirements</p>
             </div>
-          </div>
-          <div className="form-grid">
-            <label><span>Business Unit</span><input defaultValue="Manufacturing HR" /></label>
-            <label><span>Location</span><input defaultValue="Pune Plant" /></label>
-            <label><span>Role Type</span><input defaultValue="Manager" /></label>
-            <label><span>Hiring SLA</span><input defaultValue="21 Days" /></label>
-          </div>
-        </article>
+          ) : (
+            <p className="empty-state">No requirements registered yet.</p>
+          )}
       </section>
 
       <section className="page-section panel">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">Pipeline</p>
+            <h3>Hiring flow</h3>
+          </div>
+          <button
+            className="mini-button"
+            onClick={() => {
+              setCvFileName("");
+              setModalOpen(true);
+            }}
+            type="button"
+          >
+            Add Candidate
+          </button>
+        </div>
+        <div className="flow-grid">
+          <div className="flow-card"><strong>Requisition</strong><small>Plant HR Manager</small></div>
+          <div className="flow-card"><strong>Sourcing</strong><small>64 profiles</small></div>
+          <div className="flow-card"><strong>Interview</strong><small>12 scheduled</small></div>
+          <div className="flow-card"><strong>Offer</strong><small>4 released</small></div>
+        </div>
+      </section>
+
+      <section className="page-section panel" id="candidate-shortlist">
         <div className="panel-head">
           <div>
             <p className="eyebrow">Candidate Shortlist</p>
@@ -145,7 +396,7 @@ export default function AtsPageClient() {
         </div>
         <div className="table-toolbar">
           <FilterChips
-            options={["All", "Direct ATS", "Staffing Vendor", "Referral"]}
+            options={["All", "Direct ATS", "CV Import", "Staffing Vendor", "Referral"]}
             value={sourceFilter}
             onChange={(value) => {
               setSourceFilter(value);
@@ -364,6 +615,7 @@ export default function AtsPageClient() {
               prepend(created);
               await reload();
               setModalOpen(false);
+              setCvFileName("");
               setSourceFilter("All");
             });
           }}
@@ -415,12 +667,70 @@ export default function AtsPageClient() {
               />
             </label>
           </div>
+          <input
+            ref={cvInputRef}
+            accept=".pdf,.doc,.docx,.txt"
+            className="sr-only"
+            onChange={(event) => {
+              importCandidateFromCv(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+            type="file"
+          />
+          {cvFileName ? <p className="cv-import-note">Imported from {cvFileName}</p> : null}
           <div className="modal-actions">
+            <button className="ghost-button" onClick={() => cvInputRef.current?.click()} type="button">
+              Import from CV
+            </button>
             <button className="ghost-button" onClick={() => setModalOpen(false)} type="button">
               Cancel
             </button>
             <button className="primary-button" disabled={isPending} type="submit">
               {isPending ? "Saving..." : "Save Candidate"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={requirementModalOpen}
+        eyebrow="Requirement Overview"
+        title="Create job opening"
+        onClose={() => setRequirementModalOpen(false)}
+      >
+        <form onSubmit={saveRequirement}>
+          <div className="form-grid requirement-overview-grid">
+            {requirementFields.map((field) => (
+              <label key={field.key}>
+                <span>{field.label}</span>
+                {field.type === "select" ? (
+                  <select
+                    required={field.required}
+                    value={requirementForm[field.key]}
+                    onChange={updateRequirementField(field.key)}
+                  >
+                    {field.options.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    required={field.required}
+                    type={field.type || "text"}
+                    value={requirementForm[field.key]}
+                    onChange={updateRequirementField(field.key)}
+                  />
+                )}
+              </label>
+            ))}
+          </div>
+          {requirementMessage ? <p className="requirement-message">{requirementMessage}</p> : null}
+          <div className="modal-actions requirement-actions">
+            <button className="ghost-button" onClick={() => setRequirementForm(requirementSeed)} type="button">
+              Reset
+            </button>
+            <button className="primary-button" disabled={isPending} type="submit">
+              {isPending ? "Saving..." : "Save Requirement"}
             </button>
           </div>
         </form>

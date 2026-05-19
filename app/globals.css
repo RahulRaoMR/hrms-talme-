@@ -608,6 +608,18 @@ body.light-mode {
     linear-gradient(180deg, #eef4fb 0%, #f7fafc 50%, #edf2f8 100%);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 a,
 button,
 input,
@@ -704,6 +716,77 @@ p {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.cv-import-note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.requirement-overview-grid {
+  margin-top: 0;
+}
+
+.requirement-message {
+  margin-top: 14px;
+  color: var(--gold-2);
+  font-size: 0.92rem;
+}
+
+.requirement-actions {
+  margin-top: 16px;
+}
+
+.requirement-register {
+  display: grid;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.requirement-table {
+  min-width: 2750px;
+  table-layout: auto;
+}
+
+.requirement-table th,
+.requirement-table td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.requirement-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(31, 45, 64, 0.98);
+  color: var(--text);
+}
+
+.requirement-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.requirement-table .requirement-position-cell {
+  min-width: 250px;
+}
+
+.requirement-table td strong {
+  font-family: inherit;
+}
+
+.requirement-count {
+  position: sticky;
+  left: 0;
+  margin: 0;
+  padding: 0 12px 12px;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .landing-grid {
