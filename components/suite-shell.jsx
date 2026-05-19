@@ -1,12 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
-import { apiUrl } from "@/lib/api-client";
 import { canAccess, resolveRole } from "@/lib/permissions";
-import { clearSuiteSession, getSuiteSession, saveSuiteSession } from "@/lib/auth-session";
+import { clearSuiteSession, saveSuiteSession } from "@/lib/auth-session";
+
+const previewSession = {
+  token: "local-preview",
+  user: {
+    email: "director@talme.ai",
+    role: "Enterprise Admin"
+  }
+};
 
 export default function SuiteShell({
   eyebrow,
@@ -19,75 +25,20 @@ export default function SuiteShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [focusMode, setFocusMode] = useState(false);
-  const [lightMode, setLightMode] = useState(false);
+  const [lightMode, setLightMode] = useState(true);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
-  const [session, setSession] = useState(null);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [session] = useState(previewSession);
   const role = resolveRole(session?.user?.role || "Enterprise Admin") || "Enterprise Admin";
   const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function verifySession() {
-      const currentSession = getSuiteSession();
-
-      if (!currentSession) {
-        router.replace("/");
-        return;
-      }
-
-      try {
-        const response = await fetch(apiUrl("/api/auth/session"), {
-          headers: {
-            Authorization: `Bearer ${currentSession.token}`
-          },
-          cache: "no-store"
-        });
-        const payload = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(payload?.error || "Session expired. Please sign in again.");
-        }
-
-        const verifiedSession = {
-          ...currentSession,
-          user: payload.user
-        };
-
-        saveSuiteSession(verifiedSession);
-
-        if (!cancelled) {
-          setSession(verifiedSession);
-          setCheckingSession(false);
-        }
-      } catch {
-        clearSuiteSession();
-        router.replace("/");
-      }
-    }
-
-    verifySession();
-
-    const isFocus = window.localStorage.getItem("talme-focus-mode") === "on";
-    const isLight = window.localStorage.getItem("talme-theme-mode") === "light";
-    setFocusMode(isFocus);
-    setLightMode(isLight);
+    saveSuiteSession(previewSession);
+    const savedTheme = window.localStorage.getItem("talme-theme-mode");
+    const nextLightMode = savedTheme ? savedTheme === "light" : true;
+    setLightMode(nextLightMode);
     setPreferencesLoaded(true);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
-
-  useEffect(() => {
-    if (!preferencesLoaded) return;
-
-    document.body.classList.toggle("focus-mode", focusMode);
-    window.localStorage.setItem("talme-focus-mode", focusMode ? "on" : "off");
-  }, [focusMode, preferencesLoaded]);
+  }, []);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -113,22 +64,19 @@ export default function SuiteShell({
     setNavOpen(false);
   }, [pathname]);
 
-  if (checkingSession) {
-    return (
-      <main className="landing-body">
-        <section className="landing-shell">
-          <article className="landing-card">
-            <div className="landing-badge">Secure Enterprise Access</div>
-            <h1>Checking Access</h1>
-            <p>Verifying your signed-in session before opening the suite.</p>
-          </article>
-        </section>
-      </main>
-    );
+  function toggleTheme() {
+    setLightMode((current) => {
+      const nextLightMode = !current;
+
+      document.body.classList.toggle("light-mode", nextLightMode);
+      window.localStorage.setItem("talme-theme-mode", nextLightMode ? "light" : "dark");
+
+      return nextLightMode;
+    });
   }
 
   return (
-    <div className={`app-shell ${navOpen ? "nav-open" : ""}`}>
+    <div className={`app-shell ${lightMode ? "light-suite" : ""} ${navOpen ? "nav-open" : ""}`}>
       <button
         className="mobile-nav-backdrop"
         onClick={() => setNavOpen(false)}
@@ -154,11 +102,10 @@ export default function SuiteShell({
             </button>
           </div>
           {visibleNavItems.map((item, index) => (
-            <Link
+            <a
               key={item.href}
               className={`nav-link ${pathname === item.href ? "active" : ""}`}
               href={item.href}
-              onClick={() => setNavOpen(false)}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
               <div>
@@ -168,7 +115,7 @@ export default function SuiteShell({
                 </div>
                 <small>{item.meta}</small>
               </div>
-            </Link>
+            </a>
           ))}
         </div>
       </aside>
@@ -196,14 +143,7 @@ export default function SuiteShell({
             <div className="search-pill">Global Search</div>
             <button
               className="ghost-button"
-              onClick={() => setFocusMode((current) => !current)}
-              type="button"
-            >
-              {focusMode ? "Standard Focus" : "Focus Mode"}
-            </button>
-            <button
-              className="ghost-button"
-              onClick={() => setLightMode((current) => !current)}
+              onClick={toggleTheme}
               type="button"
             >
               {lightMode ? "Dark Theme" : "Light Theme"}
@@ -230,9 +170,9 @@ export default function SuiteShell({
               Log Out
             </button>
             {primaryHref && (
-              <Link className="primary-button" href={primaryHref}>
+              <a className="primary-button" href={primaryHref}>
                 {primaryLabel}
-              </Link>
+              </a>
             )}
           </div>
         </header>
