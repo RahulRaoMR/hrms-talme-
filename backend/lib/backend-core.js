@@ -7,6 +7,7 @@ export const suitePaths = [
   "/ats",
   "/vms",
   "/payroll",
+  "/daily-updates",
   "/approvals",
   "/reports",
   "/documents",
