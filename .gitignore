@@ -30,6 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 dev-server*.log
+talme-dev.log
 
 # os/editor
 .DS_Store

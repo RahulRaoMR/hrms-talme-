@@ -84,12 +84,6 @@ export const navItems = [
     index: "14"
   },
   {
-    href: "/employee-portal",
-    label: "Employee Portal",
-    meta: "Self service",
-    index: "15"
-  },
-  {
     href: "/employee-app",
     label: "Employee App",
     meta: "Mobile self service",

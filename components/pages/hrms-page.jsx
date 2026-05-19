@@ -234,6 +234,24 @@ function getNextEmployeeCode(rows = []) {
   return `${prefix}${String(nextNumber).padStart(4, "0")}`;
 }
 
+function normalizeResourceRows(payload, key) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.[key])) return payload[key];
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+async function fetchResourceRows(path, key) {
+  const response = await fetch(apiUrl(path), { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`${path} failed with ${response.status}`);
+  }
+
+  return normalizeResourceRows(await response.json(), key);
+}
+
 export default function HrmsPageClient({ data }) {
   const [employees, setEmployees] = useState(data?.employees || []);
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
@@ -248,7 +266,7 @@ export default function HrmsPageClient({ data }) {
       noPunch: 0
     }
   }));
-  const [documents] = useState(data?.documents || []);
+  const [documents, setDocuments] = useState(data?.documents || []);
   const [salarySheet, setSalarySheet] = useState({ rows: [], generated: false, monthLabel: "" });
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -269,6 +287,36 @@ export default function HrmsPageClient({ data }) {
   const [isPending, startTransition] = useTransition();
   const salarySheetTotal = salarySheet.rows.reduce((total, row) => total + row.totalPay, 0);
   const sortedEmployees = sortEmployeesById(employees);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshHrmsResources() {
+      try {
+        const [nextEmployees, nextLeaveRequests, nextAttendanceRecords, nextDocuments] = await Promise.all([
+          fetchResourceRows("/api/employees", "employees"),
+          fetchResourceRows("/api/leave-requests", "leaveRequests"),
+          fetchResourceRows("/api/attendance-records", "attendanceRecords"),
+          fetchResourceRows("/api/documents", "documents")
+        ]);
+
+        if (cancelled) return;
+
+        setEmployees(nextEmployees);
+        setLeaveRequests(nextLeaveRequests);
+        setAttendanceRecords(nextAttendanceRecords);
+        setDocuments(nextDocuments);
+      } catch (error) {
+        console.error("Unable to refresh HRMS resources.", error);
+      }
+    }
+
+    refreshHrmsResources();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const syncQuickAttendance = () => {
