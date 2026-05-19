@@ -3710,6 +3710,83 @@ body:not(.light-mode) .performance-avatar.small {
   cursor: wait;
 }
 
+body.light-mode .employee-drawer {
+  --hrms-accent: #c7953d;
+  --hrms-accent-strong: #8f641e;
+  --hrms-surface: #ffffff;
+  --hrms-surface-soft: #f4f7fb;
+  --hrms-surface-lift: #edf2f8;
+  --hrms-ink: #172033;
+  --hrms-label: #31405c;
+  --hrms-muted: #68778d;
+  --hrms-border: #cfd8e6;
+  box-shadow: -18px 0 56px rgba(15, 23, 42, 0.18);
+}
+
+body.light-mode .employee-drawer-shell {
+  background: rgba(15, 23, 42, 0.22);
+}
+
+body.light-mode .employee-drawer-titlebar,
+body.light-mode .employee-drawer-actions {
+  background: #f8fafc;
+  border-color: #d7dee9;
+}
+
+body.light-mode .employee-accordion,
+body.light-mode .employee-section-head,
+body.light-mode .employee-section-body {
+  background: #ffffff;
+}
+
+body.light-mode .employee-section {
+  border-bottom-color: #e1e7f0;
+}
+
+body.light-mode .employee-section.open .employee-section-head {
+  background: #fff7e6;
+  color: #8f641e;
+}
+
+body.light-mode .pooja-field input,
+body.light-mode .pooja-field textarea,
+body.light-mode .pooja-file-field input {
+  background: #ffffff;
+  color: #172033;
+  border-color: #cfd8e6;
+  box-shadow: none;
+}
+
+body.light-mode .pooja-field select {
+  color: #172033;
+  border-color: #cfd8e6;
+  box-shadow: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #8f641e 50%) calc(100% - 22px) 52% / 8px 8px no-repeat,
+    linear-gradient(135deg, #8f641e 50%, transparent 50%) calc(100% - 16px) 52% / 8px 8px no-repeat,
+    linear-gradient(#cfd8e6, #cfd8e6) calc(100% - 46px) 50% / 1px 28px no-repeat,
+    #ffffff;
+}
+
+body.light-mode .pooja-field select option {
+  background: #ffffff;
+  color: #172033;
+}
+
+body.light-mode .pooja-field input::placeholder,
+body.light-mode .pooja-field textarea::placeholder {
+  color: #7b8798;
+}
+
+body.light-mode .pooja-secondary-button {
+  background: #e8eef7;
+  color: #31405c;
+}
+
+body.light-mode .pooja-outline-button {
+  color: #8f641e;
+}
+
 .phone-app-shell {
   min-height: 100vh;
   display: grid;
@@ -4939,6 +5016,105 @@ body:not(.light-mode) .performance-avatar.small {
   font-size: 0.66rem;
 }
 
+body.light-mode .phone-app-shell,
+body.light-mode .employee-login-shell {
+  background:
+    radial-gradient(circle at top left, rgba(119, 216, 203, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(214, 176, 106, 0.14), transparent 22%),
+    linear-gradient(180deg, #eef4fb 0%, #f7fafc 50%, #edf2f8 100%);
+}
+
+body:has(.light-suite) {
+  --text: #142132;
+  --muted: #566779;
+  --line: rgba(16, 27, 42, 0.1);
+  --panel: rgba(248, 251, 255, 0.94);
+  --panel-soft: rgba(16, 27, 42, 0.04);
+  background:
+    radial-gradient(circle at top left, rgba(119, 216, 203, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(214, 176, 106, 0.14), transparent 22%),
+    linear-gradient(180deg, #eef4fb 0%, #f7fafc 50%, #edf2f8 100%) !important;
+}
+
+.light-suite .sidebar,
+.light-suite .workspace,
+.light-suite .panel,
+.light-suite .hero-card,
+.light-suite .stat-card,
+.light-suite .pill-card,
+.light-suite .flow-card,
+.light-suite .process-card,
+.light-suite .chart-card,
+.light-suite .score-card {
+  background: rgba(248, 251, 255, 0.94);
+  border-color: rgba(16, 27, 42, 0.1);
+  color: #142132;
+}
+
+.light-suite .search-pill,
+.light-suite .ghost-button,
+.light-suite .quick-attendance-card,
+.light-suite .data-table th,
+.light-suite .data-table td {
+  background: rgba(16, 27, 42, 0.04);
+  border-color: rgba(16, 27, 42, 0.1);
+  color: #142132;
+}
+
+body.light-mode .phone-device,
+body.light-mode .employee-login-phone,
+body.light-mode .drawer-panel {
+  background: #ffffff;
+}
+
+body.light-mode .phone-status,
+body.light-mode .phone-hero,
+body.light-mode .phone-page-head,
+body.light-mode .phone-tabs button,
+body.light-mode .phone-bottom-nav,
+body.light-mode .drawer-profile,
+body.light-mode .employee-login-hero {
+  background: rgba(248, 251, 255, 0.96);
+}
+
+body.light-mode .phone-screen {
+  background: linear-gradient(180deg, #f7fafc 0%, #eef4fb 100%);
+}
+
+body.light-mode .hours-card,
+body.light-mode .shift-card,
+body.light-mode .phone-stat-line,
+body.light-mode .payslip-card,
+body.light-mode .upload-card,
+body.light-mode .loan-card,
+body.light-mode .loan-empty-state,
+body.light-mode .phone-empty-art,
+body.light-mode .empty-board,
+body.light-mode .daily-update-card.team .daily-update-body {
+  background: #ffffff;
+  color: var(--text);
+}
+
+body.light-mode .phone-action-stack::before,
+body.light-mode .language-apply-bar {
+  background: linear-gradient(180deg, rgba(247, 250, 252, 0), rgba(247, 250, 252, 0.92) 34%, #f7fafc 100%);
+}
+
+body.light-mode .drawer-panel button,
+body.light-mode .drawer-panel small {
+  background: #ffffff;
+  color: var(--text);
+}
+
+body.light-mode .language-success {
+  background: rgba(248, 251, 255, 0.48);
+}
+
+body.light-mode .language-success p {
+  background: #ffffff;
+  color: var(--text);
+}
+
 .invoice-suite {
   display: block;
   min-height: 720px;
@@ -5872,9 +6048,34 @@ body.light-mode .invoice-board .invoice-transaction-table tbody tr:nth-child(eve
   background: #f8fafc !important;
 }
 
+body.light-mode .invoice-board .invoice-transaction-table tbody tr:nth-child(odd) td {
+  background: #ffffff !important;
+}
+
 body.light-mode .invoice-board .invoice-transaction-table tr.openable-row:hover td,
 body.light-mode .invoice-board .invoice-transaction-table tr.selected-row td {
   background: #e8f1fb !important;
+  color: #172033 !important;
+}
+
+body.light-mode .invoice-board .invoice-transaction-table tr.openable-row:hover .invoice-icon-button,
+body.light-mode .invoice-board .invoice-transaction-table tr.selected-row .invoice-icon-button {
+  color: #47566d !important;
+}
+
+body.light-mode .invoice-board .invoice-transaction-table tr.selected-row .status.gold {
+  background: #fff3cd !important;
+  color: #6b4a05 !important;
+}
+
+body.light-mode .invoice-board .invoice-transaction-table tr.selected-row .status.green {
+  background: #d8f8e6 !important;
+  color: #0d6b3f !important;
+}
+
+body.light-mode .invoice-board .invoice-transaction-table tr.selected-row .status.red {
+  background: #ffe1e6 !important;
+  color: #b4233c !important;
 }
 
 body.light-mode .invoice-icon-button {

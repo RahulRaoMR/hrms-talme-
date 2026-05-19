@@ -1,0 +1,38 @@
+[
+  {
+    "id": "daily-updates-1779104682911",
+    "createdAt": "2026-05-18T11:44:42.912Z",
+    "updatedAt": "2026-05-18T11:44:42.913Z",
+    "authorName": "Talme Director",
+    "authorEmail": "director@talme.ai",
+    "authorRole": "Enterprise Admin",
+    "message": "hy"
+  },
+  {
+    "id": "daily-updates-1779103989694",
+    "createdAt": "2026-05-18T11:33:09.695Z",
+    "updatedAt": "2026-05-18T11:33:09.696Z",
+    "authorName": "Talme Director",
+    "authorEmail": "director@talme.ai",
+    "authorRole": "Enterprise Admin",
+    "message": "hi"
+  },
+  {
+    "id": "daily-updates-1779100349694",
+    "createdAt": "2026-05-18T10:32:29.694Z",
+    "updatedAt": "2026-05-18T10:32:29.696Z",
+    "authorName": "Talme Director",
+    "authorEmail": "director@talme.ai",
+    "authorRole": "Enterprise Admin",
+    "message": "hey everyone"
+  },
+  {
+    "id": "daily-update-seed",
+    "authorName": "Talme Team",
+    "authorEmail": "team@talme.ai",
+    "authorRole": "HR",
+    "message": "Payroll Processing for April payroll 2026\nDiscussion regarding the salary pay structure to implement in razorpay.\nConfiguring the salary structure according to the New labour code / Payroll engine 2.0 in razorpay.\n\nOther HR Related tasks.",
+    "createdAt": "2026-05-18T10:24:30.379Z",
+    "updatedAt": "2026-05-18T10:24:30.379Z"
+  }
+]
