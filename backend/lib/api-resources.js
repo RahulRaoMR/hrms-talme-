@@ -657,6 +657,32 @@ const resourceConfigs = {
       update: (record) => `Updated notification ${record.subject}`,
       delete: (record, id) => `Deleted notification ${record?.subject || id}`
     }
+  },
+  "daily-updates": {
+    model: "dailyUpdate",
+    entity: "DailyUpdate",
+    orderBy: { createdAt: "desc" },
+    async createData(payload) {
+      return {
+        authorName: requiredString(payload, "authorName", "Author name"),
+        authorEmail: requiredString(payload, "authorEmail", "Author email"),
+        authorRole: optionalString(payload, "authorRole"),
+        message: requiredString(payload, "message", "Update")
+      };
+    },
+    async updateData(payload) {
+      return {
+        authorName: optionalString(payload, "authorName"),
+        authorEmail: optionalString(payload, "authorEmail"),
+        authorRole: optionalString(payload, "authorRole"),
+        message: optionalString(payload, "message")
+      };
+    },
+    audit: {
+      create: (record) => `Posted daily update for ${record.authorName}`,
+      update: (record) => `Updated daily update for ${record.authorName}`,
+      delete: (record, id) => `Deleted daily update ${record?.id || id}`
+    }
   }
 };
 

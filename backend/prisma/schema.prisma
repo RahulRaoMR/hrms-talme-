@@ -288,6 +288,19 @@ model Notification {
   updatedAt DateTime @updatedAt
 }
 
+model DailyUpdate {
+  id          String   @id @default(cuid())
+  authorName  String
+  authorEmail String
+  authorRole  String?
+  message     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([authorEmail])
+  @@index([createdAt])
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   actor     String
