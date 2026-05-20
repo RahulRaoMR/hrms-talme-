@@ -7,6 +7,7 @@ import {
   bulkDeleteCandidatesAction,
   createCandidateAction,
   createJobOpeningAction,
+  deleteJobOpeningAction,
   deleteCandidateAction,
   importCandidatesAction,
   updateCandidateAction
@@ -82,6 +83,8 @@ const requirementDateFields = new Set([
 ]);
 
 const dateMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const candidatePageSize = 10;
+const requirementPageSize = 10;
 
 function formatRequirementDate(value) {
   if (!value) return "-";
@@ -119,6 +122,18 @@ function statusTone(status, fallback = "gold") {
   return fallback;
 }
 
+function matchesRequirementSearch(opening, search) {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  if (!normalizedSearch) return true;
+
+  return requirementFields.some((field) => {
+    const value = field.key === "status" ? opening.status || "Open" : formatRequirementValue(opening, field);
+
+    return String(value || "").toLowerCase().includes(normalizedSearch);
+  });
+}
+
 function formatCandidateNameFromFile(fileName) {
   return String(fileName || "")
     .replace(/\.[^.]+$/, "")
@@ -152,6 +167,7 @@ export default function AtsPageClient({ data = {} }) {
     "/api/candidates"
   );
   const [sourceFilter, setSourceFilter] = useState("All");
+  const [candidateSearchInput, setCandidateSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState({ key: "name", direction: "asc" });
@@ -173,6 +189,9 @@ export default function AtsPageClient({ data = {} }) {
   const [requirementModalOpen, setRequirementModalOpen] = useState(false);
   const [requirementForm, setRequirementForm] = useState(requirementSeed);
   const [requirementMessage, setRequirementMessage] = useState("");
+  const [requirementSearchInput, setRequirementSearchInput] = useState("");
+  const [requirementSearch, setRequirementSearch] = useState("");
+  const [requirementPage, setRequirementPage] = useState(1);
   const [editState, setEditState] = useState(null);
 
   const importCandidateFromCv = async (file) => {
@@ -229,9 +248,48 @@ export default function AtsPageClient({ data = {} }) {
     });
   }, [normalizedCandidates, query, sort, sourceFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredCandidates.length / 5));
-  const pagedCandidates = filteredCandidates.slice((page - 1) * 5, page * 5);
+  const totalPages = Math.max(1, Math.ceil(filteredCandidates.length / candidatePageSize));
+  const safeCandidatePage = Math.min(page, totalPages);
+  const candidateStartIndex = (safeCandidatePage - 1) * candidatePageSize;
+  const pagedCandidates = filteredCandidates.slice(candidateStartIndex, candidateStartIndex + candidatePageSize);
   const pagedIds = pagedCandidates.map((candidate) => candidate.id);
+  const filteredJobOpenings = useMemo(
+    () => jobOpenings.filter((opening) => matchesRequirementSearch(opening, requirementSearch)),
+    [jobOpenings, requirementSearch]
+  );
+  const requirementTotalPages = Math.max(1, Math.ceil(filteredJobOpenings.length / requirementPageSize));
+  const safeRequirementPage = Math.min(requirementPage, requirementTotalPages);
+  const requirementStartIndex = (safeRequirementPage - 1) * requirementPageSize;
+  const pagedJobOpenings = filteredJobOpenings.slice(
+    requirementStartIndex,
+    requirementStartIndex + requirementPageSize
+  );
+  const requirementFrom = filteredJobOpenings.length ? requirementStartIndex + 1 : 0;
+  const requirementTo = Math.min(requirementStartIndex + pagedJobOpenings.length, filteredJobOpenings.length);
+
+  const submitCandidateSearch = (event) => {
+    event.preventDefault();
+    setQuery(candidateSearchInput.trim());
+    setPage(1);
+  };
+
+  const clearCandidateSearch = () => {
+    setCandidateSearchInput("");
+    setQuery("");
+    setPage(1);
+  };
+
+  const submitRequirementSearch = (event) => {
+    event.preventDefault();
+    setRequirementSearch(requirementSearchInput.trim());
+    setRequirementPage(1);
+  };
+
+  const clearRequirementSearch = () => {
+    setRequirementSearchInput("");
+    setRequirementSearch("");
+    setRequirementPage(1);
+  };
 
   const toggleSort = (key) => {
     setSort((current) => ({
@@ -258,6 +316,7 @@ export default function AtsPageClient({ data = {} }) {
           tone: String(requirementForm.status || "").toLowerCase() === "open" ? "teal" : "gold"
         });
         setJobOpenings((current) => [created, ...current]);
+        setRequirementPage(1);
         setRequirementMessage("Requirement saved to database.");
         setRequirementForm(requirementSeed);
         setRequirementModalOpen(false);
@@ -324,16 +383,33 @@ export default function AtsPageClient({ data = {} }) {
           </div>
           {jobOpenings.length ? (
             <div className="requirement-register">
+              <form className="requirement-toolbar" onSubmit={submitRequirementSearch}>
+                <input
+                  className="search-input requirement-search-input"
+                  placeholder="Search requirement details"
+                  value={requirementSearchInput}
+                  onChange={(event) => setRequirementSearchInput(event.target.value)}
+                />
+                <button className="mini-button" type="submit">
+                  Search
+                </button>
+                {requirementSearch ? (
+                  <button className="mini-button" onClick={clearRequirementSearch} type="button">
+                    Clear
+                  </button>
+                ) : null}
+              </form>
               <table className="data-table requirement-table">
                 <thead>
                   <tr>
                     {requirementFields.map((field) => (
                       <th key={field.key}>{field.label}</th>
                     ))}
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {jobOpenings.map((opening, index) => (
+                  {pagedJobOpenings.map((opening, index) => (
                     <tr key={opening.id || opening.jobId || `${opening.position}-${index}`}>
                       {requirementFields.map((field) => (
                         <td
@@ -351,11 +427,58 @@ export default function AtsPageClient({ data = {} }) {
                           )}
                         </td>
                       ))}
+                      <td>
+                        <button
+                          aria-label={`Delete ${opening.position || opening.jobId || "requirement"}`}
+                          className="mini-button danger-button requirement-delete-button"
+                          disabled={isPending || !opening.id}
+                          onClick={() =>
+                            startTransition(async () => {
+                              await deleteJobOpeningAction(opening.id);
+                              setJobOpenings((current) => current.filter((item) => item.id !== opening.id));
+                            })
+                          }
+                          title="Delete requirement"
+                          type="button"
+                        >
+                          🗑️
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {!pagedJobOpenings.length ? (
+                    <tr>
+                      <td colSpan={requirementFields.length + 1}>No matching requirements found.</td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
-              <p className="requirement-count">Showing all {jobOpenings.length} registered requirements</p>
+              <div className="requirement-pagination">
+                <p className="requirement-count">
+                  Showing {requirementFrom}-{requirementTo} of {filteredJobOpenings.length} registered requirements
+                </p>
+                <div className="row-actions">
+                  <button
+                    className="mini-button"
+                    disabled={safeRequirementPage <= 1}
+                    onClick={() => setRequirementPage((current) => Math.max(1, current - 1))}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <span className="page-badge">
+                    {safeRequirementPage} / {requirementTotalPages}
+                  </span>
+                  <button
+                    className="mini-button"
+                    disabled={safeRequirementPage >= requirementTotalPages}
+                    onClick={() => setRequirementPage((current) => Math.min(requirementTotalPages, current + 1))}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="empty-state">No requirements registered yet.</p>
@@ -394,7 +517,7 @@ export default function AtsPageClient({ data = {} }) {
             <h3>Source-aware review</h3>
           </div>
         </div>
-        <div className="table-toolbar">
+        <div className="table-toolbar candidate-shortlist-toolbar">
           <FilterChips
             options={["All", "Direct ATS", "CV Import", "Staffing Vendor", "Referral"]}
             value={sourceFilter}
@@ -403,17 +526,26 @@ export default function AtsPageClient({ data = {} }) {
               setPage(1);
             }}
           />
-          <input
-            className="search-input"
-            placeholder="Search candidate, role, or stage"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-          />
+          <form className="candidate-search-form" onSubmit={submitCandidateSearch}>
+            <input
+              className="search-input"
+              placeholder="Search candidate, role, or stage"
+              value={candidateSearchInput}
+              onChange={(event) => {
+                setCandidateSearchInput(event.target.value);
+              }}
+            />
+            <button className="mini-button candidate-toolbar-button" type="submit">
+              Search
+            </button>
+            {query ? (
+              <button className="mini-button candidate-toolbar-button" onClick={clearCandidateSearch} type="button">
+                Clear
+              </button>
+            ) : null}
+          </form>
           <button
-            className="mini-button danger-button"
+            className="mini-button danger-button candidate-toolbar-button"
             disabled={selectedIds.length === 0 || isPending}
             onClick={() =>
               startTransition(async () => {
@@ -427,20 +559,22 @@ export default function AtsPageClient({ data = {} }) {
           >
             Delete Selected ({selectedIds.length})
           </button>
-          <CsvActions
-            filename="talme-candidates.csv"
-            rows={filteredCandidates}
-            columns={[
-              { key: "name", label: "Name" },
-              { key: "role", label: "Role" },
-              { key: "stage", label: "Stage" },
-              { key: "source", label: "Source" },
-              { key: "label", label: "Status" }
-            ]}
-            sample={"Asha Verma,Talent Specialist,Screening,Direct ATS,Imported"}
-            onImport={importCandidatesAction}
-            onImported={reload}
-          />
+          <div className="candidate-csv-actions">
+            <CsvActions
+              filename="talme-candidates.csv"
+              rows={filteredCandidates}
+              columns={[
+                { key: "name", label: "Name" },
+                { key: "role", label: "Role" },
+                { key: "stage", label: "Stage" },
+                { key: "source", label: "Source" },
+                { key: "label", label: "Status" }
+              ]}
+              sample={"Asha Verma,Talent Specialist,Screening,Direct ATS,Imported"}
+              onImport={importCandidatesAction}
+              onImported={reload}
+            />
+          </div>
         </div>
         <table className="data-table">
           <thead>
@@ -493,21 +627,29 @@ export default function AtsPageClient({ data = {} }) {
                 </td>
                 <td>
                   <div className="row-actions">
-                    <Link className="mini-button" href={`/candidates/${candidate.id}`}>
-                      View
+                    <Link
+                      aria-label={`View ${candidate.name}`}
+                      className="mini-button table-icon-button"
+                      href={`/candidates/${candidate.id}`}
+                      title="View"
+                    >
+                      👁️
                     </Link>
                     <button
-                      className="mini-button"
+                      aria-label={`Edit ${candidate.name}`}
+                      className="mini-button table-icon-button"
                       onClick={() => {
                         setEditState(candidate);
                         setEditModalOpen(true);
                       }}
+                      title="Edit"
                       type="button"
                     >
-                      Edit
+                      ✏️
                     </button>
                     <button
-                      className="mini-button"
+                      aria-label={`Approve ${candidate.name}`}
+                      className="mini-button table-icon-button"
                       disabled={isPending}
                       onClick={() =>
                         startTransition(async () => {
@@ -516,12 +658,14 @@ export default function AtsPageClient({ data = {} }) {
                           await reload();
                         })
                       }
+                      title="Approve"
                       type="button"
                     >
-                      Approve
+                      ✅
                     </button>
                     <button
-                      className="mini-button danger-button"
+                      aria-label={`Delete ${candidate.name}`}
+                      className="mini-button danger-button table-icon-button"
                       disabled={isPending}
                       onClick={() =>
                         startTransition(async () => {
@@ -530,14 +674,20 @@ export default function AtsPageClient({ data = {} }) {
                           await reload();
                         })
                       }
+                      title="Delete"
                       type="button"
                     >
-                      Delete
+                      🗑️
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
+            {!pagedCandidates.length ? (
+              <tr>
+                <td colSpan="7">No matching candidates found.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
         <div className="pagination-row">
@@ -547,18 +697,18 @@ export default function AtsPageClient({ data = {} }) {
           <div className="row-actions">
             <button
               className="mini-button"
-              disabled={page <= 1}
+              disabled={safeCandidatePage <= 1}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               type="button"
             >
               Previous
             </button>
             <span className="page-badge">
-              {page} / {totalPages}
+              {safeCandidatePage} / {totalPages}
             </span>
             <button
               className="mini-button"
-              disabled={page >= totalPages}
+              disabled={safeCandidatePage >= totalPages}
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               type="button"
             >
