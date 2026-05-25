@@ -358,6 +358,17 @@ app.delete("/api/users/:id", asyncHandler(async (req, res) => {
   res.json({ id: req.params.id });
 }));
 
+app.get("/api/employees", asyncHandler(async (_req, res) => {
+  const rows = await prisma.employee.findMany({ orderBy: resourceMap.employees.orderBy });
+  res.json(rows);
+}));
+
+app.post("/api/employees", asyncHandler(async (req, res) => {
+  const data = pick(req.body, resourceMap.employees.fields);
+  const row = await prisma.employee.create({ data });
+  res.status(201).json(row);
+}));
+
 app.all("/api/pdf/:kind", (req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.json({ kind: req.params.kind, message: "PDF endpoint is available on the Express backend." });

@@ -26,4 +26,5 @@ The frontend should set:
 
 ```text
 API_BASE_URL=https://talme-hrms-backend.onrender.com
+NEXT_PUBLIC_API_URL=https://talme-hrms-backend.onrender.com
 ```
