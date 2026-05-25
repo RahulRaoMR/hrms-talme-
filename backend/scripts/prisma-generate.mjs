@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import "../lib/load-env.js";
 
 process.env.DATABASE_URL ||=
   process.env.POSTGRES_URL ||

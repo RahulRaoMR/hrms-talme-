@@ -1,8 +1,12 @@
+import "../lib/load-env.js";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
+});
 
 function loadJson(name) {
   const filePath = path.join(process.cwd(), "data", "recruitment", `${name}.json`);

@@ -1,21 +1,31 @@
-import "dotenv/config";
+import "./lib/load-env.js";
 import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import pool from "./config/db.js";
 
+const POSTGRES_URL_PATTERN = /^postgres(?:ql)?:\/\//;
+const cleanUrl = (value) => String(value || "").trim().replace(/^"|"$/g, "");
 const databaseUrl =
-  process.env.DATABASE_URL ||
-  process.env.POSTGRES_URL ||
-  process.env.POSTGRES_PRISMA_URL ||
-  process.env.POSTGRES_URL_NON_POOLING;
+  [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.POSTGRES_URL_NON_POOLING
+  ]
+    .map(cleanUrl)
+    .find((value) => POSTGRES_URL_PATTERN.test(value)) || "";
 
-if (!process.env.DATABASE_URL && databaseUrl) {
+if (databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
 }
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL || "postgresql://dummy:dummy@localhost:5432/dummy" })
+});
 const app = express();
 const hostname = "0.0.0.0";
 const port = Number.parseInt(process.env.PORT || "3000", 10);
@@ -23,12 +33,10 @@ const allowedOrigin = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTE
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 const defaultHrPassword = process.env.DEFAULT_HR_PASSWORD || "hr123";
-const databaseStatus = process.env.DATABASE_URL
-  ? `${new URL(process.env.DATABASE_URL).protocol.replace(":", "")} configured`
-  : "missing";
+const databaseStatus = databaseUrl ? `${new URL(databaseUrl).protocol.replace(":", "")} configured` : "missing";
 
 const resourceMap = {
-  candidates: { model: "candidate", orderBy: { createdAt: "desc" }, fields: ["jobId", "recruiterId", "recruiterName", "name", "role", "stage", "source", "status", "tone", "businessUnit", "domain", "client", "noticePeriod", "email", "phone", "qualification", "yearsOfExperience", "previousCompany", "previousCtc", "location", "preferredLocation", "expectedCtc", "sourceDate", "screeningDate", "screeningNotes", "tech1Date", "tech1Status", "tech1Remarks", "tech1Panel", "tech2Date", "tech2Status", "tech2Remarks", "tech2Panel", "tech3Date", "tech3Status", "tech3Remarks", "tech3Panel", "offerStageInputDate", "documentCollectionDate", "approvalDate", "offerDate", "offerStatus", "offerDecisionDate", "offerAcceptStatus", "joiningDate", "joiningStatus", "offeredCtc"] },
+  candidates: { model: "candidate", orderBy: { createdAt: "desc" }, fields: ["jobId", "recruiterId", "recruiterName", "name", "role", "stage", "source", "status", "tone", "businessUnit", "domain", "client", "noticePeriod", "email", "phone", "qualification", "yearsOfExperience", "previousCompany", "previousCtc", "location", "preferredLocation", "expectedCtc", "sourceDate", "screeningDate", "screeningNotes", "tech1Date", "tech1Status", "tech1Remarks", "tech1Panel", "tech2Date", "tech2Status", "tech2Remarks", "tech2Panel", "tech3Date", "tech3Status", "tech3Remarks", "tech3Panel", "offerStageInputDate", "documentCollectionDate", "approvalDate", "offerDate", "offerStatus", "offerDecisionDate", "offerAcceptStatus", "joiningDate", "joiningStatus", "offeredCtc", "resumeFileName", "resumeMimeType", "resumeDataUrl"] },
   "job-openings": { model: "jobOpening", orderBy: { postedDate: "desc" }, fields: ["jobId", "agingDays", "hireType", "postedDate", "businessUnit", "department", "client", "domain", "position", "priority", "numberOfOpenings", "status", "remarks", "candidateConcerned", "holdDate", "offerStageDate", "offerDate", "joiningDate", "candidateCtc", "source", "harmonizedRole", "recruiterTagged", "originalJobPostDate", "tone"] },
   recruiters: { model: "recruiter", orderBy: { recruiterId: "asc" }, fields: ["recruiterId", "name", "email", "phoneNumber", "currentStatus", "joinedDate", "lwd", "designation"] },
   "harmonized-roles": { model: "harmonizedRole", orderBy: { position: "asc" }, fields: ["position", "harmonizedRole"] },
@@ -50,6 +58,16 @@ const resourceMap = {
 app.use(cors({ origin: allowedOrigin, credentials: allowedOrigin !== "*" }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+app.get("/", asyncHandler(async (_req, res) => {
+  const result = await pool.query("SELECT NOW()");
+
+  res.json({
+    message: "Talme HRMS Backend Running",
+    database: "connected",
+    time: result.rows[0]
+  });
+}));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "HRMS Backend" });

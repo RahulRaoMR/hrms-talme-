@@ -724,6 +724,29 @@ p {
   font-size: 0.92rem;
 }
 
+.modal-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cv-header-import-button {
+  white-space: nowrap;
+}
+
+.record-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.resume-download-button {
+  width: auto;
+}
+
 .requirement-overview-grid {
   margin-top: 0;
 }
@@ -1627,6 +1650,19 @@ button.flow-card {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.table-select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 30px 8px 10px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+}
+
+.table-select:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .data-table tr.openable-row {
