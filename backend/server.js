@@ -4,7 +4,7 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import pool from "./config/db.js";
 
 const POSTGRES_URL_PATTERN = /^postgres(?:ql)?:\/\//;
@@ -364,7 +364,7 @@ app.get("/api/employees", asyncHandler(async (_req, res) => {
 }));
 
 app.post("/api/employees", asyncHandler(async (req, res) => {
-  const data = pick(req.body, resourceMap.employees.fields);
+  const data = pick(req.body, resourceMap.employees.fields, resourceMap.employees);
   const row = await prisma.employee.create({ data });
   res.status(201).json(row);
 }));
@@ -384,7 +384,7 @@ app.get("/api/:resource", asyncHandler(async (req, res) => {
 app.post("/api/:resource", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
-  const data = pick(req.body, config.fields);
+  const data = pick(req.body, config.fields, config);
   const row = await prisma[config.model].create({ data });
   res.status(201).json(row);
 }));
@@ -402,7 +402,7 @@ app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const row = await prisma[config.model].update({
     where: { id: req.params.id },
-    data: pick(req.body, config.fields)
+    data: pick(req.body, config.fields, config)
   });
   res.json(row);
 }));
@@ -439,10 +439,46 @@ async function getSuiteData() {
   return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings };
 }
 
-function pick(payload, fields) {
+function getModelFieldMap(modelName) {
+  const model = Prisma.dmmf.datamodel.models.find((item) => item.name.toLowerCase() === modelName.toLowerCase());
+  return new Map(model?.fields.map((field) => [field.name, field]) || []);
+}
+
+function coerceFieldValue(value, field) {
+  if (!field) return value;
+
+  if (value === "" && !field.isRequired) {
+    return null;
+  }
+
+  if (field.type === "Int") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (field.type === "Float") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (field.type === "Boolean") {
+    if (typeof value === "boolean") return value;
+    return ["true", "1", "yes", "on"].includes(String(value).toLowerCase());
+  }
+
+  if (field.type === "Json" && typeof value === "string") {
+    return JSON.parse(value);
+  }
+
+  return value;
+}
+
+function pick(payload, fields, config) {
+  const fieldMap = config ? getModelFieldMap(config.model) : new Map();
+
   return fields.reduce((data, field) => {
     if (payload?.[field] !== undefined) {
-      data[field] = payload[field];
+      data[field] = coerceFieldValue(payload[field], fieldMap.get(field));
     }
     return data;
   }, {});
