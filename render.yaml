@@ -8,10 +8,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        sync: false
       - key: API_BASE_URL
-        value: https://talme-hrms-backend.onrender.com
+        sync: false
       - key: NEXT_PUBLIC_API_URL
-        value: https://talme-hrms-backend.onrender.com
+        sync: false
 
   - type: web
     name: talme-hrms-backend
