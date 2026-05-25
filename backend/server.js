@@ -29,7 +29,18 @@ const prisma = new PrismaClient({
 const app = express();
 const hostname = "0.0.0.0";
 const port = Number.parseInt(process.env.PORT || "3000", 10);
-const allowedOrigin = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || "*";
+const configuredFrontendOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  "https://hrms.talme.in",
+  "https://www.hrms.talme.in",
+  "http://localhost:3000",
+  "http://localhost:3001"
+]
+  .flatMap((value) => String(value || "").split(","))
+  .map((value) => value.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+const allowedOrigins = new Set(configuredFrontendOrigins);
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 const defaultHrPassword = process.env.DEFAULT_HR_PASSWORD || "hr123";
@@ -55,7 +66,17 @@ const resourceMap = {
   "daily-updates": { model: "dailyUpdate", orderBy: { createdAt: "desc" }, fields: ["authorName", "authorEmail", "authorRole", "message"] }
 };
 
-app.use(cors({ origin: allowedOrigin, credentials: allowedOrigin !== "*" }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || !allowedOrigins.size || allowedOrigins.has(origin.replace(/\/$/, ""))) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS origin not allowed: ${origin}`));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
 

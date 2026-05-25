@@ -10,8 +10,6 @@ services:
         value: production
       - key: API_BASE_URL
         value: https://talme-hrms-backend.onrender.com
-      - key: NEXT_PUBLIC_API_URL
-        value: https://talme-hrms-backend.onrender.com
 
   - type: web
     name: talme-hrms-backend
