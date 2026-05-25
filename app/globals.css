@@ -2067,6 +2067,232 @@ button.flow-card {
   width: min(420px, 100%);
 }
 
+.letters-workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.78fr) minmax(560px, 1.22fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.letter-form-panel {
+  position: sticky;
+  top: 24px;
+}
+
+.letter-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.letter-form-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.letter-form-grid span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.letter-form-grid input {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
+}
+
+.letter-preview-panel {
+  overflow-x: hidden;
+  padding: 8px 0 24px;
+}
+
+.offer-letter-document {
+  display: grid;
+  gap: 22px;
+  justify-items: center;
+}
+
+.exact-pdf-preview {
+  width: min(794px, 100%);
+  box-sizing: border-box;
+  margin: 0 auto 22px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.exact-pdf-preview iframe {
+  display: block;
+  width: 100%;
+  height: 720px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.offer-letter-sheet {
+  position: relative;
+  width: 794px;
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 58px 68px 76px;
+  background: #fff;
+  color: #111827;
+  border: 1px solid #d7dce5;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+  font-family: "Times New Roman", Georgia, serif;
+  font-size: 15px;
+  line-height: 1.58;
+}
+
+.offer-letter-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 2px solid #184f8f;
+}
+
+.offer-letter-header img {
+  width: 74px;
+  height: 74px;
+  object-fit: contain;
+}
+
+.offer-letter-header h2 {
+  margin: 0;
+  color: #173d75;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.offer-letter-header p {
+  margin: 6px 0 0;
+  color: #be8d2f;
+  font-family: Inter, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.offer-letter-company {
+  display: grid;
+  gap: 2px;
+  margin: 16px 0 28px;
+  color: #445166;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.offer-letter-company strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.offer-letter-date {
+  margin-bottom: 26px;
+  text-align: right;
+  font-weight: 700;
+}
+
+.offer-letter-address {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 22px;
+}
+
+.offer-letter-sheet h1 {
+  margin: 0 0 22px;
+  color: #111827;
+  font-size: 18px;
+  text-align: center;
+  text-decoration: underline;
+}
+
+.offer-letter-sheet p {
+  margin: 0 0 14px;
+  text-align: justify;
+}
+
+.offer-letter-list {
+  margin: 18px 0;
+  padding-left: 24px;
+}
+
+.offer-letter-list li {
+  margin-bottom: 10px;
+  text-align: justify;
+}
+
+.offer-letter-table {
+  width: 100%;
+  margin: 20px 0;
+  border-collapse: collapse;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+}
+
+.offer-letter-table th,
+.offer-letter-table td {
+  border: 1px solid #9aa4b2;
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.offer-letter-table th {
+  width: 34%;
+  background: #f1f5f9;
+  color: #172033;
+}
+
+.offer-letter-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  margin-top: 54px;
+}
+
+.offer-letter-signatures div {
+  min-height: 100px;
+  border-top: 1px solid #111827;
+  padding-top: 10px;
+}
+
+.offer-letter-signatures p {
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.offer-letter-footer {
+  position: absolute;
+  left: 68px;
+  right: 68px;
+  bottom: 28px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #d7dce5;
+  padding-top: 8px;
+  color: #64748b;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+}
+
+.signature-cell {
+  height: 74px;
+}
+
 .daily-update-meta {
   display: flex;
   flex-wrap: wrap;
@@ -6415,7 +6641,9 @@ body.light-mode .invoice-action-bar {
 
   .daily-composer,
   .daily-filters,
-  .daily-filters > div {
+  .daily-filters > div,
+  .letters-workspace,
+  .letter-form-grid {
     grid-template-columns: 1fr;
   }
 
@@ -6434,6 +6662,10 @@ body.light-mode .invoice-action-bar {
   .daily-update-card.mine .daily-update-body,
   .daily-update-card.team .daily-update-body {
     width: 100%;
+  }
+
+  .letter-form-panel {
+    position: static;
   }
 
   .invoice-form-row,
@@ -6572,5 +6804,54 @@ body.light-mode .invoice-action-bar {
 
   .insight-drawer {
     width: 100%;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #offer-letter-print,
+  #offer-letter-print * {
+    visibility: visible !important;
+  }
+
+  #offer-letter-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    display: block;
+    width: 210mm;
+  }
+
+  #offer-letter-print .offer-letter-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 15mm 18mm 20mm;
+    border: 0;
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  #offer-letter-print .offer-letter-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  #offer-letter-print .offer-letter-footer {
+    left: 18mm;
+    right: 18mm;
+    bottom: 8mm;
   }
 }
