@@ -3,17 +3,23 @@
   "private": true,
   "scripts": {
     "postinstall": "node -e \"const fs = require('fs'); if (!process.env.DATABASE_URL) { process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/dummy'; } require('child_process').execSync('npx prisma generate --schema backend/prisma/schema.prisma', { stdio: 'inherit', env: process.env });\"",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
+    "backend:start": "npm --prefix backend start",
+    "backend:db:deploy": "npm --prefix backend run db:deploy",
+    "backend:seed": "npm --prefix backend run prisma:seed",
     "prisma:generate": "prisma generate --schema backend/prisma/schema.prisma",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.7.0",
     "bcryptjs": "^3.0.2",
+    "dotenv": "^17.4.2",
     "next": "latest",
     "nodemailer": "^7.0.13",
     "pdf-lib": "^1.17.1",
+    "pg": "^8.21.0",
     "react": "latest",
     "react-dom": "latest"
   },

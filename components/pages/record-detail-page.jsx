@@ -10,6 +10,7 @@ export default function RecordDetailPage({
   primaryLabel,
   summary,
   details,
+  actions,
   sections = []
 }) {
   return (
@@ -29,6 +30,7 @@ export default function RecordDetailPage({
             </div>
           </div>
           <p className="body-copy">{summary}</p>
+          {actions ? <div className="record-detail-actions">{actions}</div> : null}
         </article>
         <article className="panel">
           <div className="panel-head">

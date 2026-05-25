@@ -25,6 +25,8 @@ Set these environment variables in your hosting provider:
 
 ```text
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public
+NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+API_BASE_URL=https://your-backend.onrender.com
 AUTH_SECRET=replace-with-a-long-random-secret
 STORAGE_PROVIDER=local or s3
 AWS_REGION=ap-south-1
@@ -51,6 +53,10 @@ npm run prisma:migrate
 npm run build -- --webpack
 npm run start
 ```
+
+## Employee Data Persistence
+
+Employee records are stored through Prisma/PostgreSQL. Do not add `MONGODB_URI` unless you also rewrite the app for MongoDB. On Vercel, either set `DATABASE_URL` to a PostgreSQL database or set both `NEXT_PUBLIC_API_URL` and `API_BASE_URL` to the deployed backend URL. Without one of those, production API writes are rejected because serverless local storage is temporary and would lose employees after refresh.
 
 ## Corporate Controls Included
 

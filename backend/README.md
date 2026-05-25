@@ -25,5 +25,5 @@ Set `DATABASE_URL`, `AUTH_SECRET`, `NEXTAUTH_URL`, and `FRONTEND_URL` in Render.
 The frontend should set:
 
 ```text
-NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
 ```

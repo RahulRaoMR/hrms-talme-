@@ -4,6 +4,12 @@ import { getPersistentHrmsData } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
 export async function GET(request) {
+  const proxiedResponse = await proxyToConfiguredApi(request, "/api/hrms");
+
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   const persistentData = await getPersistentHrmsData();
 
   if (persistentData) {
@@ -11,12 +17,6 @@ export async function GET(request) {
       ...persistentData,
       shiftAssignments: getResource("shift-assignments") || []
     });
-  }
-
-  const proxiedResponse = await proxyToConfiguredApi(request, "/api/hrms");
-
-  if (proxiedResponse) {
-    return proxiedResponse;
   }
 
   return Response.json(getLocalSuiteData() || getEnterpriseSuiteData());

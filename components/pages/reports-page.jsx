@@ -1,10 +1,55 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import BarChart from "@/components/bar-chart";
 import SuiteShell from "@/components/suite-shell";
-import { apiUrl } from "@/lib/api-client";
 
 export default function ReportsPageClient({ data }) {
+  const [reportData, setReportData] = useState(data);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId;
+
+    async function refreshReports() {
+      try {
+        const response = await fetch(apiUrl(`/api/reports?t=${Date.now()}`), {
+          cache: "no-store"
+        });
+
+        if (!response.ok) return;
+
+        const nextData = await response.json();
+
+        if (!cancelled) {
+          setReportData(nextData);
+        }
+      } finally {
+        if (!cancelled) {
+          window.clearTimeout(timeoutId);
+          timeoutId = window.setTimeout(refreshReports, 5000);
+        }
+      }
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") {
+        refreshReports();
+      }
+    }
+
+    refreshReports();
+    window.addEventListener("focus", refreshReports);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus", refreshReports);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
+
   return (
     <SuiteShell
       eyebrow="Analytics Module"
@@ -14,7 +59,7 @@ export default function ReportsPageClient({ data }) {
       brandEyebrow="Insight Suite"
     >
       <section className="page-section stats-grid">
-        {data.scorecards.map((card) => (
+        {reportData.scorecards.map((card) => (
           <article className="stat-card" key={card.label}>
             <span>{card.label}</span>
             <strong>{card.value}</strong>
@@ -45,7 +90,7 @@ export default function ReportsPageClient({ data }) {
             </div>
           </div>
           <div className="doc-stack">
-            {data.aiSignals.map((signal) => (
+            {reportData.aiSignals.map((signal) => (
               <div className="doc-line" key={signal}>
                 <span>{signal}</span>
                 <strong>Live</strong>
@@ -59,92 +104,17 @@ export default function ReportsPageClient({ data }) {
         <BarChart
           eyebrow="Headcount Trend"
           title="Department-wise workforce"
-          summary={String(data.scorecards[0]?.value || "0")}
-          items={data.charts.departments}
+          summary={String(reportData.scorecards[0]?.value || "0")}
+          items={reportData.charts.departments}
         />
         <BarChart
           eyebrow="Sourcing Mix"
           title="ATS source performance"
-          summary={String(data.charts.sourcing.reduce((acc, item) => acc + Number(item.value), 0))}
-          items={data.charts.sourcing}
+          summary={String(reportData.charts.sourcing.reduce((acc, item) => acc + Number(item.value), 0))}
+          items={reportData.charts.sourcing}
         />
       </section>
 
-      <section className="page-section split-grid">
-        <BarChart
-          eyebrow="Invoice Status"
-          title="Payroll and vendor finance queue"
-          summary={String(data.charts.invoices.reduce((acc, item) => acc + Number(item.value), 0))}
-          items={data.charts.invoices}
-        />
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Exports</p>
-              <h3>PDF and audit-ready packs</h3>
-            </div>
-          </div>
-          <div className="landing-actions">
-            <a
-              className="primary-button"
-              href={apiUrl("/api/pdf/payslip?employee=Manish%20Gupta&month=April%202026&band=INR%209.6L")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Payslip PDF
-            </a>
-            <a
-              className="ghost-button"
-              href={apiUrl("/api/pdf/invoice?vendor=StaffCore%20India&invoiceNo=INV-4388&amount=INR%2042,40,000&status=Approved")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Invoice PDF
-            </a>
-            <a
-              className="ghost-button"
-              href={apiUrl("/api/pdf/offer?candidate=Neha%20Sharma&role=HRBP&location=Pune%20Plant&status=Draft")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Offer PDF
-            </a>
-          </div>
-          <div className="doc-stack">
-            <div className="doc-line"><span>Generated PDFs use live query parameters</span><strong>Ready</strong></div>
-            <div className="doc-line"><span>Suitable for payslips, offers, invoice summaries</span><strong>Corporate format</strong></div>
-          </div>
-        </article>
-      </section>
-
-      <section className="page-section panel-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Compliance Risk</p>
-              <h3>Open control points</h3>
-            </div>
-          </div>
-          <div className="doc-stack">
-            <div className="doc-line"><span>Document risks</span><strong>{data.scorecards[4]?.value}</strong></div>
-            <div className="doc-line"><span>Approval queue</span><strong>{data.scorecards[5]?.value}</strong></div>
-            <div className="doc-line"><span>Notifications delivered</span><strong>{data.scorecards[6]?.value}</strong></div>
-          </div>
-        </article>
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Analytics Status</p>
-              <h3>Database-driven charts</h3>
-            </div>
-          </div>
-          <div className="signal-row">
-            <span className="teal">Headcount chart uses employee records</span>
-            <span>Source chart uses ATS candidate data</span>
-            <span className="gold">Invoice chart uses finance queue data</span>
-          </div>
-        </article>
-      </section>
     </SuiteShell>
   );
 }
