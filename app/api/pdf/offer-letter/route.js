@@ -57,7 +57,7 @@ function drawTextParts(page, parts, x, y, options = {}) {
   let cursorX = x;
 
   parts.forEach((part) => {
-    const text = clean(part.text);
+    const text = String(part.text || "");
     if (!text) return;
 
     page.drawText(text, {
@@ -110,7 +110,7 @@ function redrawFirstPageBody(page, fonts, data) {
     width: 595.5,
     height: 650,
     color: rgb(1, 1, 1),
-    opacity: 0.99
+    opacity: 1
   });
 
   drawLine(page, regular, "Personal & Confidential", x, y, { size: 16 });
@@ -189,49 +189,27 @@ function redrawFirstPageBody(page, fonts, data) {
     { size: 10.3, maxWidth, lineHeight: 13.6 }
   );
 
-  y -= 22;
-  drawLine(page, regular, "List of documents to be carried for on-boarding formalities:", x, y, { size: 10.2 });
-  y -= 12;
-  [
-    "Please submit the below mentioned documents for verification on your date of joining.",
-    "Previous Service Credentials (As applicable)",
-    "Relieving Letter / Resignation Acceptance Letter",
-    "Fitness certificate obtained from a registered medical practitioner",
-    "Universal Account Number (UAN)"
-  ].forEach((item, index) => {
-    drawLine(page, regular, index === 0 ? item : `\u2022 ${item}`, x, y, { size: 9.7 });
-    y -= 11;
-  });
-  drawLine(
-    page,
-    regular,
-    "You are required to submit UAN from the Employee Provident Fund Organization (EPFO).",
-    x,
-    y,
-    { size: 9.2 }
-  );
-  y -= 26;
-
-  drawLine(page, bold, "Terms & Conditions", x, y, { size: 10.4 });
-  y -= 18;
-  drawLine(page, bold, "1. Compensation", x, y, { size: 10.2 });
-  y -= 13;
+  y -= 24;
+  drawLine(page, bold, "Terms & Conditions", x, y, { size: 10.8 });
+  y -= 20;
+  drawLine(page, bold, "1. Compensation", x, y, { size: 10.4 });
+  y -= 15;
   y = drawWrapped(
     page,
     regular,
     "As detailed in the above page and do not disclose the service duration and compensation details to any candidates and the customer organization. Matter of your compensation and offer letter is confidential information of the company. Any discussion or disclosure of your compensation or the contents of offer letter with anybody other than HR will be considered as breach of agreement by you.",
     x,
     y,
-    { size: 8.4, maxWidth, lineHeight: 10.5 }
+    { size: 9.1, maxWidth, lineHeight: 12.4 }
   );
-  y -= 6;
+  y -= 9;
   drawWrapped(
     page,
     regular,
     "*** The company reserves the right to alter the salary structure and make changes in the overall CTC to accommodate any changes in the regulatory provisions or company policies.",
     x,
     y,
-    { size: 8.4, maxWidth, lineHeight: 10.5 }
+    { size: 9.1, maxWidth, lineHeight: 12.4 }
   );
 }
 
@@ -262,7 +240,7 @@ function redrawSecondPageTerms(page, fonts) {
     width: 595.5,
     height: 650,
     color: rgb(1, 1, 1),
-    opacity: 0.99
+    opacity: 1
   });
 
   y = drawTermSection(page, fonts, "2", "Term", [
