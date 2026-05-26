@@ -66,6 +66,33 @@ function drawText(page, font, text, x, y, options = {}) {
   });
 }
 
+function drawWrapped(page, font, text, x, y, options = {}) {
+  const size = options.size || 10;
+  const maxWidth = options.maxWidth || 520;
+  const lineHeight = options.lineHeight || 12;
+  const words = clean(text).split(/\s+/);
+  let line = "";
+  let currentY = y;
+
+  words.forEach((word) => {
+    const nextLine = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(nextLine, size) > maxWidth && line) {
+      drawText(page, font, line, x, currentY, { size, maxWidth });
+      currentY -= lineHeight;
+      line = word;
+      return;
+    }
+    line = nextLine;
+  });
+
+  if (line) {
+    drawText(page, font, line, x, currentY, { size, maxWidth });
+    currentY -= lineHeight;
+  }
+
+  return currentY;
+}
+
 function drawLine(page, x1, y1, x2, y2) {
   page.drawLine({
     start: { x: x1, y: y1 },
@@ -134,20 +161,99 @@ function calculateAnnexure(ctcValue) {
 
 function replaceFirstPage(page, fonts, data) {
   const { regular, bold } = fonts;
+  const x = 36;
+  const maxWidth = 520;
 
-  replaceText(page, regular, `Date: ${data.offerDate}`, 36, 688, 210, 20, { size: 10 });
-  replaceText(page, bold, `${data.candidateName} ,`, 62, 607, 280, 20, { size: 10 });
-  replaceText(page, regular, `"${data.jobRole}"`, 405, 560, 150, 18, { size: 10 });
-  replaceText(page, regular, clean(data.dateOfJoining), 150, 538, 75, 20, { size: 10 });
-  replaceText(page, regular, `Employment Type: ${data.employmentType}`, 34, 481, 250, 18, { size: 10 });
-  replaceText(page, regular, `Place of work: ${data.companyName}`, 34, 456, 260, 18, { size: 10 });
-  replaceText(page, regular, buildCtcTail(data.ctc), 210, 371, 340, 18, { size: 10 });
+  cover(page, 0, 86, 595.5, 635);
+
+  drawText(page, regular, "Personal & Confidential", 38, 707, { size: 15 });
+  drawText(page, regular, `Date: ${data.offerDate}`, 38, 691, { size: 10 });
+  drawText(page, regular, "Offer of Employment", 38, 640, { size: 15 });
+
+  drawText(page, regular, "Dear ", x, 611, { size: 10 });
+  drawText(page, bold, `${data.candidateName} ,`, 60, 611, { size: 10 });
+
+  let y = 565;
+  y = drawWrapped(
+    page,
+    regular,
+    `We are pleased to inform you that you have been selected to work at Talme Technologies as "${data.jobRole}".`,
+    x,
+    y,
+    { size: 10, maxWidth, lineHeight: 12 }
+  );
+  y -= 10;
+  y = drawWrapped(
+    page,
+    regular,
+    `You are requested to join on ${data.dateOfJoining} and the offer stands Withdrawn thereafter, unless the date is extended and communicated to you In Writing.`,
+    x,
+    y,
+    { size: 10, maxWidth, lineHeight: 12 }
+  );
+  y -= 8;
+  y = drawWrapped(
+    page,
+    regular,
+    "The company has full right to terminate you with or without cause, and with or without notice.",
+    x,
+    y,
+    { size: 10, maxWidth, lineHeight: 12 }
+  );
+  y -= 12;
+  drawText(page, regular, `Employment Type: ${data.employmentType}`, x, y, { size: 10 });
+  y -= 25;
+  drawText(page, regular, `Place of work: ${data.companyName}`, x, y, { size: 10 });
+  y -= 25;
+  y = drawWrapped(
+    page,
+    regular,
+    "We will initiate the pre on-boarding processes and provide you any additional requirements for on boarding separately.",
+    x,
+    y,
+    { size: 10, maxWidth, lineHeight: 12 }
+  );
+
+  drawText(page, bold, "Compensation structure;", 38, 401, { size: 10 });
+  drawText(page, bold, `Your Total Cost to Company is INR Rs. ${buildCtcTail(data.ctc)}`, x, 375, { size: 10, maxWidth });
+  drawText(page, bold, "The details of the compensation package offered to you are given in Annexure - A.", x, 351, { size: 10 });
+
+  drawText(page, bold, "Terms & Conditions", x, 322, { size: 10 });
+  drawText(page, bold, "1.Compensation", x, 296, { size: 10 });
+  y = drawWrapped(
+    page,
+    regular,
+    "As detailed in the above page and do not disclose the service duration and compensation details to any candidates and the customer organization. Matter of your compensation and offer letter is confidential information of the company. Any discussion or disclosure of your compensation or the contents of offer letter with anybody other than HR will be considered as breach of agreement by you.",
+    x,
+    266,
+    { size: 10, maxWidth, lineHeight: 11 }
+  );
+  y -= 10;
+  y = drawWrapped(
+    page,
+    regular,
+    "*** The company reserves the right to alter the salary structure and make changes in the overall CTC to accommodate any changes in the regulatory provisions or company policies.",
+    x,
+    y,
+    { size: 10, maxWidth, lineHeight: 11 }
+  );
+  y -= 12;
+  drawText(page, bold, "2. Term", x, y, { size: 10 });
+  drawWrapped(
+    page,
+    regular,
+    "This Offer Letter shall be valid and binding between you and the Company from the date of execution hereof, unless terminated in accordance with the provisions of this Offer letter.",
+    x,
+    y - 21,
+    { size: 10, maxWidth, lineHeight: 11 }
+  );
 }
 
 function fixFooterOverlap(page, font) {
-  cover(page, 70, 36, 500, 32);
-  drawText(page, font, "19.6.2 make any statement to any person which may, or is likely to, adversely affect the business or reputation of the Company;", 38, 64, { size: 8.8, maxWidth: 520 });
-  drawText(page, font, "represent yourself as being directly or indirectly associated with or interested in the business of the Company and/or its affiliates;", 38, 51, { size: 8.8, maxWidth: 520 });
+  cover(page, 0, 30, 595.5, 72);
+  drawText(page, font, "19.6.1 make any untrue or misleading statements in relation to the Company and/or its affiliates;", 38, 89, { size: 8.2, maxWidth: 520 });
+  drawText(page, font, "19.6.2 make any statement to any person which may, or is likely to, adversely affect the business or reputation of the Company;", 38, 76, { size: 8.2, maxWidth: 520 });
+  drawText(page, font, "represent yourself as being directly or indirectly associated with or interested in the business of the Company and/or its affiliates;", 38, 63, { size: 8.2, maxWidth: 520 });
 }
 
 function replaceAcceptancePage(page, font, data) {
