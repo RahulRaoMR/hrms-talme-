@@ -363,18 +363,18 @@ function replacePolicyPage(page, fonts, data) {
   const x = 38;
   const maxWidth = 520;
   const headingSize = 10;
-  const bodySize = 8.4;
-  const lineHeight = 9.4;
-  let y = 724;
+  const bodySize = 9.7;
+  const lineHeight = 12;
+  let y = 710;
 
   cover(page, 0, 64, page.getWidth(), 686);
 
   const heading = (text, gapBefore = 0) => {
     y -= gapBefore;
     drawText(page, bold, text, x, y, { size: headingSize });
-    y -= 11;
+    y -= 14;
   };
-  const body = (text, gapAfter = 7) => {
+  const body = (text, gapAfter = 10) => {
     y = drawWrapped(page, regular, text, x, y, { size: bodySize, maxWidth, lineHeight });
     y -= gapAfter;
   };
@@ -384,37 +384,37 @@ function replacePolicyPage(page, fonts, data) {
   };
 
   heading("9. Contact information");
-  body("You will keep the company informed of your postal address, telephone number, fax, email or any other means for communication including changes that may occur during the period of your employment. Any communication sent to the last informed address is deemed as served.", 7);
+  body("You will keep the company informed of your postal address, telephone number, fax, email or any other means for communication including changes that may occur during the period of your employment. Any communication sent to the last informed address is deemed as served.", 9);
 
   heading("10. Working Hours");
   boldLine(`Monday to Friday: ${data.weekdayShiftTiming}`);
   boldLine(`Saturday: ${data.saturdayShiftTiming}`, 0);
-  body("Company reserves the right to run the shifts, change the shift timings, fix the criteria to attend in shifts within the applicable laws based on its business needs and all its employees are bound by it.", 7);
+  body("Company reserves the right to run the shifts, change the shift timings, fix the criteria to attend in shifts within the applicable laws based on its business needs and all its employees are bound by it.", 9);
 
   heading("11. Leave & Holidays");
-  body("Employees are entitled to a maximum of one and a half (1.5) days of leave per month, subject to proper written approval from Talme. Unused leave cannot be carried forward to subsequent months and any unused paid leave cannot be claimed or cashed in.", 7);
+  body("Employees are entitled to a maximum of one and a half (1.5) days of leave per month, subject to proper written approval from Talme. Unused leave cannot be carried forward to subsequent months and any unused paid leave cannot be claimed or cashed in.", 9);
 
   heading("12. Voluntary Abandonment");
-  body("You agree that all/any unplanned/unauthorized leave for 5 (five) or more consecutive working days without prior intimation will be deemed as \"Abandonment of Services\" unless such unplanned leave is for the reasons of medical emergency which shall be substantiated with valid documentary proof within 7 (seven) days from the date of such absence. You shall not be entitled to any monetary and non-monetary benefits as was applicable to you. This provision shall also be applicable to all/any such unplanned/unauthorized leave during your serving the notice period, if any. You shall also not be entitled to any monetary and non-monetary benefits in case of your resignation and you do not serve the agreed notice period as directed by the Company.", 7);
+  body("You agree that all/any unplanned/unauthorized leave for 5 (five) or more consecutive working days without prior intimation will be deemed as \"Abandonment of Services\" unless such unplanned leave is for the reasons of medical emergency which shall be substantiated with valid documentary proof within 7 (seven) days from the date of such absence. You shall not be entitled to any monetary and non-monetary benefits as was applicable to you. This provision shall also be applicable to all/any such unplanned/unauthorized leave during your serving the notice period, if any. You shall also not be entitled to any monetary and non-monetary benefits in case of your resignation and you do not serve the agreed notice period as directed by the Company.", 9);
 
   heading("13. Insurance / Medical Examination");
-  body("The insurance policy will take up to 30 working days from your date of joining to be generated. Details regarding the insurance plan and coverage will be provided upon activation. The company reserves its right to have you undergo medical examination from time to time. The appointment shall at all times be subject to a doctor certifying you to be fit to carry out your duties.", 7);
+  body("The insurance policy will take up to 30 working days from your date of joining to be generated. Details regarding the insurance plan and coverage will be provided upon activation. The company reserves its right to have you undergo medical examination from time to time. The appointment shall at all times be subject to a doctor certifying you to be fit to carry out your duties.", 9);
 
   heading("14. Dress Code");
-  body("You are required to be dressed in Business Formals on Weekdays and Business Informal is permitted on Friday. Gentlemen: To be dressed in full/half sleeved shirt, Full Trousers and Leather Shoes (Black or Brown). Ladies: Saree's / Salwar Kameez / Business Suits / Full or half sleeved shirt, Full Trousers.", 7);
+  body("You are required to be dressed in Business Formals on Weekdays and Business Informal is permitted on Friday. Gentlemen: To be dressed in full/half sleeved shirt, Full Trousers and Leather Shoes (Black or Brown). Ladies: Saree's / Salwar Kameez / Business Suits / Full or half sleeved shirt, Full Trousers.", 9);
 
   heading("15. Performance Review");
   body("You shall receive periodic performance reviews/evaluations at the discretion of the Company.", 6);
 
   heading("16. Compensation Reviews");
-  body("Compensation reviews shall be purely based on individual's profile, contributions, competencies, role, potential to shoulder higher responsibilities and internal & external environment. Compensation reviews are highly personal and confidential and hence, revealing or eliciting compensation details is considered as impropriety and may lead to punitive action.", 7);
+  body("Compensation reviews shall be purely based on individual's profile, contributions, competencies, role, potential to shoulder higher responsibilities and internal & external environment. Compensation reviews are highly personal and confidential and hence, revealing or eliciting compensation details is considered as impropriety and may lead to punitive action.", 9);
 
   heading("17. Travel & Facility");
   body("No cab facility and food facility will be provided by Talme.", 6);
 
   drawText(page, bold, "A.  Canteen Policy", x, y, { size: headingSize });
   y -= 11;
-  body("Canteen charges will be deducted from the employee's Cost to Company (CTC) as part of the overall benefits and amenities provided by the organization. This deduction will be reflected in the monthly salary statement.", 7);
+  body("Canteen charges will be deducted from the employee's Cost to Company (CTC) as part of the overall benefits and amenities provided by the organization. This deduction will be reflected in the monthly salary statement.", 9);
 
   heading("18. Associate's Non-Disclosure agreement");
   body("You will need to keep all information pertaining to Talme Technologies and its subsidiaries, customers and all stakeholders confidential.", 0);
