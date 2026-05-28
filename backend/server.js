@@ -1,53 +1,34 @@
-import "./lib/load-env.js";
+import "dotenv/config";
 import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Prisma, PrismaClient } from "@prisma/client";
-import pool from "./config/db.js";
+import { PrismaClient } from "@prisma/client";
 
-const POSTGRES_URL_PATTERN = /^postgres(?:ql)?:\/\//;
-const cleanUrl = (value) => String(value || "").trim().replace(/^"|"$/g, "");
 const databaseUrl =
-  [
-    process.env.DATABASE_URL,
-    process.env.POSTGRES_URL,
-    process.env.POSTGRES_PRISMA_URL,
-    process.env.POSTGRES_URL_NON_POOLING
-  ]
-    .map(cleanUrl)
-    .find((value) => POSTGRES_URL_PATTERN.test(value)) || "";
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL_NON_POOLING;
 
-if (databaseUrl) {
+if (!process.env.DATABASE_URL && databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
 }
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL || "postgresql://dummy:dummy@localhost:5432/dummy" })
-});
+const prisma = new PrismaClient();
 const app = express();
 const hostname = "0.0.0.0";
 const port = Number.parseInt(process.env.PORT || "3000", 10);
-const configuredFrontendOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.NEXT_PUBLIC_FRONTEND_URL,
-  "https://hrms.talme.in",
-  "https://www.hrms.talme.in",
-  "http://localhost:3000",
-  "http://localhost:3001"
-]
-  .flatMap((value) => String(value || "").split(","))
-  .map((value) => value.trim().replace(/\/$/, ""))
-  .filter(Boolean);
-const allowedOrigins = new Set(configuredFrontendOrigins);
+const allowedOrigin = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || "*";
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 const defaultHrPassword = process.env.DEFAULT_HR_PASSWORD || "hr123";
-const databaseStatus = databaseUrl ? `${new URL(databaseUrl).protocol.replace(":", "")} configured` : "missing";
+const databaseStatus = process.env.DATABASE_URL
+  ? `${new URL(process.env.DATABASE_URL).protocol.replace(":", "")} configured`
+  : "missing";
 
 const resourceMap = {
-  candidates: { model: "candidate", orderBy: { createdAt: "desc" }, fields: ["jobId", "recruiterId", "recruiterName", "name", "role", "stage", "source", "status", "tone", "businessUnit", "domain", "client", "noticePeriod", "email", "phone", "qualification", "yearsOfExperience", "previousCompany", "previousCtc", "location", "preferredLocation", "expectedCtc", "sourceDate", "screeningDate", "screeningNotes", "tech1Date", "tech1Status", "tech1Remarks", "tech1Panel", "tech2Date", "tech2Status", "tech2Remarks", "tech2Panel", "tech3Date", "tech3Status", "tech3Remarks", "tech3Panel", "offerStageInputDate", "documentCollectionDate", "approvalDate", "offerDate", "offerStatus", "offerDecisionDate", "offerAcceptStatus", "joiningDate", "joiningStatus", "offeredCtc", "resumeFileName", "resumeMimeType", "resumeDataUrl"] },
+  candidates: { model: "candidate", orderBy: { createdAt: "desc" }, fields: ["jobId", "recruiterId", "recruiterName", "name", "role", "stage", "source", "status", "tone", "businessUnit", "domain", "client", "noticePeriod", "email", "phone", "qualification", "yearsOfExperience", "previousCompany", "previousCtc", "location", "preferredLocation", "expectedCtc", "sourceDate", "screeningDate", "screeningNotes", "tech1Date", "tech1Status", "tech1Remarks", "tech1Panel", "tech2Date", "tech2Status", "tech2Remarks", "tech2Panel", "tech3Date", "tech3Status", "tech3Remarks", "tech3Panel", "offerStageInputDate", "documentCollectionDate", "approvalDate", "offerDate", "offerStatus", "offerDecisionDate", "offerAcceptStatus", "joiningDate", "joiningStatus", "offeredCtc"] },
   "job-openings": { model: "jobOpening", orderBy: { postedDate: "desc" }, fields: ["jobId", "agingDays", "hireType", "postedDate", "businessUnit", "department", "client", "domain", "position", "priority", "numberOfOpenings", "status", "remarks", "candidateConcerned", "holdDate", "offerStageDate", "offerDate", "joiningDate", "candidateCtc", "source", "harmonizedRole", "recruiterTagged", "originalJobPostDate", "tone"] },
   recruiters: { model: "recruiter", orderBy: { recruiterId: "asc" }, fields: ["recruiterId", "name", "email", "phoneNumber", "currentStatus", "joinedDate", "lwd", "designation"] },
   "harmonized-roles": { model: "harmonizedRole", orderBy: { position: "asc" }, fields: ["position", "harmonizedRole"] },
@@ -66,29 +47,9 @@ const resourceMap = {
   "daily-updates": { model: "dailyUpdate", orderBy: { createdAt: "desc" }, fields: ["authorName", "authorEmail", "authorRole", "message"] }
 };
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || !allowedOrigins.size || allowedOrigins.has(origin.replace(/\/$/, ""))) {
-      callback(null, true);
-      return;
-    }
-
-    callback(new Error(`CORS origin not allowed: ${origin}`));
-  },
-  credentials: true
-}));
+app.use(cors({ origin: allowedOrigin, credentials: allowedOrigin !== "*" }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
-
-app.get("/", asyncHandler(async (_req, res) => {
-  const result = await pool.query("SELECT NOW()");
-
-  res.json({
-    message: "Talme HRMS Backend Running",
-    database: "connected",
-    time: result.rows[0]
-  });
-}));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "HRMS Backend" });
@@ -358,17 +319,6 @@ app.delete("/api/users/:id", asyncHandler(async (req, res) => {
   res.json({ id: req.params.id });
 }));
 
-app.get("/api/employees", asyncHandler(async (_req, res) => {
-  const rows = await prisma.employee.findMany({ orderBy: resourceMap.employees.orderBy });
-  res.json(rows);
-}));
-
-app.post("/api/employees", asyncHandler(async (req, res) => {
-  const data = pick(req.body, resourceMap.employees.fields, resourceMap.employees);
-  const row = await prisma.employee.create({ data });
-  res.status(201).json(row);
-}));
-
 app.all("/api/pdf/:kind", (req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.json({ kind: req.params.kind, message: "PDF endpoint is available on the Express backend." });
@@ -384,7 +334,7 @@ app.get("/api/:resource", asyncHandler(async (req, res) => {
 app.post("/api/:resource", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
-  const data = pick(req.body, config.fields, config);
+  const data = pick(req.body, config.fields);
   const row = await prisma[config.model].create({ data });
   res.status(201).json(row);
 }));
@@ -402,7 +352,7 @@ app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const row = await prisma[config.model].update({
     where: { id: req.params.id },
-    data: pick(req.body, config.fields, config)
+    data: pick(req.body, config.fields)
   });
   res.json(row);
 }));
@@ -439,46 +389,10 @@ async function getSuiteData() {
   return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings };
 }
 
-function getModelFieldMap(modelName) {
-  const model = Prisma.dmmf.datamodel.models.find((item) => item.name.toLowerCase() === modelName.toLowerCase());
-  return new Map(model?.fields.map((field) => [field.name, field]) || []);
-}
-
-function coerceFieldValue(value, field) {
-  if (!field) return value;
-
-  if (value === "" && !field.isRequired) {
-    return null;
-  }
-
-  if (field.type === "Int") {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  if (field.type === "Float") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  if (field.type === "Boolean") {
-    if (typeof value === "boolean") return value;
-    return ["true", "1", "yes", "on"].includes(String(value).toLowerCase());
-  }
-
-  if (field.type === "Json" && typeof value === "string") {
-    return JSON.parse(value);
-  }
-
-  return value;
-}
-
-function pick(payload, fields, config) {
-  const fieldMap = config ? getModelFieldMap(config.model) : new Map();
-
+function pick(payload, fields) {
   return fields.reduce((data, field) => {
     if (payload?.[field] !== undefined) {
-      data[field] = coerceFieldValue(payload[field], fieldMap.get(field));
+      data[field] = payload[field];
     }
     return data;
   }, {});

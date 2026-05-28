@@ -18,7 +18,9 @@ const initialLetter = {
   monthlySalary: "Rs. 15,000",
   joiningBonus: "Rs. 0",
   leaveEntitlement: "As per company policy",
-  reportingManager: "HR Manager"
+  reportingManager: "HR Manager",
+  weekdayShiftTiming: "08:00 AM to 5:30 PM",
+  saturdayShiftTiming: "08:00 AM to 12:00 PM"
 };
 
 const fields = [
@@ -36,8 +38,19 @@ const fields = [
   ["monthlySalary", "Monthly Salary"],
   ["joiningBonus", "Joining Bonus"],
   ["leaveEntitlement", "Leave"],
-  ["reportingManager", "Reporting Manager"]
+  ["reportingManager", "Reporting Manager"],
+  ["weekdayShiftTiming", "Monday to Friday Timing"],
+  ["saturdayShiftTiming", "Saturday Timing"]
 ];
+
+function amountFrom(value) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  return digits ? Number(digits) : 0;
+}
+
+function formatAmount(value) {
+  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(value || 0));
+}
 
 export default function LettersPageClient() {
   const [letter, setLetter] = useState(initialLetter);
@@ -47,7 +60,14 @@ export default function LettersPageClient() {
   const previewObjectUrl = useRef("");
 
   function updateField(field, value) {
-    setLetter((current) => ({ ...current, [field]: value }));
+    setLetter((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "ctc") {
+        const ctc = amountFrom(value);
+        next.monthlySalary = ctc ? `Rs. ${formatAmount(ctc / 12)}` : "";
+      }
+      return next;
+    });
   }
 
   async function requestOfferLetterPdf(payload) {

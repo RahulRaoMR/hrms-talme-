@@ -1,4 +1,0 @@
-ALTER TABLE "Candidate"
-ADD COLUMN IF NOT EXISTS "resumeFileName" TEXT,
-ADD COLUMN IF NOT EXISTS "resumeMimeType" TEXT,
-ADD COLUMN IF NOT EXISTS "resumeDataUrl" TEXT;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
   approveCandidateAction,
   bulkDeleteCandidatesAction,
@@ -16,7 +16,6 @@ import CsvActions from "@/components/csv-actions";
 import Drawer from "@/components/drawer";
 import FilterChips from "@/components/filter-chips";
 import Modal from "@/components/modal";
-import { rememberCandidateForDetail } from "@/components/pages/candidate-detail-page";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
 import { demoSeed, storeKeys } from "@/lib/demo-data";
@@ -87,142 +86,6 @@ const dateMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 const candidatePageSize = 10;
 const requirementPageSize = 10;
 
-const candidateDropdownOptions = {
-  techStatus: ["Select", "Reject", "Hold", "No Show"],
-  offerStatus: ["Offered Yet to Join", "Doccument Collection", "Offer Drop", "Offer Stage Drop"],
-  offerAcceptStatus: ["Offer Accepted", "Offer Rejected"],
-  source: ["Portal-Naukri", "Portal-LinkedIN", "Employee Reference", "Campus Drive"],
-  recruiters: ["Harish", "Harshitha", "Bhoomika", "Pooja", "Narthana", "Himanshu", "Pooja & Bhoomika"],
-  joiningStatus: ["Joined", "No Show", "Drop after Offer Accept"],
-  stage: ["Sourcing", "Screening", "Tech 1", "Tech 2", "Tech 3", "Client Feedback", "Offer", "Joining", "Pipeline"],
-  currentStatus: [
-    "Sourced",
-    "Yet to Screen",
-    "Screening Reject by Client",
-    "Tech 1 to be Scheduled",
-    "Tech 1 Awaiting Feedback",
-    "Tech 1 Reject",
-    "Tech 2 to be Scheduled",
-    "Tech 2 Awaiting Feedback",
-    "Tech 2 Reject",
-    "Tech 3 to be Scheduled",
-    "Tech 3 Awaiting Feedback",
-    "Tech 3 Reject",
-    "Yet to Offer",
-    "Offer Released",
-    "Document Collection",
-    "Offer Accepted Yet to Join",
-    "Offer Rejected",
-    "Joined",
-    "No Show",
-    "Screening reject by HR",
-    "Not Interested job change",
-    "Awaiting feedback from client",
-    "position closed",
-    "Position on Hold"
-  ],
-  businessUnit: ["Talme"],
-  department: ["Talme"]
-};
-
-const candidateSourceFilterOptions = ["All", ...candidateDropdownOptions.source, "Direct ATS", "CV Import", "Staffing Vendor", "Referral"];
-const candidateProfileFields = [
-  { key: "noticePeriod", label: "Notice Period" },
-  { key: "qualification", label: "Qualification" },
-  { key: "yearsOfExperience", label: "Experience", type: "number", step: "0.1" },
-  { key: "previousCompany", label: "Previous Company" },
-  { key: "previousCtc", label: "Previous CTC" },
-  { key: "expectedCtc", label: "Expected CTC" },
-  { key: "location", label: "Location" },
-  { key: "preferredLocation", label: "Preferred Location" }
-];
-const candidateIntakeFields = [
-  { key: "phone", label: "Phone" },
-  { key: "jobId", label: "Job ID" },
-  { key: "recruiterId", label: "Recruiter ID" },
-  { key: "domain", label: "Domain" },
-  { key: "client", label: "Client" },
-  { key: "sourceDate", label: "Source Date", type: "date" },
-  { key: "screeningDate", label: "Screening Date", type: "date" },
-  { key: "screeningNotes", label: "Screening Notes", multiline: true }
-];
-
-function uniqueOptions(options) {
-  return Array.from(new Set(options.filter(Boolean)));
-}
-
-function candidateStatusOptions(currentValue) {
-  return uniqueOptions([currentValue, ...candidateDropdownOptions.currentStatus]);
-}
-
-function candidateStageOptions(currentValue) {
-  return uniqueOptions([currentValue, ...candidateDropdownOptions.stage]);
-}
-
-function candidateSourceOptions(currentValue) {
-  return uniqueOptions([currentValue, ...candidateDropdownOptions.source]);
-}
-
-function pluralize(count, singular, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function normalizeCandidateText(candidate, fields) {
-  return fields
-    .map((field) => candidate?.[field])
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function hasInterviewSignal(candidate) {
-  const stage = normalizeCandidateText(candidate, ["stage"]);
-  const status = normalizeCandidateText(candidate, [
-    "label",
-    "status",
-    "tech1Status",
-    "tech2Status",
-    "tech3Status"
-  ]);
-
-  return (
-    /interview|assessment|client feedback|tech\s*[123]/.test(stage) ||
-    /interview|awaiting feedback|tech\s*[123]/.test(status) ||
-    Boolean(candidate.tech1Date || candidate.tech2Date || candidate.tech3Date)
-  );
-}
-
-function hasOfferReleaseSignal(candidate) {
-  const stage = normalizeCandidateText(candidate, ["stage"]);
-  const offerText = normalizeCandidateText(candidate, [
-    "label",
-    "status",
-    "offerStatus",
-    "offerAcceptStatus",
-    "joiningStatus"
-  ]);
-  const isDroppedOrRejected = /yet to offer|rejected|drop|no show/.test(offerText);
-
-  return (
-    Boolean(candidate.offerDate) ||
-    /offer released|offered yet to join|offer accepted|document collection/.test(offerText) ||
-    (stage === "offer" && !isDroppedOrRejected)
-  );
-}
-
-function candidateRequirementKey(candidate) {
-  return candidate?.jobId || candidate?.role || "";
-}
-
-function isOpenRequirement(opening) {
-  const status = String(opening?.status || "Open").toLowerCase();
-  return status !== "closed" && status !== "joined";
-}
-
-function jobOpeningOptionLabel(opening) {
-  return [opening.jobId, opening.position, opening.client].filter(Boolean).join(" - ");
-}
-
 function formatRequirementDate(value) {
   if (!value) return "-";
 
@@ -280,329 +143,25 @@ function formatCandidateNameFromFile(fileName) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function normalizeResumeText(text) {
-  return String(text || "")
-    .replace(/\\r/g, "\n")
-    .replace(/\\n/g, "\n")
-    .replace(/\(([^()]{2,})\)/g, " $1 ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[^\S\r\n]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function readLooseResumeText(buffer) {
-  const decoded = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-
-  return normalizeResumeText(decoded);
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-function bytesToBinaryText(bytes) {
-  let output = "";
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    output += String.fromCharCode(...bytes.slice(index, index + chunkSize));
-  }
-
-  return output;
-}
-
-function binaryTextToBytes(text) {
-  const bytes = new Uint8Array(text.length);
-
-  for (let index = 0; index < text.length; index += 1) {
-    bytes[index] = text.charCodeAt(index) & 255;
-  }
-
-  return bytes;
-}
-
-async function inflatePdfStream(bytes) {
-  if (typeof DecompressionStream === "undefined") {
-    return null;
-  }
-
-  try {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
-function decodePdfLiteralString(value) {
-  let output = "";
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-
-    if (char !== "\\") {
-      output += char;
-      continue;
-    }
-
-    const next = value[index + 1];
-
-    if (!next) continue;
-    if (next === "n") output += "\n";
-    else if (next === "r") output += "\r";
-    else if (next === "t") output += "\t";
-    else if (next === "b") output += "\b";
-    else if (next === "f") output += "\f";
-    else if (["\\", "(", ")"].includes(next)) output += next;
-    else if (/[0-7]/.test(next)) {
-      const octal = value.slice(index + 1).match(/^[0-7]{1,3}/)?.[0] || "";
-      output += String.fromCharCode(Number.parseInt(octal, 8));
-      index += octal.length - 1;
-    }
-
-    index += 1;
-  }
-
-  return output;
-}
-
-function extractPdfTextOperators(content) {
-  const chunks = [];
-  const tokenPattern = /\((?:\\.|[^\\)])*\)|-?\d+(?:\.\d+)?/g;
-  const arrayPattern = /\[(.*?)\]\s*TJ/gs;
-  const textPattern = /\((?:\\.|[^\\)])*\)\s*Tj/g;
-  let arrayMatch;
-
-  while ((arrayMatch = arrayPattern.exec(content))) {
-    const parts = [];
-    const tokens = arrayMatch[1].match(tokenPattern) || [];
-
-    for (const token of tokens) {
-      if (token.startsWith("(")) {
-        parts.push(decodePdfLiteralString(token.slice(1, -1)));
-      } else if (Number(token) < -250) {
-        parts.push(" ");
-      }
-    }
-
-    chunks.push(parts.join(""));
-  }
-
-  let textMatch;
-
-  while ((textMatch = textPattern.exec(content))) {
-    chunks.push(decodePdfLiteralString(textMatch[0].replace(/\s*Tj$/, "").slice(1, -1)));
-  }
-
-  return chunks;
-}
-
-async function extractPdfResumeText(buffer) {
-  const pdfText = bytesToBinaryText(new Uint8Array(buffer));
-  const streamPattern = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  const chunks = [];
-  let match;
-
-  while ((match = streamPattern.exec(pdfText))) {
-    const inflated = await inflatePdfStream(binaryTextToBytes(match[1]));
-
-    if (!inflated) continue;
-
-    chunks.push(...extractPdfTextOperators(bytesToBinaryText(inflated)));
-  }
-
-  return normalizeResumeText(
-    chunks
-      .filter(Boolean)
-      .join("\n")
-      .replace(/[\u0005\u0088]/g, " ")
-      .replace(/\u000b/g, "fi")
-      .replace(/\u000d/g, "")
-      .replace(/\u000e/g, "ff")
-      .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
-      .replace(/\s+-\s+/g, " - ")
-      .replace(/[ \t]+/g, " ")
-  );
-}
-
-function getLabeledResumeValue(lines, labels) {
-  const labelPattern = labels.join("|");
-  const direct = lines.find((line) => new RegExp(`^(${labelPattern})\\s*[:|-]`, "i").test(line));
-
-  if (direct) {
-    return direct.replace(new RegExp(`^(${labelPattern})\\s*[:|-]\\s*`, "i"), "").trim();
-  }
-
-  const labelIndex = lines.findIndex((line) => new RegExp(`^(${labelPattern})$`, "i").test(line));
-  return labelIndex >= 0 ? lines[labelIndex + 1] || "" : "";
-}
-
-function cleanPhone(value) {
-  return String(value || "")
-    .replace(/[^\d+]/g, "")
-    .replace(/^00/, "+");
-}
-
-function sectionBetween(text, startPattern, endPattern) {
-  const start = text.search(startPattern);
-
-  if (start < 0) return "";
-
-  const rest = text.slice(start);
-  const end = rest.slice(1).search(endPattern);
-
-  return end < 0 ? rest : rest.slice(0, end + 1);
-}
-
-function titleCaseResumeValue(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
-    .replace(/\b(Of|And|In)\b/g, (word) => word.toLowerCase())
-    .trim();
-}
-
-function parseResumeMonth(value) {
-  const months = {
-    jan: 0,
-    january: 0,
-    feb: 1,
-    february: 1,
-    mar: 2,
-    march: 2,
-    apr: 3,
-    april: 3,
-    may: 4,
-    jun: 5,
-    june: 5,
-    jul: 6,
-    july: 6,
-    aug: 7,
-    august: 7,
-    sep: 8,
-    sept: 8,
-    september: 8,
-    oct: 9,
-    october: 9,
-    nov: 10,
-    november: 10,
-    dec: 11,
-    december: 11
-  };
-  const match = String(value || "").match(/\b([A-Za-z]+)\s+(\d{4})\b/);
-
-  if (!match) return null;
-
-  const month = months[match[1].toLowerCase()];
-  const year = Number(match[2]);
-
-  return month === undefined || !year ? null : new Date(year, month, 1);
-}
-
-function monthsBetween(start, end) {
-  if (!start || !end || end < start) return 0;
-
-  return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
-}
-
-function estimateExperienceYears(text) {
-  const explicit =
-    text.match(/(\d+(?:\.\d+)?)\s*(?:\+?\s*)?(?:years?|yrs?)\s+(?:of\s+)?experience/i) ||
-    text.match(/experience\s*[:|-]?\s*(\d+(?:\.\d+)?)/i);
-
-  if (explicit?.[1]) return explicit[1];
-
-  const experienceSection = sectionBetween(text, /professional experience/i, /\n(?:skills|education|academic projects|certifications)\b/i);
-  const rangePattern = /\b([A-Za-z]+\s+\d{4})\s*(?:-|{|to|–|—)\s*(Present|Current|[A-Za-z]+\s+\d{4})/gi;
-  let months = 0;
-  let match;
-
-  while ((match = rangePattern.exec(experienceSection))) {
-    const start = parseResumeMonth(match[1]);
-    const end = /present|current/i.test(match[2]) ? new Date() : parseResumeMonth(match[2]);
-    months += monthsBetween(start, end);
-  }
-
-  if (!months) return "";
-
-  return String(Math.max(0.1, Math.round((months / 12) * 10) / 10));
-}
-
 function parseCandidateCvText(text) {
-  const normalizedText = normalizeResumeText(text);
-  const lines = normalizedText
+  const lines = String(text || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 80);
-  const email = normalizedText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
-  const phoneMatch =
-    normalizedText.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0] ||
-    getLabeledResumeValue(lines, ["phone", "mobile", "contact", "cell"]);
-  const role =
-    getLabeledResumeValue(lines, ["role", "title", "position", "designation", "current role"]) ||
-    sectionBetween(normalizedText, /professional experience/i, /\n(?:skills|education|academic projects)\b/i)
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .find((line) => !/professional experience|pvt|ltd|private|bengaluru|karnataka|\d{4}|working|developing|building|collaborating/i.test(line)) ||
-    lines.find((line) => /\b(engineer|developer|analyst|manager|specialist|consultant|recruiter|lead|architect|designer)\b/i.test(line)) ||
-    "";
-  const educationSection = sectionBetween(normalizedText, /education/i, /\n(?:academic projects|industry internship|internship|certifications|extra-curricula)\b/i);
-  const degreeLine = educationSection
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .find((line) => /\b(bachelor|master|engineering|degree|b\.?e|btech|mtech|bsc|msc|mba|computer science)\b/i.test(line));
-  const specializationLine = educationSection
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .find((line) => /computer science|electronics|mechanical|civil|information technology|science/i.test(line));
-  const qualification =
-    getLabeledResumeValue(lines, ["education", "qualification", "degree"]) ||
-    [degreeLine, specializationLine !== degreeLine ? specializationLine : ""].filter(Boolean).join(" - ");
-  const location =
-    getLabeledResumeValue(lines, ["location", "current location", "address"]) ||
-    lines.find((line) => /,\s*(india|karnataka|tamil nadu|telangana|maharashtra|kerala|delhi|bengaluru|bangalore|hyderabad|chennai|pune|mumbai)\b/i.test(line)) ||
-    "";
-  const noticePeriod = getLabeledResumeValue(lines, ["notice period", "notice"]);
-  const previousCompany =
-    getLabeledResumeValue(lines, ["company", "current company", "previous company", "employer"]) ||
-    sectionBetween(normalizedText, /professional experience/i, /\n(?:skills|education|academic projects)\b/i)
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => /\b(pvt|ltd|private|technologies|solutions|systems|company|inc|llp)\b/i.test(line)) ||
-    "";
-  const name = lines.slice(0, 12).find((line) =>
+    .filter(Boolean);
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+  const roleLine = lines.find((line) => /^(role|title|position|designation)\s*:/i.test(line));
+  const role = roleLine?.replace(/^(role|title|position|designation)\s*:\s*/i, "") || "";
+  const name = lines.find((line) =>
     !line.includes("@") &&
-    !/\d{4,}/.test(line) &&
-    !/^(role|title|position|designation|phone|mobile|email|summary|profile|experience|education|qualification|location|address|linkedin|github|portfolio)\b/i.test(line) &&
+    !/^(role|title|position|designation|phone|mobile|email|summary|experience)\b/i.test(line) &&
     line.split(/\s+/).length <= 4
   );
 
-  return {
-    email,
-    name,
-    role,
-    phone: cleanPhone(phoneMatch),
-    qualification: titleCaseResumeValue(qualification),
-    yearsOfExperience: estimateExperienceYears(normalizedText),
-    previousCompany: titleCaseResumeValue(previousCompany),
-    location: titleCaseResumeValue(location),
-    noticePeriod
-  };
+  return { email, name, role };
 }
 
 export default function AtsPageClient({ data = {} }) {
-  const { items: candidates, ready: candidatesReady, prepend, reload, replace, remove } = useDemoStore(
+  const { items: candidates, prepend, reload, replace, remove } = useDemoStore(
     storeKeys.candidates,
     demoSeed.candidates,
     "/api/candidates"
@@ -618,39 +177,14 @@ export default function AtsPageClient({ data = {} }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const cvInputRef = useRef(null);
-  const [savingCandidateKey, setSavingCandidateKey] = useState("");
   const [formState, setFormState] = useState({
     name: "Asha Verma",
     email: "asha.verma@talme.ai",
     role: "Talent Specialist",
-    stage: "Sourcing",
-    source: "Portal-Naukri",
-    status: "Sourced",
-    recruiterName: "Harish",
-    businessUnit: "Talme",
-    department: "Talme",
-    phone: "",
-    jobId: "",
-    recruiterId: "",
-    domain: "",
-    client: "",
-    sourceDate: "",
-    screeningDate: "",
-    screeningNotes: "",
-    noticePeriod: "",
-    qualification: "",
-    yearsOfExperience: "",
-    previousCompany: "",
-    previousCtc: "",
-    expectedCtc: "",
-    location: "",
-    preferredLocation: "",
-    resumeFileName: "",
-    resumeMimeType: "",
-    resumeDataUrl: ""
+    stage: "Screening",
+    source: "Direct ATS"
   });
   const [cvFileName, setCvFileName] = useState("");
-  const [cvImportMessage, setCvImportMessage] = useState("");
   const [jobOpenings, setJobOpenings] = useState(data.jobOpenings || []);
   const [requirementModalOpen, setRequirementModalOpen] = useState(false);
   const [requirementForm, setRequirementForm] = useState(requirementSeed);
@@ -659,29 +193,6 @@ export default function AtsPageClient({ data = {} }) {
   const [requirementSearch, setRequirementSearch] = useState("");
   const [requirementPage, setRequirementPage] = useState(1);
   const [editState, setEditState] = useState(null);
-  const candidateReloadRef = useRef(reload);
-
-  useEffect(() => {
-    candidateReloadRef.current = reload;
-  }, [reload]);
-
-  useEffect(() => {
-    if (!candidatesReady) return undefined;
-
-    const refreshCandidates = () => {
-      if (document.visibilityState === "visible") {
-        candidateReloadRef.current();
-      }
-    };
-    const intervalId = window.setInterval(refreshCandidates, 15000);
-
-    window.addEventListener("focus", refreshCandidates);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshCandidates);
-    };
-  }, [candidatesReady]);
 
   const importCandidateFromCv = async (file) => {
     if (!file) return;
@@ -689,23 +200,10 @@ export default function AtsPageClient({ data = {} }) {
     const fileName = file.name || "";
     const fallbackName = formatCandidateNameFromFile(fileName);
     let parsed = {};
-    let text = "";
-    let resumeDataUrl = "";
 
-    try {
-      resumeDataUrl = await readFileAsDataUrl(file);
-
-      if (/\.pdf$/i.test(fileName) || file.type === "application/pdf") {
-        text = await extractPdfResumeText(await file.arrayBuffer());
-      } else if (/\.txt$/i.test(fileName) || file.type.startsWith("text/")) {
-        text = await file.text();
-      } else {
-        text = readLooseResumeText(await file.arrayBuffer());
-      }
-
+    if (/\.txt$/i.test(fileName) || file.type.startsWith("text/")) {
+      const text = await file.text();
       parsed = parseCandidateCvText(text);
-    } catch {
-      parsed = {};
     }
 
     setCvFileName(fileName);
@@ -714,24 +212,9 @@ export default function AtsPageClient({ data = {} }) {
       name: parsed.name || fallbackName || current.name,
       email: parsed.email || current.email,
       role: parsed.role || current.role,
-      phone: parsed.phone || current.phone,
-      qualification: parsed.qualification || current.qualification,
-      yearsOfExperience: parsed.yearsOfExperience || current.yearsOfExperience,
-      previousCompany: parsed.previousCompany || current.previousCompany,
-      location: parsed.location || current.location,
-      noticePeriod: parsed.noticePeriod || current.noticePeriod,
-      stage: current.stage || "Sourcing",
-      status: current.status || "Sourced",
-      source: "CV Import",
-      resumeFileName: fileName,
-      resumeMimeType: file.type || "application/octet-stream",
-      resumeDataUrl: resumeDataUrl || current.resumeDataUrl
+      stage: current.stage || "Screening",
+      source: "CV Import"
     }));
-    setCvImportMessage(
-      parsed.email || parsed.phone || parsed.name
-        ? `Imported from ${fileName}. Candidate details were filled automatically.`
-        : `Imported from ${fileName}. Some PDF/DOCX resumes may need manual review if text is embedded as an image.`
-    );
   };
 
   const normalizedCandidates = useMemo(
@@ -752,12 +235,7 @@ export default function AtsPageClient({ data = {} }) {
         !q ||
         candidate.name.toLowerCase().includes(q) ||
         candidate.role.toLowerCase().includes(q) ||
-        candidate.stage.toLowerCase().includes(q) ||
-        String(candidate.source || "").toLowerCase().includes(q) ||
-        String(candidate.label || candidate.status || "").toLowerCase().includes(q) ||
-        String(candidate.recruiterName || "").toLowerCase().includes(q) ||
-        String(candidate.businessUnit || "").toLowerCase().includes(q) ||
-        String(candidate.department || "").toLowerCase().includes(q);
+        candidate.stage.toLowerCase().includes(q);
       return matchesSource && matchesQuery;
     });
 
@@ -775,34 +253,6 @@ export default function AtsPageClient({ data = {} }) {
   const candidateStartIndex = (safeCandidatePage - 1) * candidatePageSize;
   const pagedCandidates = filteredCandidates.slice(candidateStartIndex, candidateStartIndex + candidatePageSize);
   const pagedIds = pagedCandidates.map((candidate) => candidate.id);
-  const jobOpeningOptions = useMemo(() => {
-    const seen = new Set();
-
-    return jobOpenings.filter((opening) => {
-      if (!opening?.jobId || seen.has(opening.jobId)) return false;
-      seen.add(opening.jobId);
-      return true;
-    });
-  }, [jobOpenings]);
-  const applyJobOpeningDetails = (current, jobId) => {
-    const opening = jobOpeningOptions.find((item) => item.jobId === jobId);
-
-    if (!opening) {
-      return { ...current, jobId };
-    }
-
-    return {
-      ...current,
-      jobId,
-      role: opening.position || current.role,
-      domain: opening.domain || "",
-      client: opening.client || "",
-      businessUnit: opening.businessUnit || current.businessUnit,
-      department: opening.department || current.department,
-      source: opening.source || current.source,
-      recruiterName: opening.recruiterTagged || current.recruiterName
-    };
-  };
   const filteredJobOpenings = useMemo(
     () => jobOpenings.filter((opening) => matchesRequirementSearch(opening, requirementSearch)),
     [jobOpenings, requirementSearch]
@@ -816,40 +266,6 @@ export default function AtsPageClient({ data = {} }) {
   );
   const requirementFrom = filteredJobOpenings.length ? requirementStartIndex + 1 : 0;
   const requirementTo = Math.min(requirementStartIndex + pagedJobOpenings.length, filteredJobOpenings.length);
-  const pipelineRequirementScope = useMemo(
-    () =>
-      sourceFilter === "All"
-        ? jobOpenings
-        : jobOpenings.filter((opening) => opening.source === sourceFilter),
-    [jobOpenings, sourceFilter]
-  );
-  const hiringFlowCards = useMemo(() => {
-    const linkedRequirements = new Set(filteredCandidates.map(candidateRequirementKey).filter(Boolean)).size;
-    const openRequirements = linkedRequirements || pipelineRequirementScope.filter(isOpenRequirement).length;
-    const interviewCandidates = filteredCandidates.filter(hasInterviewSignal).length;
-    const offerReleasedCandidates = filteredCandidates.filter(hasOfferReleaseSignal).length;
-
-    return [
-      {
-        title: "Requisition",
-        meta: linkedRequirements
-          ? pluralize(linkedRequirements, "linked role")
-          : pluralize(openRequirements, "open role")
-      },
-      {
-        title: "Sourcing",
-        meta: `${pluralize(filteredCandidates.length, "profile")} in review`
-      },
-      {
-        title: "Interview",
-        meta: `${pluralize(interviewCandidates, "candidate")} active`
-      },
-      {
-        title: "Offer",
-        meta: `${pluralize(offerReleasedCandidates, "released offer")}`
-      }
-    ];
-  }, [filteredCandidates, pipelineRequirementScope]);
 
   const submitCandidateSearch = (event) => {
     event.preventDefault();
@@ -880,32 +296,6 @@ export default function AtsPageClient({ data = {} }) {
       key,
       direction: current.key === key && current.direction === "asc" ? "desc" : "asc"
     }));
-  };
-
-  const updateCandidateInline = (candidate, field, value) => {
-    const currentValue =
-      field === "status"
-        ? candidate.label || candidate.status || candidate.stage || ""
-        : candidate[field] || "";
-
-    if (!candidate.id || value === currentValue) return;
-
-    const patch =
-      field === "status"
-        ? { status: value, label: value }
-        : { [field]: value };
-    const rowKey = `${candidate.id}:${field}`;
-
-    setSavingCandidateKey(rowKey);
-    startTransition(async () => {
-      try {
-        const updated = await updateCandidateAction(candidate.id, patch);
-        replace(candidate.id, { ...candidate, ...updated, ...patch });
-        await reload();
-      } finally {
-        setSavingCandidateKey((current) => (current === rowKey ? "" : current));
-      }
-    });
   };
 
   const updateRequirementField = (key) => (event) => {
@@ -1113,12 +503,10 @@ export default function AtsPageClient({ data = {} }) {
           </button>
         </div>
         <div className="flow-grid">
-          {hiringFlowCards.map((card) => (
-            <div className="flow-card" key={card.title}>
-              <strong>{card.title}</strong>
-              <small>{card.meta}</small>
-            </div>
-          ))}
+          <div className="flow-card"><strong>Requisition</strong><small>Plant HR Manager</small></div>
+          <div className="flow-card"><strong>Sourcing</strong><small>64 profiles</small></div>
+          <div className="flow-card"><strong>Interview</strong><small>12 scheduled</small></div>
+          <div className="flow-card"><strong>Offer</strong><small>4 released</small></div>
         </div>
       </section>
 
@@ -1131,7 +519,7 @@ export default function AtsPageClient({ data = {} }) {
         </div>
         <div className="table-toolbar candidate-shortlist-toolbar">
           <FilterChips
-            options={candidateSourceFilterOptions}
+            options={["All", "Direct ATS", "CV Import", "Staffing Vendor", "Referral"]}
             value={sourceFilter}
             onChange={(value) => {
               setSourceFilter(value);
@@ -1232,44 +620,10 @@ export default function AtsPageClient({ data = {} }) {
                 </td>
                 <td>{candidate.name}</td>
                 <td>{candidate.role}</td>
+                <td>{candidate.stage}</td>
+                <td>{candidate.source}</td>
                 <td>
-                  <select
-                    aria-label={`Update stage for ${candidate.name}`}
-                    className="table-select"
-                    disabled={savingCandidateKey === `${candidate.id}:stage`}
-                    value={candidate.stage || ""}
-                    onChange={(event) => updateCandidateInline(candidate, "stage", event.target.value)}
-                  >
-                    {candidateStageOptions(candidate.stage).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select
-                    aria-label={`Update source for ${candidate.name}`}
-                    className="table-select"
-                    disabled={savingCandidateKey === `${candidate.id}:source`}
-                    value={candidate.source || ""}
-                    onChange={(event) => updateCandidateInline(candidate, "source", event.target.value)}
-                  >
-                    {candidateSourceOptions(candidate.source).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select
-                    aria-label={`Update decision for ${candidate.name}`}
-                    className="table-select decision-select"
-                    disabled={savingCandidateKey === `${candidate.id}:status`}
-                    value={candidate.label || candidate.status || candidate.stage || ""}
-                    onChange={(event) => updateCandidateInline(candidate, "status", event.target.value)}
-                  >
-                    {candidateStatusOptions(candidate.label || candidate.status || candidate.stage).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                  <StatusBadge tone={candidate.tone}>{candidate.label}</StatusBadge>
                 </td>
                 <td>
                   <div className="row-actions">
@@ -1277,7 +631,6 @@ export default function AtsPageClient({ data = {} }) {
                       aria-label={`View ${candidate.name}`}
                       className="mini-button table-icon-button"
                       href={`/candidates/${candidate.id}`}
-                      onClick={() => rememberCandidateForDetail(candidate)}
                       title="View"
                     >
                       👁️
@@ -1286,34 +639,7 @@ export default function AtsPageClient({ data = {} }) {
                       aria-label={`Edit ${candidate.name}`}
                       className="mini-button table-icon-button"
                       onClick={() => {
-                        setEditState({
-                          ...candidate,
-                          label: candidate.label || candidate.status || "Sourced",
-                          stage: candidate.stage || "Sourcing",
-                          source: candidate.source || "Portal-Naukri",
-                          recruiterName: candidate.recruiterName || "Harish",
-                          businessUnit: candidate.businessUnit || "Talme",
-                          department: candidate.department || "Talme",
-                          phone: candidate.phone || "",
-                          jobId: candidate.jobId || "",
-                          recruiterId: candidate.recruiterId || "",
-                          domain: candidate.domain || "",
-                          client: candidate.client || "",
-                          sourceDate: candidate.sourceDate || "",
-                          screeningDate: candidate.screeningDate || "",
-                          screeningNotes: candidate.screeningNotes || "",
-                          noticePeriod: candidate.noticePeriod || "",
-                          qualification: candidate.qualification || "",
-                          yearsOfExperience: candidate.yearsOfExperience ?? "",
-                          previousCompany: candidate.previousCompany || "",
-                          previousCtc: candidate.previousCtc || "",
-                          expectedCtc: candidate.expectedCtc || "",
-                          location: candidate.location || "",
-                          preferredLocation: candidate.preferredLocation || "",
-                          resumeFileName: candidate.resumeFileName || "",
-                          resumeMimeType: candidate.resumeMimeType || "",
-                          resumeDataUrl: candidate.resumeDataUrl || ""
-                        });
+                        setEditState(candidate);
                         setEditModalOpen(true);
                       }}
                       title="Edit"
@@ -1426,11 +752,6 @@ export default function AtsPageClient({ data = {} }) {
         eyebrow="Create Candidate"
         title="Add to ATS Pipeline"
         onClose={() => setModalOpen(false)}
-        headerActions={
-          <button className="ghost-button cv-header-import-button" onClick={() => cvInputRef.current?.click()} type="button">
-            Import from CV
-          </button>
-        }
       >
         <form
           onSubmit={(event) => {
@@ -1438,16 +759,13 @@ export default function AtsPageClient({ data = {} }) {
             startTransition(async () => {
               const created = await createCandidateAction({
                 ...formState,
-                yearsOfExperience:
-                  formState.yearsOfExperience === "" ? undefined : Number(formState.yearsOfExperience),
-                status: formState.status || formState.stage,
+                status: "New",
                 tone: "gold"
               });
               prepend(created);
               await reload();
               setModalOpen(false);
               setCvFileName("");
-              setCvImportMessage("");
               setSourceFilter("All");
             });
           }}
@@ -1480,136 +798,24 @@ export default function AtsPageClient({ data = {} }) {
                 }
               />
             </label>
-              <label>
-                <span>Stage</span>
-                <select
-                  value={formState.stage}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, stage: event.target.value }))
-                  }
-                >
-                  {candidateStageOptions(formState.stage).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Source</span>
-                <select
-                  value={formState.source}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, source: event.target.value }))
-                  }
-                >
-                  {candidateSourceOptions(formState.source).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Candidate Current Status</span>
-                <select
-                  value={formState.status}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, status: event.target.value }))
-                  }
-                >
-                  {candidateStatusOptions(formState.status).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Recruiter</span>
-                <select
-                  value={formState.recruiterName}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, recruiterName: event.target.value }))
-                  }
-                >
-                  {candidateDropdownOptions.recruiters.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Business Unit</span>
-                <select
-                  value={formState.businessUnit}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, businessUnit: event.target.value }))
-                  }
-                >
-                  {candidateDropdownOptions.businessUnit.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Department</span>
-                <select
-                  value={formState.department}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, department: event.target.value }))
-                  }
-                >
-                {candidateDropdownOptions.department.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+            <label>
+              <span>Stage</span>
+              <input
+                value={formState.stage}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, stage: event.target.value }))
+                }
+              />
             </label>
-            {candidateIntakeFields.map((field) => (
-              <label key={field.key}>
-                <span>{field.label}</span>
-                {field.multiline ? (
-                  <textarea
-                    value={formState[field.key]}
-                    onChange={(event) =>
-                      setFormState((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                    rows={3}
-                  />
-                ) : field.key === "jobId" ? (
-                  <select
-                    value={formState.jobId}
-                    onChange={(event) =>
-                      setFormState((current) => applyJobOpeningDetails(current, event.target.value))
-                    }
-                  >
-                    <option value="">Select Job ID</option>
-                    {formState.jobId && !jobOpeningOptions.some((opening) => opening.jobId === formState.jobId) ? (
-                      <option value={formState.jobId}>{formState.jobId}</option>
-                    ) : null}
-                    {jobOpeningOptions.map((opening) => (
-                      <option key={opening.id || opening.jobId} value={opening.jobId}>
-                        {jobOpeningOptionLabel(opening)}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type || "text"}
-                    value={formState[field.key]}
-                    onChange={(event) =>
-                      setFormState((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                  />
-                )}
-              </label>
-            ))}
-            {candidateProfileFields.map((field) => (
-              <label key={field.key}>
-                <span>{field.label}</span>
-                <input
-                  step={field.step}
-                  type={field.type || "text"}
-                  value={formState[field.key]}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, [field.key]: event.target.value }))
-                  }
-                />
-              </label>
-            ))}
+            <label>
+              <span>Source</span>
+              <input
+                value={formState.source}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, source: event.target.value }))
+                }
+              />
+            </label>
           </div>
           <input
             ref={cvInputRef}
@@ -1621,8 +827,11 @@ export default function AtsPageClient({ data = {} }) {
             }}
             type="file"
           />
-          {cvImportMessage ? <p className="cv-import-note">{cvImportMessage}</p> : null}
+          {cvFileName ? <p className="cv-import-note">Imported from {cvFileName}</p> : null}
           <div className="modal-actions">
+            <button className="ghost-button" onClick={() => cvInputRef.current?.click()} type="button">
+              Import from CV
+            </button>
             <button className="ghost-button" onClick={() => setModalOpen(false)} type="button">
               Cancel
             </button>
@@ -1697,29 +906,6 @@ export default function AtsPageClient({ data = {} }) {
                   role: editState.role,
                   stage: editState.stage,
                   source: editState.source,
-                  recruiterName: editState.recruiterName,
-                  businessUnit: editState.businessUnit,
-                  department: editState.department,
-                  phone: editState.phone,
-                  jobId: editState.jobId,
-                  recruiterId: editState.recruiterId,
-                  domain: editState.domain,
-                  client: editState.client,
-                  sourceDate: editState.sourceDate,
-                  screeningDate: editState.screeningDate,
-                  screeningNotes: editState.screeningNotes,
-                  noticePeriod: editState.noticePeriod,
-                  qualification: editState.qualification,
-                  yearsOfExperience:
-                    editState.yearsOfExperience === "" ? undefined : Number(editState.yearsOfExperience),
-                  previousCompany: editState.previousCompany,
-                  previousCtc: editState.previousCtc,
-                  expectedCtc: editState.expectedCtc,
-                  location: editState.location,
-                  preferredLocation: editState.preferredLocation,
-                  resumeFileName: editState.resumeFileName,
-                  resumeMimeType: editState.resumeMimeType,
-                  resumeDataUrl: editState.resumeDataUrl,
                   status: editState.label,
                   tone: editState.tone
                 });
@@ -1760,134 +946,22 @@ export default function AtsPageClient({ data = {} }) {
               </label>
               <label>
                 <span>Stage</span>
-                <select
+                <input
                   value={editState.stage}
                   onChange={(event) =>
                     setEditState((current) => ({ ...current, stage: event.target.value }))
                   }
-                >
-                  {candidateStageOptions(editState.stage).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
+                />
               </label>
               <label>
                 <span>Source</span>
-                <select
+                <input
                   value={editState.source}
                   onChange={(event) =>
                     setEditState((current) => ({ ...current, source: event.target.value }))
                   }
-                >
-                  {candidateSourceOptions(editState.source).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
+                />
               </label>
-              <label>
-                <span>Candidate Current Status</span>
-                <select
-                  value={editState.label || editState.status || editState.stage}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, label: event.target.value }))
-                  }
-                >
-                  {candidateStatusOptions(editState.label || editState.status || editState.stage).map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Recruiter</span>
-                <select
-                  value={editState.recruiterName || "Harish"}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, recruiterName: event.target.value }))
-                  }
-                >
-                  {candidateDropdownOptions.recruiters.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Business Unit</span>
-                <select
-                  value={editState.businessUnit || "Talme"}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, businessUnit: event.target.value }))
-                  }
-                >
-                  {candidateDropdownOptions.businessUnit.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Department</span>
-                <select
-                  value={editState.department || "Talme"}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, department: event.target.value }))
-                  }
-                >
-                  {candidateDropdownOptions.department.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              {candidateIntakeFields.map((field) => (
-                <label key={field.key}>
-                  <span>{field.label}</span>
-                  {field.multiline ? (
-                    <textarea
-                      value={editState[field.key] ?? ""}
-                      onChange={(event) =>
-                        setEditState((current) => ({ ...current, [field.key]: event.target.value }))
-                      }
-                      rows={3}
-                    />
-                  ) : field.key === "jobId" ? (
-                    <select
-                      value={editState.jobId ?? ""}
-                      onChange={(event) =>
-                        setEditState((current) => applyJobOpeningDetails(current, event.target.value))
-                      }
-                    >
-                      <option value="">Select Job ID</option>
-                      {editState.jobId && !jobOpeningOptions.some((opening) => opening.jobId === editState.jobId) ? (
-                        <option value={editState.jobId}>{editState.jobId}</option>
-                      ) : null}
-                      {jobOpeningOptions.map((opening) => (
-                        <option key={opening.id || opening.jobId} value={opening.jobId}>
-                          {jobOpeningOptionLabel(opening)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={field.type || "text"}
-                      value={editState[field.key] ?? ""}
-                      onChange={(event) =>
-                        setEditState((current) => ({ ...current, [field.key]: event.target.value }))
-                      }
-                    />
-                  )}
-                </label>
-              ))}
-              {candidateProfileFields.map((field) => (
-                <label key={field.key}>
-                  <span>{field.label}</span>
-                  <input
-                    step={field.step}
-                    type={field.type || "text"}
-                    value={editState[field.key] ?? ""}
-                    onChange={(event) =>
-                      setEditState((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                  />
-                </label>
-              ))}
             </div>
             <div className="modal-actions">
               <button

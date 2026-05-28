@@ -1,5 +1,3 @@
-import "../lib/load-env.js";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import {
@@ -14,9 +12,7 @@ import {
   vendorWorkerSeed
 } from "../lib/demo-data.js";
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
-});
+const prisma = new PrismaClient();
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 
 const candidates = [

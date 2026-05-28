@@ -1,6 +1,6 @@
 "use client";
 
-export default function Modal({ open, title, eyebrow, onClose, headerActions, children }) {
+export default function Modal({ open, title, eyebrow, onClose, children }) {
   if (!open) return null;
 
   return (
@@ -16,12 +16,9 @@ export default function Modal({ open, title, eyebrow, onClose, headerActions, ch
             <p className="eyebrow">{eyebrow}</p>
             <h3>{title}</h3>
           </div>
-          <div className="modal-head-actions">
-            {headerActions}
-            <button className="ghost-button" onClick={onClose} type="button">
-              Close
-            </button>
-          </div>
+          <button className="ghost-button" onClick={onClose} type="button">
+            Close
+          </button>
         </div>
         {children}
       </div>
