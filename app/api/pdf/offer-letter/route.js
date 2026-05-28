@@ -8,8 +8,11 @@ export const dynamic = "force-dynamic";
 const templatePath = path.join(process.cwd(), "public", "templates", "talme-offer-letter-template.pdf");
 const BLACK = rgb(0, 0, 0);
 const WHITE = rgb(1, 1, 1);
-const TABLE_BLUE = rgb(0.47, 0.78, 0.9);
+const TABLE_BLUE = rgb(0.78, 0.86, 0.98);
 const TABLE_GREEN = rgb(0.58, 0.9, 0.58);
+const TABLE_YELLOW = rgb(1, 1, 0);
+const TABLE_PALE_GREEN = rgb(0.88, 0.96, 0.93);
+const TABLE_PALE_YELLOW = rgb(1, 0.98, 0.82);
 
 function clean(value) {
   return String(value || "").trim();
@@ -64,6 +67,13 @@ function drawText(page, font, text, x, y, options = {}) {
     color: options.color || BLACK,
     maxWidth: options.maxWidth
   });
+}
+
+function drawCenteredText(page, font, text, y, options = {}) {
+  const size = options.size || 9;
+  const pageWidth = page.getWidth();
+  const textWidth = font.widthOfTextAtSize(String(text || ""), size);
+  drawText(page, font, text, (pageWidth - textWidth) / 2, y, { ...options, size });
 }
 
 function drawWrapped(page, font, text, x, y, options = {}) {
@@ -123,38 +133,55 @@ function buildCtcTail(ctcValue) {
 function calculateAnnexure(ctcValue) {
   const ctc = amountFrom(ctcValue);
   const basicYearly = Math.round(ctc * 0.5);
-  const hraYearly = Math.round(basicYearly * 0.5);
-  const conveyanceYearly = Math.round(basicYearly * 0.0833);
-  const pfWageYearly = Math.min(basicYearly, 180000);
-  const pfYearly = Math.round(pfWageYearly * 0.12);
-  const edliYearly = Math.round(pfWageYearly * 0.005);
-  const epfAdminYearly = Math.round(pfWageYearly * 0.005);
-  const employerTotalYearly = pfYearly + edliYearly + epfAdminYearly;
+  const hraYearly = Math.round(ctc * 0.25);
+  const conveyanceYearly = Math.round(ctc * 0.025);
+  const communicationYearly = ctc > 720000 ? 36000 : Math.round(ctc * 0.05);
+  const employeePfMonthly = Math.min(Math.round((basicYearly / 12) * 0.12), 1800);
+  const employeePfYearly = employeePfMonthly * 12;
+  const employerPfMonthly = employeePfMonthly;
+  const employerPfYearly = employeePfYearly;
+  const edliYearly = Math.round(basicYearly * 0.005);
+  const epfAdminYearly = Math.round(basicYearly * 0.005);
+  const employerEsiYearly = Math.round(basicYearly < 252000 ? basicYearly * 0.0325 : 0);
+  const employerLwfYearly = 100;
+  const employerTotalYearly = employerEsiYearly + employerPfYearly + edliYearly + epfAdminYearly + employerLwfYearly;
   const grossYearly = ctc - employerTotalYearly;
-  const specialYearly = grossYearly - basicYearly - hraYearly - conveyanceYearly;
-  const employeeEsiYearly = Math.round(grossYearly * 0.0075);
-  const professionalTaxYearly = Math.round(grossYearly / 12) > 25000 ? 2400 : 0;
-  const employeeTotalYearly = pfYearly + employeeEsiYearly + professionalTaxYearly;
-  const netYearly = grossYearly - employeeTotalYearly;
-  const employerEsiYearly = Math.round(grossYearly * 0.0325);
+  const ltaYearly = grossYearly - basicYearly - hraYearly - conveyanceYearly - communicationYearly;
+  const employeeEsiYearly = Math.round(basicYearly < 252000 ? basicYearly * 0.0075 : 0);
+  const employeeLwfYearly = 50;
+  const professionalTaxYearly = grossYearly / 12 > 15000 ? 2400 : 0;
+  const employeeTotalYearly = employeeEsiYearly + employeePfYearly + employeeLwfYearly + professionalTaxYearly;
+  const medicalInsuranceYearly = 0;
+  const incomeTaxYearly = 0;
+  const totalTaxesYearly = incomeTaxYearly;
+  const totalDeductionsYearly = medicalInsuranceYearly;
+  const netYearly = grossYearly - employeeTotalYearly - totalDeductionsYearly - totalTaxesYearly;
 
   return {
     ctc,
+    monthlyCtc: ctc / 12,
     basic: basicYearly,
     hra: hraYearly,
     conveyance: conveyanceYearly,
-    special: specialYearly,
+    communication: communicationYearly,
+    lta: ltaYearly,
     gross: grossYearly,
-    employeePf: pfYearly,
+    employeePf: employeePfYearly,
     employeeEsi: employeeEsiYearly,
+    employeeLwf: employeeLwfYearly,
     professionalTax: professionalTaxYearly,
     employeeTotal: employeeTotalYearly,
-    net: netYearly,
-    employerPf: pfYearly,
+    employerPf: employerPfYearly,
     edli: edliYearly,
     epfAdmin: epfAdminYearly,
     employerEsi: employerEsiYearly,
+    employerLwf: employerLwfYearly,
     employerTotal: employerTotalYearly,
+    medicalInsurance: medicalInsuranceYearly,
+    totalDeductions: totalDeductionsYearly,
+    incomeTax: incomeTaxYearly,
+    totalTaxes: totalTaxesYearly,
+    net: netYearly,
     totalCompensation: ctc
   };
 }
@@ -249,11 +276,80 @@ function replaceFirstPage(page, fonts, data) {
   );
 }
 
-function fixFooterOverlap(page, font) {
-  cover(page, 0, 30, 595.5, 72);
-  drawText(page, font, "19.6.1 make any untrue or misleading statements in relation to the Company and/or its affiliates;", 38, 89, { size: 8.2, maxWidth: 520 });
-  drawText(page, font, "19.6.2 make any statement to any person which may, or is likely to, adversely affect the business or reputation of the Company;", 38, 76, { size: 8.2, maxWidth: 520 });
-  drawText(page, font, "represent yourself as being directly or indirectly associated with or interested in the business of the Company and/or its affiliates;", 38, 63, { size: 8.2, maxWidth: 520 });
+function fixTermsOverlap(page, font) {
+  const x = 38;
+  const maxWidth = 486;
+  const size = 8.8;
+  const lineHeight = 10.5;
+  let y = 342;
+
+  cover(page, 0, 28, 595.5, 336);
+
+  const drawTerm = (text, gap = 2.5) => {
+    y = drawWrapped(page, font, text, x, y, { size, maxWidth, lineHeight });
+    y -= gap;
+  };
+
+  const drawNumberedTerm = (number, text, gap = 2.5) => {
+    const bodyX = x + font.widthOfTextAtSize(`${number}  `, size);
+    drawText(page, font, number, x, y, { size });
+    y = drawWrapped(page, font, text, bodyX, y, { size, maxWidth: maxWidth - (bodyX - x), lineHeight });
+    y -= gap;
+  };
+
+  drawTerm(
+    "19.4 In the event your employment is terminated by the Company for any other reason, or you terminate your employment in breach of the terms of your employment, without prejudice to any other right or remedy available to the Company under law and/or equity, the Company shall not be liable to pay any salary or any other amount to you which shall stand forfeited with immediate effect. In such an event you shall also be deemed to have unconditionally and irrevocably waived any salary or any other amount payable to and you shall not be entitled to claim damages, injunction or other reliefs or compensation for termination of this Offer Letter.",
+    4
+  );
+  drawTerm("19.5 Upon termination of this Offer Letter:", 2);
+  drawNumberedTerm(
+    "19.5.1",
+    "Please adhere to the requirements of the exit process in terms of settling all claims. You will also need to surrender all the tangible assets of the Company, including the data and information both in soft and hard copies which are in your possession by virtue of your employment before separation from the Company.",
+    3
+  );
+  drawNumberedTerm(
+    "19.5.2",
+    "You shall extend requisite co-operation to the Company and/or its affiliates to ensure smooth transition of your duties and responsibilities to such person as may be nominated/appointed by the Company and/or affiliates.",
+    3
+  );
+  drawTerm("19.6 At the termination of your employment with the Company and/or its affiliates, you shall not at any time:", 2);
+  drawNumberedTerm("19.6.1", "make any untrue or misleading statements in relation to the Company and/or its affiliates;", 2);
+  drawNumberedTerm(
+    "19.6.2",
+    "make any statement to any person which may, or is likely to, adversely affect the business or reputation of the Company; represent yourself as being directly or indirectly associated with or interested in the business of the Company and/or its affiliates;",
+    0
+  );
+}
+
+function fixUpperTerminationClauses(page, font, bold) {
+  const x = 38;
+  const maxWidth = 500;
+  const size = 9.2;
+  const lineHeight = 11.3;
+  let y = 474;
+
+  cover(page, 0, 314, 595.5, 174);
+
+  const drawRomanTerm = (number, text, gap = 8) => {
+    const bodyX = x + font.widthOfTextAtSize(`${number}  `, size);
+    drawText(page, bold, number, x, y, { size });
+    y = drawWrapped(page, font, text, bodyX, y, { size, maxWidth: maxWidth - (bodyX - x), lineHeight });
+    y -= gap;
+  };
+
+  drawRomanTerm(
+    "iv.",
+    "have willfully or intentionally acted in any way, with the intent to harm the Company, that has a direct, substantial and material adverse effect on the business or reputation of the Company;",
+    6
+  );
+  drawRomanTerm(
+    "v.",
+    "are restricted in any manner (regardless of the extent, context, and validity of such restrictions) from conducting or engaging in the business of the Company by any court of competent jurisdiction;",
+    6
+  );
+  drawRomanTerm("vi.", "provide any inaccurate representations or commit a material breach of any of the provisions of this Offer Letter;", 8);
+  drawRomanTerm("vii.", "failed to remedy any breach notified by the Company; or", 8);
+  drawRomanTerm("viii.", "otherwise act in a manner that is damaging to the Company's reputation.", 0);
 }
 
 function replaceAcceptancePage(page, font, data) {
@@ -262,45 +358,130 @@ function replaceAcceptancePage(page, font, data) {
   replaceText(page, font, `Name: ${data.candidateName}`, 35, 312, 280, 20, { size: 10 });
 }
 
+function replacePolicyPage(page, fonts, data) {
+  const { regular, bold } = fonts;
+  const x = 38;
+  const maxWidth = 520;
+  const headingSize = 10;
+  const bodySize = 8.4;
+  const lineHeight = 9.4;
+  let y = 724;
+
+  cover(page, 0, 64, page.getWidth(), 686);
+
+  const heading = (text, gapBefore = 0) => {
+    y -= gapBefore;
+    drawText(page, bold, text, x, y, { size: headingSize });
+    y -= 11;
+  };
+  const body = (text, gapAfter = 7) => {
+    y = drawWrapped(page, regular, text, x, y, { size: bodySize, maxWidth, lineHeight });
+    y -= gapAfter;
+  };
+  const boldLine = (text, gapAfter = 0) => {
+    drawText(page, bold, text, x, y, { size: bodySize });
+    y -= lineHeight + gapAfter;
+  };
+
+  heading("9. Contact information");
+  body("You will keep the company informed of your postal address, telephone number, fax, email or any other means for communication including changes that may occur during the period of your employment. Any communication sent to the last informed address is deemed as served.", 7);
+
+  heading("10. Working Hours");
+  boldLine(`Monday to Friday: ${data.weekdayShiftTiming}`);
+  boldLine(`Saturday: ${data.saturdayShiftTiming}`, 0);
+  body("Company reserves the right to run the shifts, change the shift timings, fix the criteria to attend in shifts within the applicable laws based on its business needs and all its employees are bound by it.", 7);
+
+  heading("11. Leave & Holidays");
+  body("Employees are entitled to a maximum of one and a half (1.5) days of leave per month, subject to proper written approval from Talme. Unused leave cannot be carried forward to subsequent months and any unused paid leave cannot be claimed or cashed in.", 7);
+
+  heading("12. Voluntary Abandonment");
+  body("You agree that all/any unplanned/unauthorized leave for 5 (five) or more consecutive working days without prior intimation will be deemed as \"Abandonment of Services\" unless such unplanned leave is for the reasons of medical emergency which shall be substantiated with valid documentary proof within 7 (seven) days from the date of such absence. You shall not be entitled to any monetary and non-monetary benefits as was applicable to you. This provision shall also be applicable to all/any such unplanned/unauthorized leave during your serving the notice period, if any. You shall also not be entitled to any monetary and non-monetary benefits in case of your resignation and you do not serve the agreed notice period as directed by the Company.", 7);
+
+  heading("13. Insurance / Medical Examination");
+  body("The insurance policy will take up to 30 working days from your date of joining to be generated. Details regarding the insurance plan and coverage will be provided upon activation. The company reserves its right to have you undergo medical examination from time to time. The appointment shall at all times be subject to a doctor certifying you to be fit to carry out your duties.", 7);
+
+  heading("14. Dress Code");
+  body("You are required to be dressed in Business Formals on Weekdays and Business Informal is permitted on Friday. Gentlemen: To be dressed in full/half sleeved shirt, Full Trousers and Leather Shoes (Black or Brown). Ladies: Saree's / Salwar Kameez / Business Suits / Full or half sleeved shirt, Full Trousers.", 7);
+
+  heading("15. Performance Review");
+  body("You shall receive periodic performance reviews/evaluations at the discretion of the Company.", 6);
+
+  heading("16. Compensation Reviews");
+  body("Compensation reviews shall be purely based on individual's profile, contributions, competencies, role, potential to shoulder higher responsibilities and internal & external environment. Compensation reviews are highly personal and confidential and hence, revealing or eliciting compensation details is considered as impropriety and may lead to punitive action.", 7);
+
+  heading("17. Travel & Facility");
+  body("No cab facility and food facility will be provided by Talme.", 6);
+
+  drawText(page, bold, "A.  Canteen Policy", x, y, { size: headingSize });
+  y -= 11;
+  body("Canteen charges will be deducted from the employee's Cost to Company (CTC) as part of the overall benefits and amenities provided by the organization. This deduction will be reflected in the monthly salary statement.", 7);
+
+  heading("18. Associate's Non-Disclosure agreement");
+  body("You will need to keep all information pertaining to Talme Technologies and its subsidiaries, customers and all stakeholders confidential.", 0);
+}
+
 function drawAnnexureTable(page, fonts, data) {
   const { regular, bold } = fonts;
   const values = calculateAnnexure(data.ctc);
-  const x = 30;
-  const top = 675;
-  const rowHeight = 20;
-  const widths = [190, 86, 128];
+  const x = 24;
+  const top = 674;
+  const rowHeight = 15;
+  const widths = [165, 190, 76, 88];
   const tableWidth = widths.reduce((sum, width) => sum + width, 0);
-  const colX = [x, x + widths[0], x + widths[0] + widths[1], x + tableWidth];
+  const colX = [x, x + widths[0], x + widths[0] + widths[1], x + widths[0] + widths[1] + widths[2], x + tableWidth];
+  const communicationReason = values.ctc > 720000 ? "36000 fixed for CTC > 7.2 LPA" : "5% for CTC <= 7.2 LPA";
   const rows = [
-    ["Name", data.candidateName, "", "bold"],
-    ["Candidate's CTC", `Rs. ${formatAmount(values.ctc)}`, "", ""],
-    ["Salary Component", "Monthly", "Yearly", "header"],
-    ["Earnings", "", "", ""],
-    ["Basic", `Rs. ${formatAmount(values.basic / 12)}`, `Rs. ${formatAmount(values.basic)}`, ""],
-    ["HRA", `Rs. ${formatAmount(values.hra / 12)}`, `Rs. ${formatAmount(values.hra)}`, ""],
-    ["Conveyance Allowance", `Rs. ${formatAmount(values.conveyance / 12)}`, `Rs. ${formatAmount(values.conveyance)}`, ""],
-    ["Special Allowance", `Rs. ${formatAmount(values.special / 12)}`, `Rs. ${formatAmount(values.special)}`, ""],
-    ["Total Gross Pay", `Rs. ${formatAmount(values.gross / 12)}`, `Rs. ${formatAmount(values.gross)}`, "header"],
-    ["Employee Contribution", "", "", ""],
-    ["Employee's Contribution to PF", `Rs. ${formatAmount(values.employeePf / 12)}`, `Rs. ${formatAmount(values.employeePf)}`, ""],
-    ["Esi", `Rs. ${formatAmount(values.employeeEsi / 12)}`, `Rs. ${formatAmount(values.employeeEsi)}`, ""],
-    ["KA Professional Tax", `Rs. ${formatAmount(values.professionalTax / 12)}`, `Rs. ${formatAmount(values.professionalTax)}`, ""],
-    ["Total", `Rs. ${formatAmount(values.employeeTotal / 12)}`, `Rs. ${formatAmount(values.employeeTotal)}`, ""],
-    ["Net Pay", `Rs. ${formatAmount(values.net / 12)}`, `Rs. ${formatAmount(values.net)}`, "net"],
-    ["Employer Contribution", "", "", ""],
-    ["Employer Contribution to PF", `Rs. ${formatAmount(values.employerPf / 12)}`, `Rs. ${formatAmount(values.employerPf)}`, ""],
-    ["EDLI - Employer Contribution", `Rs. ${formatAmount(values.edli / 12)}`, `Rs. ${formatAmount(values.edli)}`, ""],
-    ["EPF Admin Charges", `Rs. ${formatAmount(values.epfAdmin / 12)}`, `Rs. ${formatAmount(values.epfAdmin)}`, ""],
-    ["ESI", `Rs. ${formatAmount(values.employerEsi / 12)}`, `Rs. ${formatAmount(values.employerEsi)}`, ""],
-    ["Total", `Rs. ${formatAmount(values.employerTotal / 12)}`, `Rs. ${formatAmount(values.employerTotal)}`, ""],
-    ["Total Compensation", `Rs. ${formatAmount(values.totalCompensation / 12)}`, `Rs. ${formatAmount(values.totalCompensation)}`, "header"]
+    ["Annual CTC", "", `Rs. ${formatAmount(values.ctc)}`, "", "input"],
+    ["Monthly CTC", "", `Rs. ${formatAmount(values.monthlyCtc)}`, "", ""],
+    ["State for PT", "", "1", "", "input"],
+    ["", "", "", "", "blank"],
+    ["Salary Component", "Reason", "Monthly", "Yearly", "header"],
+    ["Earnings", "", "", "", "section"],
+    ["Basic", "50%", `Rs. ${formatAmount(values.basic / 12)}`, `Rs. ${formatAmount(values.basic)}`, "reason"],
+    ["HRA", "25%", `Rs. ${formatAmount(values.hra / 12)}`, `Rs. ${formatAmount(values.hra)}`, "reason"],
+    ["Conveyance / Fuel Allowance", "2.50%", `Rs. ${formatAmount(values.conveyance / 12)}`, `Rs. ${formatAmount(values.conveyance)}`, "reason"],
+    ["Communication Allowance", communicationReason, `Rs. ${formatAmount(values.communication / 12)}`, `Rs. ${formatAmount(values.communication)}`, "reason"],
+    ["LTA (Leave & Travel Allowance)", "Balancing figure", `Rs. ${formatAmount(values.lta / 12)}`, `Rs. ${formatAmount(values.lta)}`, ""],
+    ["", "", "", "", "blank"],
+    ["Gross pay", "", `Rs. ${formatAmount(values.gross / 12)}`, `Rs. ${formatAmount(values.gross)}`, "total"],
+    ["", "", "", "", "blank"],
+    ["Employee Statutories", "", "", "", "section"],
+    ["Employee's Contribution to ESIC", "0.75% if Basic less than 21000", `Rs. ${formatAmount(values.employeeEsi / 12)}`, `Rs. ${formatAmount(values.employeeEsi)}`, ""],
+    ["Employee's Contribution to PF", "12% of the basic with upper cap at 1800", `Rs. ${formatAmount(values.employeePf / 12)}`, `Rs. ${formatAmount(values.employeePf)}`, ""],
+    ["Employee's Contribution to LWF", "Total 50 in a year", `Rs. ${formatAmount(values.employeeLwf / 12)}`, `Rs. ${formatAmount(values.employeeLwf)}`, ""],
+    ["KA Professional Tax", "", `Rs. ${formatAmount(values.professionalTax / 12)}`, `Rs. ${formatAmount(values.professionalTax)}`, ""],
+    ["Total Employee Statutories", "", `Rs. ${formatAmount(values.employeeTotal / 12)}`, `Rs. ${formatAmount(values.employeeTotal)}`, "total"],
+    ["", "", "", "", "blank"],
+    ["Employer Statutories", "", "", "", "section"],
+    ["Employer's Contribution to ESIC", "3.25% if basic less than 21000", `Rs. ${formatAmount(values.employerEsi / 12)}`, `Rs. ${formatAmount(values.employerEsi)}`, ""],
+    ["Employer's Contribution to PF", "12% of basic", `Rs. ${formatAmount(values.employerPf / 12)}`, `Rs. ${formatAmount(values.employerPf)}`, ""],
+    ["EDLI - Employer Contribution", "0.5% of the basic", `Rs. ${formatAmount(values.edli / 12)}`, `Rs. ${formatAmount(values.edli)}`, ""],
+    ["EPF Admin Charges", "0.5% of the basic", `Rs. ${formatAmount(values.epfAdmin / 12)}`, `Rs. ${formatAmount(values.epfAdmin)}`, ""],
+    ["Employer's Contribution to LWF", "Total 100 in a year", `Rs. ${formatAmount(values.employerLwf / 12)}`, `Rs. ${formatAmount(values.employerLwf)}`, ""],
+    ["Total Employer Statutories", "", `Rs. ${formatAmount(values.employerTotal / 12)}`, `Rs. ${formatAmount(values.employerTotal)}`, "total"],
+    ["", "", "", "", "blank"],
+    ["Deductions", "", "", "", "section"],
+    ["Medical Insurance", "", `Rs. ${formatAmount(values.medicalInsurance / 12)}`, `Rs. ${formatAmount(values.medicalInsurance)}`, ""],
+    ["Total Deductions", "", `Rs. ${formatAmount(values.totalDeductions / 12)}`, `Rs. ${formatAmount(values.totalDeductions)}`, "total"],
+    ["", "", "", "", "blank"],
+    ["TDS", "", "", "", "section"],
+    ["Income tax", "", `Rs. ${formatAmount(values.incomeTax / 12)}`, `Rs. ${formatAmount(values.incomeTax)}`, ""],
+    ["Total Taxes", "", `Rs. ${formatAmount(values.totalTaxes / 12)}`, `Rs. ${formatAmount(values.totalTaxes)}`, "total"],
+    ["", "", "", "", "blank"],
+    ["Net Pay", "", `Rs. ${formatAmount(values.net / 12)}`, `Rs. ${formatAmount(values.net)}`, "net"]
   ];
 
-  cover(page, 26, 218, 420, 470);
+  cover(page, 18, 88, 560, 600);
 
   rows.forEach((row, index) => {
     const y = top - (index + 1) * rowHeight;
-    const fill = row[3] === "header" ? TABLE_BLUE : row[3] === "net" ? TABLE_GREEN : null;
+    const fill =
+      row[4] === "header" ? TABLE_BLUE :
+        row[4] === "net" ? TABLE_GREEN :
+          row[4] === "total" ? TABLE_PALE_GREEN :
+            row[4] === "reason" ? TABLE_YELLOW :
+              row[4] === "input" ? TABLE_PALE_YELLOW :
+                null;
     if (fill) page.drawRectangle({ x, y, width: tableWidth, height: rowHeight, color: fill });
   });
 
@@ -311,12 +492,36 @@ function drawAnnexureTable(page, fonts, data) {
   colX.forEach((lineX) => drawLine(page, lineX, top, lineX, top - rows.length * rowHeight));
 
   rows.forEach((row, index) => {
-    const baseline = top - (index + 1) * rowHeight + 6;
-    const rowFont = row[3] === "bold" ? bold : regular;
-    drawText(page, rowFont, row[0], x + 5, baseline, { size: 11, maxWidth: widths[0] - 10 });
-    drawText(page, rowFont, row[1], colX[1] + 5, baseline, { size: 11, maxWidth: widths[1] - 10 });
-    drawText(page, rowFont, row[2], colX[2] + 8, baseline, { size: 11, maxWidth: widths[2] - 12 });
+    if (row[4] === "blank") return;
+    const baseline = top - (index + 1) * rowHeight + 4.3;
+    const rowFont = ["header", "net"].includes(row[4]) ? bold : regular;
+    drawText(page, rowFont, row[0], x + 4, baseline, { size: 6.7, maxWidth: widths[0] - 8 });
+    drawText(page, rowFont, row[1], colX[1] + 4, baseline, { size: 6.7, maxWidth: widths[1] - 8 });
+    drawText(page, rowFont, row[2], colX[2] + 4, baseline, { size: 6.7, maxWidth: widths[2] - 8 });
+    drawText(page, rowFont, row[3], colX[3] + 4, baseline, { size: 6.7, maxWidth: widths[3] - 8 });
   });
+}
+
+function drawAddressFooter(page, font, options = {}) {
+  const firstLineY = options.firstLineY || 30;
+  const secondLineY = options.secondLineY || 19;
+  if (options.cover !== false) {
+    cover(page, 0, Math.max(0, secondLineY - 11), page.getWidth(), firstLineY - secondLineY + 24);
+  }
+  drawCenteredText(
+    page,
+    font,
+    "Level 14, Concorde Towers, UB City, No.24 Vittal Mallya Road, Bangalore, Karnataka, 560001, India. Centre Name - UB City",
+    firstLineY,
+    { size: 8.2 }
+  );
+  drawCenteredText(
+    page,
+    font,
+    "Email: hr@talme.in          Phone: +91 94818 38000 | +91 97318 38000          Website: www.talme.in",
+    secondLineY,
+    { size: 8.2 }
+  );
 }
 
 export async function POST(request) {
@@ -339,13 +544,23 @@ export async function POST(request) {
     employmentType: clean(data.employmentType),
     workLocation: clean(data.workLocation),
     ctc: clean(data.ctc),
-    acceptanceDate: clean(data.acceptanceDate)
+    acceptanceDate: clean(data.acceptanceDate),
+    weekdayShiftTiming: clean(data.weekdayShiftTiming) || "08:00 AM to 5:30 PM",
+    saturdayShiftTiming: clean(data.saturdayShiftTiming) || "08:00 AM to 12:00 PM"
   };
 
   if (pages[0]) replaceFirstPage(pages[0], { regular, bold }, payload);
-  if (pages[3]) fixFooterOverlap(pages[3], regular);
+  if (pages[2]) replacePolicyPage(pages[2], { regular, bold }, payload);
+  if (pages[3]) {
+    fixUpperTerminationClauses(pages[3], regular, bold);
+    fixTermsOverlap(pages[3], regular);
+    drawAddressFooter(pages[3], tableRegular, { firstLineY: 54, secondLineY: 43, cover: false });
+  }
   if (pages[6]) replaceAcceptancePage(pages[6], regular, payload);
-  if (pages[7]) drawAnnexureTable(pages[7], { regular: tableRegular, bold: tableBold }, payload);
+  if (pages[7]) {
+    drawAnnexureTable(pages[7], { regular: tableRegular, bold: tableBold }, payload);
+    drawAddressFooter(pages[7], tableRegular);
+  }
 
   const bytes = await pdfDoc.save();
 
