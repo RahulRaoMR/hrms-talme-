@@ -2260,12 +2260,19 @@ button.flow-card {
   background: var(--panel);
 }
 
+.pdf-preview-frame {
+  height: 720px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
 .exact-pdf-preview iframe {
   display: block;
   width: 100%;
-  height: 720px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  height: calc(100% + 18px);
+  border: 0;
   background: #fff;
 }
 

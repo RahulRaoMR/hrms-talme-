@@ -148,10 +148,13 @@ export default function LettersPageClient() {
                 {generating ? "Generating..." : "Generate Same PDF"}
               </button>
             </div>
-            <iframe
-              title="Live Talme offer letter preview"
-              src={`${previewUrl || "/templates/talme-offer-letter-template.pdf"}#toolbar=0&navpanes=0&zoom=page-fit`}
-            />
+            <div className="pdf-preview-frame">
+              <iframe
+                title="Live Talme offer letter preview"
+                src={`${previewUrl || "/templates/talme-offer-letter-template.pdf"}#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit`}
+                scrolling="no"
+              />
+            </div>
           </div>
         </article>
       </section>
