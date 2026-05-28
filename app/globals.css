@@ -724,29 +724,6 @@ p {
   font-size: 0.92rem;
 }
 
-.modal-head-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.cv-header-import-button {
-  white-space: nowrap;
-}
-
-.record-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.resume-download-button {
-  width: auto;
-}
-
 .requirement-overview-grid {
   margin-top: 0;
 }
@@ -769,22 +746,6 @@ p {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.025);
-}
-
-.requirement-toolbar {
-  position: sticky;
-  left: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 12px 12px 0;
-  width: min(100%, 680px);
-}
-
-.requirement-search-input {
-  flex: 1 1 260px;
-  min-width: min(100%, 240px);
 }
 
 .requirement-table {
@@ -819,38 +780,13 @@ p {
   font-family: inherit;
 }
 
-.requirement-delete-button {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 10px;
-  font-size: 1rem;
-}
-
-.table-icon-button {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
-  padding: 0;
-  font-size: 1rem;
-  line-height: 1;
-}
-
 .requirement-count {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-.requirement-pagination {
   position: sticky;
   left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  margin: 0;
   padding: 0 12px 12px;
-  width: min(100%, 760px);
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .landing-grid {
@@ -887,60 +823,6 @@ textarea {
 
 .search-input {
   max-width: 320px;
-}
-
-.candidate-search-form {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.candidate-shortlist-toolbar {
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.candidate-shortlist-toolbar .filter-row {
-  gap: 8px;
-}
-
-.candidate-shortlist-toolbar .chip-button,
-.candidate-toolbar-button,
-.candidate-csv-actions .mini-button {
-  width: auto;
-  min-height: 40px;
-  padding: 9px 13px;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-
-.candidate-search-form {
-  flex: 1 1 380px;
-  gap: 8px;
-  flex-wrap: nowrap;
-  min-width: min(100%, 300px);
-}
-
-.candidate-search-form .search-input {
-  flex: 1 1 240px;
-  max-width: none;
-  min-width: 180px;
-  height: 40px;
-  padding: 9px 12px;
-  border-radius: 12px;
-}
-
-.candidate-csv-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .landing-actions,
@@ -1650,19 +1532,6 @@ button.flow-card {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-}
-
-.table-select {
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 30px 8px 10px;
-  border-radius: 10px;
-  font-size: 0.88rem;
-}
-
-.table-select:disabled {
-  cursor: wait;
-  opacity: 0.72;
 }
 
 .data-table tr.openable-row {
@@ -6992,16 +6861,4 @@ body.light-mode .invoice-action-bar {
     right: 18mm;
     bottom: 8mm;
   }
-}
-
-.candidate-shortlist-toolbar .chip-button,
-.candidate-shortlist-toolbar .candidate-toolbar-button,
-.candidate-shortlist-toolbar .candidate-csv-actions .mini-button {
-  width: auto;
-  flex: 0 0 auto;
-}
-
-.candidate-shortlist-toolbar {
-  flex-direction: row;
-  align-items: center;
 }

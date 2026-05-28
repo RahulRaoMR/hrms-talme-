@@ -1,12 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  engineType = "client"
-}
-
-generator rootClient {
-  provider   = "prisma-client-js"
-  engineType = "client"
-  output     = "../../node_modules/.prisma/client"
+  engineType = "binary"
 }
 
 datasource db {
@@ -74,9 +68,6 @@ model Candidate {
   joiningDate            String?
   joiningStatus          String?
   offeredCtc             String?
-  resumeFileName         String?
-  resumeMimeType         String?
-  resumeDataUrl          String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
