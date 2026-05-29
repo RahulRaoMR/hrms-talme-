@@ -242,17 +242,35 @@ function replaceFirstPage(page, fonts, data) {
   );
 
   drawText(page, bold, "Compensation structure;", 38, 401, { size: 10 });
-  drawText(page, bold, `Your Total Cost to Company is INR Rs. ${buildCtcTail(data.ctc)}`, x, 375, { size: 10, maxWidth });
-  drawText(page, bold, "The details of the compensation package offered to you are given in Annexure - A.", x, 351, { size: 10 });
+  y = drawWrapped(
+    page,
+    bold,
+    `Your Total Cost to Company is INR Rs. ${buildCtcTail(data.ctc)}`,
+    x,
+    375,
+    { size: 10, maxWidth, lineHeight: 13 }
+  );
+  y -= 6;
+  y = drawWrapped(
+    page,
+    bold,
+    "The details of the compensation package offered to you are given in Annexure - A.",
+    x,
+    y,
+    { size: 10, maxWidth, lineHeight: 13 }
+  );
+  y -= 12;
 
-  drawText(page, bold, "Terms & Conditions", x, 322, { size: 10 });
-  drawText(page, bold, "1.Compensation", x, 296, { size: 10 });
+  drawText(page, bold, "Terms & Conditions", x, y, { size: 10 });
+  y -= 26;
+  drawText(page, bold, "1.Compensation", x, y, { size: 10 });
+  y -= 30;
   y = drawWrapped(
     page,
     regular,
     "As detailed in the above page and do not disclose the service duration and compensation details to any candidates and the customer organization. Matter of your compensation and offer letter is confidential information of the company. Any discussion or disclosure of your compensation or the contents of offer letter with anybody other than HR will be considered as breach of agreement by you.",
     x,
-    266,
+    y,
     { size: 10, maxWidth, lineHeight: 11 }
   );
   y -= 10;
