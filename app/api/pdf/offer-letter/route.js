@@ -410,7 +410,11 @@ function replacePolicyPage(page, fonts, data) {
   body("Company reserves the right to run the shifts, change the shift timings, fix the criteria to attend in shifts within the applicable laws based on its business needs and all its employees are bound by it.", 9);
 
   heading("11. Leave & Holidays");
-  body("Employees are entitled to a maximum of one and a half (1.5) days of leave per month, subject to proper written approval from Talme. Unused leave cannot be carried forward to subsequent months and any unused paid leave cannot be claimed or cashed in.", 9);
+  body(
+    data.leaveEntitlement ||
+      "Employees are entitled to a maximum of one and a half (1.5) days of leave per month, subject to proper written approval from Talme. Unused leave cannot be carried forward to subsequent months and any unused paid leave cannot be claimed or cashed in.",
+    9
+  );
 
   heading("12. Voluntary Abandonment");
   body("You agree that all/any unplanned/unauthorized leave for 5 (five) or more consecutive working days without prior intimation will be deemed as \"Abandonment of Services\" unless such unplanned leave is for the reasons of medical emergency which shall be substantiated with valid documentary proof within 7 (seven) days from the date of such absence. You shall not be entitled to any monetary and non-monetary benefits as was applicable to you. This provision shall also be applicable to all/any such unplanned/unauthorized leave during your serving the notice period, if any. You shall also not be entitled to any monetary and non-monetary benefits in case of your resignation and you do not serve the agreed notice period as directed by the Company.", 9);
@@ -562,6 +566,7 @@ export async function POST(request) {
     employmentType: clean(data.employmentType),
     workLocation: clean(data.workLocation),
     ctc: clean(data.ctc),
+    leaveEntitlement: clean(data.leaveEntitlement),
     acceptanceDate: clean(data.acceptanceDate),
     weekdayShiftTiming: clean(data.weekdayShiftTiming) || "08:00 AM to 5:30 PM",
     saturdayShiftTiming: clean(data.saturdayShiftTiming) || "08:00 AM to 12:00 PM"
