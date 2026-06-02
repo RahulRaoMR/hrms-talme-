@@ -2098,7 +2098,8 @@ button.flow-card {
   text-transform: uppercase;
 }
 
-.letter-form-grid input {
+.letter-form-grid input,
+.letter-form-grid textarea {
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -2106,6 +2107,13 @@ button.flow-card {
   color: var(--text);
   padding: 0 12px;
   font: inherit;
+}
+
+.letter-form-grid textarea {
+  min-height: 74px;
+  padding: 10px 12px;
+  line-height: 1.35;
+  resize: vertical;
 }
 
 .letter-preview-panel {

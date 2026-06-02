@@ -147,11 +147,20 @@ export default function LettersPageClient() {
             {fields.map(([field, label]) => (
               <label key={field}>
                 <span>{label}</span>
-                <input
-                  value={letter[field]}
-                  onChange={(event) => updateField(field, event.target.value)}
-                  placeholder={label}
-                />
+                {field === "leaveEntitlement" ? (
+                  <textarea
+                    value={letter[field]}
+                    onChange={(event) => updateField(field, event.target.value)}
+                    placeholder={label}
+                    rows={3}
+                  />
+                ) : (
+                  <input
+                    value={letter[field]}
+                    onChange={(event) => updateField(field, event.target.value)}
+                    placeholder={label}
+                  />
+                )}
               </label>
             ))}
           </div>
