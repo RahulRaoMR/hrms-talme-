@@ -55,15 +55,18 @@ export default function RecordDetailPage({
               <p className="eyebrow">{section.eyebrow || "Insights"}</p>
               <h3>{section.title}</h3>
             </div>
+            {section.actions ? <div className="record-detail-section-actions">{section.actions}</div> : null}
           </div>
-          <div className="doc-stack">
-            {section.items.map((item) => (
-              <div className="doc-line" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
+          {section.content || (
+            <div className="doc-stack">
+              {section.items.map((item) => (
+                <div className="doc-line" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       ))}
     </SuiteShell>

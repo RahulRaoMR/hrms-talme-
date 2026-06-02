@@ -59,6 +59,7 @@ function hasResendKey() {
 
 function shouldUseResend() {
   const provider = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  const service = process.env.EMAIL_SERVICE?.trim().toLowerCase();
 
   if (provider === "resend") {
     return hasResendKey();
@@ -68,7 +69,11 @@ function shouldUseResend() {
     return false;
   }
 
-  return hasResendKey();
+  if (service === "smtp" || service === "gmail") {
+    return false;
+  }
+
+  return hasResendKey() && (Boolean(process.env.EMAIL_FROM?.trim()) || !hasSmtpCredentials());
 }
 
 function getDefaultFrom(provider = "smtp") {

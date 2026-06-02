@@ -1,14 +1,19 @@
-import dotenv from "dotenv";
-import crypto from "node:crypto";
+import "./lib/load-env.js";
+import crypto, { randomBytes } from "node:crypto";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
-import { PrismaClient } from "@prisma/client";
-import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
-import { buildPayslipRowsFromQuery, createPayslipPdf } from "../lib/payslip-pdf.js";
-
-dotenv.config({ override: true, quiet: true });
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Prisma, PrismaClient } from "@prisma/client";
+import pool from "./config/db.js";
+import { isEmailConfigured, sendEmail } from "./services/emailService.js";
+import {
+  exportAtsToSharePoint,
+  getAtsSharePointSyncStatus,
+  isAtsSharePointResource,
+  maybeImportAtsFromSharePoint,
+  queueAtsSharePointExport
+} from "./lib/ats-sharepoint-sync.js";
 
 const databaseUrl =
   process.env.DATABASE_URL ||
@@ -46,6 +51,7 @@ const resourceMap = {
   employees: { model: "employee", orderBy: { createdAt: "desc" }, fields: ["employeeId", "email", "name", "department", "location", "manager", "grade", "joiningDate", "salaryBand", "salaryNetPay", "bankStatus", "status", "tone", "employeeDetails"] },
   "leave-requests": { model: "leaveRequest", orderBy: { createdAt: "desc" }, fields: ["employee", "leaveType", "dates", "balance", "reason", "approver", "status", "tone"] },
   "attendance-records": { model: "attendanceRecord", orderBy: { createdAt: "desc" }, fields: ["employee", "salaryNetPay", "month", "monthDays", "sundays", "holidays", "paidLeaves", "otHours", "present", "leaves", "overtime", "shift", "lockState", "tone"] },
+  "punch-activity": { model: "punchActivity", orderBy: { timestamp: "desc" }, fields: ["employeeId", "employeeName", "type", "timestamp", "time", "workDate", "geoCoordinates"] },
   "vendor-workers": { model: "vendorWorker", orderBy: { createdAt: "desc" }, fields: ["workerId", "name", "vendor", "site", "skill", "wageRate", "attendance", "status", "tone"] },
   documents: { model: "documentRecord", orderBy: { createdAt: "desc" }, fields: ["owner", "docType", "module", "expiry", "status", "tone"] },
   approvals: { model: "approvalItem", orderBy: { createdAt: "desc" }, fields: ["module", "title", "owner", "amount", "level", "status", "tone"] },
@@ -220,6 +226,97 @@ app.get("/api/hrms", asyncHandler(async (_req, res) => {
   res.json(await getSuiteData());
 }));
 
+app.get("/api/ats/sharepoint-sync", (_req, res) => {
+  res.json(getAtsSharePointSyncStatus());
+});
+
+app.post("/api/ats/sharepoint-sync", asyncHandler(async (req, res) => {
+  const action = String(req.body?.action || "import").trim().toLowerCase();
+
+  if (action === "export") {
+    return res.json(await exportAtsToSharePoint(prisma));
+  }
+
+  return res.json(await maybeImportAtsFromSharePoint(prisma, { force: true }));
+}));
+
+app.post("/api/ats/sharepoint-sync/import", asyncHandler(async (_req, res) => {
+  res.json(await maybeImportAtsFromSharePoint(prisma, { force: true }));
+}));
+
+app.post("/api/ats/sharepoint-sync/export", asyncHandler(async (_req, res) => {
+  res.json(await exportAtsToSharePoint(prisma));
+}));
+
+app.get("/api/punch-activity", asyncHandler(async (req, res) => {
+  const employeeId = String(req.query.employeeId || "").trim();
+  const workDate = String(req.query.date || req.query.workDate || "").trim();
+  const month = String(req.query.month || "").trim();
+  const where = {};
+
+  if (employeeId) {
+    where.employeeId = { equals: employeeId, mode: "insensitive" };
+  }
+
+  if (workDate) {
+    where.workDate = workDate;
+  } else if (/^\d{4}-\d{2}$/.test(month)) {
+    where.workDate = { startsWith: month };
+  }
+
+  const rows = await prisma.punchActivity.findMany({
+    where,
+    orderBy: { timestamp: "desc" }
+  });
+
+  res.json(rows);
+}));
+
+app.post("/api/punch-activity", asyncHandler(async (req, res) => {
+  const timestamp = new Date(req.body?.timestamp || Date.now());
+  const employeeId = String(req.body?.employeeId || "").trim();
+  const type = String(req.body?.type || "").trim();
+
+  if (!employeeId) {
+    return res.status(400).json({ error: "Employee ID is required." });
+  }
+
+  if (!["Punch In", "Punch Out"].includes(type)) {
+    return res.status(400).json({ error: "Punch type must be Punch In or Punch Out." });
+  }
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return res.status(400).json({ error: "Punch timestamp is invalid." });
+  }
+
+  const data = {
+    employeeId,
+    employeeName: req.body?.employeeName ? String(req.body.employeeName).trim() : null,
+    type,
+    timestamp,
+    time: String(req.body?.time || "").trim() || formatPunchTime(timestamp),
+    workDate: String(req.body?.workDate || "").trim() || formatStorageDate(timestamp),
+    geoCoordinates: req.body?.geoCoordinates || undefined
+  };
+  const existing = await prisma.punchActivity.findFirst({
+    where: {
+      employeeId: { equals: data.employeeId, mode: "insensitive" },
+      type: data.type,
+      timestamp
+    }
+  });
+
+  if (existing) {
+    return res.json(existing);
+  }
+
+  const row = await prisma.punchActivity.create({
+    data
+  });
+
+  res.status(201).json(row);
+}));
+
 app.get("/api/employee-portal", asyncHandler(async (_req, res) => {
   const data = await getSuiteData();
   res.json({
@@ -357,27 +454,12 @@ app.delete("/api/users/:id", asyncHandler(async (req, res) => {
 app.get("/api/pdf/payslip", (req, res) => {
   const params = new URLSearchParams();
 
-  Object.entries(req.query || {}).forEach(([key, value]) => {
-    params.set(key, Array.isArray(value) ? String(value[0] || "") : String(value || ""));
-  });
-
-  const pdf = createPayslipPdf(buildPayslipRowsFromQuery(params));
-
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", 'inline; filename="payslip.pdf"');
-  res.send(pdf);
-});
-
-app.post("/api/pdf/salary-slips", (req, res) => {
-  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-  const month = String(req.body?.month || "current-month");
-  const fileMonth = month.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
-  const pdf = createPayslipPdf(rows.length ? rows : [{ employee: "No salary rows", month }]);
-
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="salary-slips-${fileMonth}.pdf"`);
-  res.send(pdf);
-});
+app.post("/api/employees", asyncHandler(async (req, res) => {
+  const data = pick(req.body, resourceMap.employees.fields, resourceMap.employees);
+  const row = await prisma.employee.create({ data });
+  const onboarding = await onboardEmployee(row);
+  res.status(201).json({ ...row, onboarding });
+}));
 
 app.all("/api/pdf/:kind", (req, res) => {
   res.setHeader("Content-Type", "application/json");
@@ -405,6 +487,7 @@ app.post("/api/uploads", asyncHandler(async (req, res) => {
 app.get("/api/:resource", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
+  await refreshAtsResourceFromSharePoint(req.params.resource);
   const rows = await prisma[config.model].findMany({ orderBy: config.orderBy });
   res.json(rows);
 }));
@@ -414,8 +497,8 @@ app.post("/api/:resource", asyncHandler(async (req, res) => {
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const data = coerceResourceFields(req.params.resource, pick(req.body, config.fields));
   const row = await prisma[config.model].create({ data });
-  const onboarding = req.params.resource === "employees" ? await onboardEmployee(row) : null;
-  res.status(201).json(onboarding ? { ...row, onboarding } : row);
+  queueAtsResourceExport(req.params.resource);
+  res.status(201).json(row);
 }));
 
 app.get("/api/:resource/:id", asyncHandler(async (req, res) => {
@@ -429,11 +512,16 @@ app.get("/api/:resource/:id", asyncHandler(async (req, res) => {
 app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
+  const previousRow = req.params.resource === "leave-requests"
+    ? await prisma[config.model].findUnique({ where: { id: req.params.id } })
+    : null;
   const row = await prisma[config.model].update({
     where: { id: req.params.id },
     data: coerceResourceFields(req.params.resource, pick(req.body, config.fields))
   });
-  res.json(row);
+  queueAtsResourceExport(req.params.resource);
+  const leaveNotification = await sendLeaveStatusNotification(req.params.resource, previousRow, row);
+  res.json(leaveNotification ? { ...row, leaveNotification } : row);
 }));
 
 app.delete("/api/:resource/:id", asyncHandler(async (req, res) => {
@@ -444,9 +532,7 @@ app.delete("/api/:resource/:id", asyncHandler(async (req, res) => {
     : null;
 
   await prisma[config.model].delete({ where: { id: req.params.id } });
-  if (row?.fileUrl) {
-    await deleteUploadedFile(row.fileUrl);
-  }
+  queueAtsResourceExport(req.params.resource);
   res.json({ id: req.params.id });
 }));
 
@@ -462,15 +548,32 @@ app.listen(port, hostname, () => {
 });
 
 async function getSuiteData() {
-  const employees = await prisma.employee.findMany({ orderBy: { createdAt: "desc" } });
-  const leaveRequests = await prisma.leaveRequest.findMany({ orderBy: { createdAt: "desc" } });
-  const attendanceRecords = await prisma.attendanceRecord.findMany({ orderBy: { createdAt: "desc" } });
-  const vendorWorkers = await prisma.vendorWorker.findMany({ orderBy: { createdAt: "desc" } });
-  const documents = await prisma.documentRecord.findMany({ orderBy: { createdAt: "desc" } });
-  const approvals = await prisma.approvalItem.findMany({ orderBy: { createdAt: "desc" } });
-  const settings = await prisma.companySetting.findMany({ orderBy: { category: "asc" } });
+  const [employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings, punchActivity] = await Promise.all([
+    prisma.employee.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.leaveRequest.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.attendanceRecord.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.vendorWorker.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.documentRecord.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.approvalItem.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.companySetting.findMany({ orderBy: { category: "asc" } }),
+    prisma.punchActivity.findMany({ orderBy: { timestamp: "desc" } }).catch(() => [])
+  ]);
 
-  return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings };
+  return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings, punchActivity };
+}
+
+async function refreshAtsResourceFromSharePoint(resource) {
+  if (!isAtsSharePointResource(resource)) return;
+
+  await maybeImportAtsFromSharePoint(prisma).catch((error) => {
+    console.error("SharePoint ATS import failed:", error);
+  });
+}
+
+function queueAtsResourceExport(resource) {
+  if (isAtsSharePointResource(resource)) {
+    queueAtsSharePointExport(prisma, resource);
+  }
 }
 
 async function buildUploadPayload(req) {
@@ -593,22 +696,31 @@ function parseMultipartPart(part) {
     return null;
   }
 
-  const headerText = chunk.subarray(0, headerEnd).toString("utf8");
-  const content = chunk.subarray(headerEnd + 4);
-  const headers = parseMultipartHeaders(headerText);
-  const disposition = parseContentDisposition(headers["content-disposition"] || "");
+  if (field.type === "DateTime") {
+    return value instanceof Date ? value : new Date(value);
+  }
 
-  return {
-    name: disposition.name,
-    fileName: disposition.filename,
-    mimeType: headers["content-type"],
-    content
-  };
+  return value;
 }
 
-function parseMultipartHeaders(headerText) {
-  return headerText.split("\r\n").reduce((headers, line) => {
-    const separator = line.indexOf(":");
+function formatStorageDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatPunchTime(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  }).format(date).toLowerCase();
+}
+
+function pick(payload, fields, config) {
+  const fieldMap = config ? getModelFieldMap(config.model) : new Map();
 
     if (separator !== -1) {
       headers[line.slice(0, separator).trim().toLowerCase()] = line.slice(separator + 1).trim();
@@ -704,15 +816,13 @@ function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
     hr: "HR",
-    payrollAts: "Payroll + ATS",
-    ats: "ATS",
-    invoice: "Invoice",
-    employeeHrms: "Employee HRMS",
+    employeeHrms: "Employee",
     payroll: "Payroll",
     employee: "Employee"
   };
 
-  return roles[role] || role || "";
+  const normalizedRole = roles[role] || role || "";
+  return normalizedRole === "Employee HRMS" ? "Employee" : normalizedRole;
 }
 
 function isDatabaseUnavailableError(error) {
@@ -965,6 +1075,248 @@ async function onboardEmployee(employee) {
 function safeUser(user) {
   const { passwordHash, ...safe } = user;
   return safe;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderEmailShell(title, content) {
+  return `
+    <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
+      <div style="border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #0f766e, #1d4ed8); color: #ffffff; padding: 24px;">
+          <p style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Talme HRMS</p>
+          <h2 style="margin: 0; font-size: 28px;">${escapeHtml(title)}</h2>
+        </div>
+        <div style="padding: 24px;">
+          ${content}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function detailRow(label, value) {
+  return `
+    <tr>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">${escapeHtml(label)}</td>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 700;">${escapeHtml(value || "-")}</td>
+    </tr>
+  `;
+}
+
+function generateEmployeePassword() {
+  return `Talme@${randomBytes(4).toString("hex")}`;
+}
+
+function getEmployeeLoginEmail(employee) {
+  return String(employee?.email || "").trim().toLowerCase();
+}
+
+function getFrontendBaseUrl() {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL;
+  const baseUrl = String(configuredUrl || "http://localhost:3000").trim().replace(/^"|"$/g, "").replace(/\/$/, "");
+
+  if (!baseUrl) {
+    return "http://localhost:3000";
+  }
+
+  return baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+}
+
+function getEmployeeAppLoginUrl() {
+  return `${getFrontendBaseUrl()}/employee-app/login`;
+}
+
+function buildWelcomeEmail(employee, password) {
+  const loginUrl = getEmployeeAppLoginUrl();
+
+  return renderEmailShell(
+    "Welcome to Talme",
+    `
+      <p>Hi ${escapeHtml(employee?.name || "Team Member")},</p>
+      <p>Your employee account has been created successfully.</p>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 18px 0; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+        <tbody>
+          ${detailRow("Employee ID", employee?.employeeId)}
+          ${detailRow("Employee Name", employee?.name)}
+          ${detailRow("Department", employee?.department)}
+          ${detailRow("Manager", employee?.manager)}
+        </tbody>
+      </table>
+
+      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 18px 0;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Employee portal login</p>
+        <p style="margin: 0;">Login page: <a href="${escapeHtml(loginUrl)}" style="color: #0f766e; font-weight: 700;">${escapeHtml(loginUrl)}</a></p>
+        <p style="margin: 0;">Employee ID: <strong>${escapeHtml(employee?.employeeId || "-")}</strong></p>
+        <p style="margin: 4px 0 0;">Temporary password: <strong>${escapeHtml(password || "-")}</strong></p>
+      </div>
+
+      <p>Use these credentials to log in to the employee app, open attendance, and punch in or punch out.</p>
+      <p>Please keep this password private.</p>
+    `
+  );
+}
+
+async function createEmployeePortalAccount(employee, password) {
+  const loginEmail = getEmployeeLoginEmail(employee);
+
+  if (!loginEmail) {
+    return { created: false, reason: "Missing employee email." };
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.upsert({
+    where: { email: loginEmail },
+    update: {
+      name: employee.name,
+      role: "Employee",
+      active: true,
+      passwordHash
+    },
+    create: {
+      name: employee.name,
+      email: loginEmail,
+      role: "Employee",
+      active: true,
+      passwordHash
+    }
+  });
+
+  return { created: true };
+}
+
+async function onboardEmployee(employee) {
+  const loginEmail = getEmployeeLoginEmail(employee);
+
+  if (!loginEmail) {
+    return { accountCreated: false, emailSent: false, reason: "Missing employee email." };
+  }
+
+  const password = generateEmployeePassword();
+  const account = await createEmployeePortalAccount(employee, password);
+
+  if (!account.created) {
+    return { accountCreated: false, emailSent: false, reason: account.reason };
+  }
+
+  if (!isEmailConfigured()) {
+    return { accountCreated: true, emailSent: false, reason: "Email service is not configured." };
+  }
+
+  try {
+    const loginUrl = getEmployeeAppLoginUrl();
+    const info = await sendEmail(loginEmail, "Welcome to Talme", buildWelcomeEmail(employee, password), {
+      text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully. Login page: ${loginUrl}. Employee ID: ${employee?.employeeId || "-"}. Temporary password: ${password}.`
+    });
+
+    return {
+      accountCreated: true,
+      emailSent: true,
+      reason: info?.messageId || info?.response || "Email delivered."
+    };
+  } catch (error) {
+    console.error("Employee welcome email failed:", error);
+    return {
+      accountCreated: true,
+      emailSent: false,
+      reason: error?.message || "Email delivery failed."
+    };
+  }
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getLeaveEmailStatus(status) {
+  const normalizedStatus = normalizeText(status);
+  return ["accepted", "approved", "leave accepted"].includes(normalizedStatus) ? "Accepted" : status || "Updated";
+}
+
+async function findEmployeeForLeave(leaveRequest) {
+  const lookup = String(leaveRequest?.employee || "").trim();
+
+  if (!lookup) {
+    return null;
+  }
+
+  return prisma.employee.findFirst({
+    where: {
+      OR: [
+        { employeeId: { equals: lookup, mode: "insensitive" } },
+        { name: { equals: lookup, mode: "insensitive" } },
+        { email: { equals: lookup, mode: "insensitive" } }
+      ]
+    }
+  });
+}
+
+function buildLeaveStatusEmail(employee, leaveRequest) {
+  const emailStatus = getLeaveEmailStatus(leaveRequest?.status);
+
+  return renderEmailShell(
+    `Leave ${emailStatus}`,
+    `
+      <p>Hi ${escapeHtml(employee?.name || leaveRequest?.employee || "Employee")},</p>
+      <p>Your leave request has been <strong>${escapeHtml(emailStatus)}</strong>.</p>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 18px 0; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+        <tbody>
+          ${detailRow("Leave Type", leaveRequest?.leaveType)}
+          ${detailRow("Dates", leaveRequest?.dates)}
+          ${detailRow("Reason", leaveRequest?.reason || "No reason provided")}
+          ${detailRow("Status", emailStatus)}
+        </tbody>
+      </table>
+
+      <p>Please log in to the Talme employee app if you want to review the full request details.</p>
+    `
+  );
+}
+
+async function sendLeaveStatusNotification(resource, previousLeave, nextLeave) {
+  if (resource !== "leave-requests" || !nextLeave?.status) {
+    return null;
+  }
+
+  if (normalizeText(previousLeave?.status) === normalizeText(nextLeave.status)) {
+    return { sent: false, skipped: true, reason: "Leave status did not change." };
+  }
+
+  const employee = await findEmployeeForLeave(nextLeave);
+
+  if (!employee?.email) {
+    return { sent: false, reason: "No registered employee email found." };
+  }
+
+  if (!isEmailConfigured()) {
+    return { sent: false, reason: "Email service is not configured." };
+  }
+
+  const emailStatus = getLeaveEmailStatus(nextLeave.status);
+
+  try {
+    const info = await sendEmail(employee.email, `Leave ${emailStatus}`, buildLeaveStatusEmail(employee, nextLeave), {
+      text: `Hi ${employee.name || nextLeave.employee || "Employee"}, your leave request for ${nextLeave.dates || "-"} is ${emailStatus}. Reason: ${nextLeave.reason || "No reason provided"}.`
+    });
+
+    return { sent: true, reason: info?.messageId || info?.response || "Email delivered." };
+  } catch (error) {
+    console.error("Leave status email failed:", error);
+    return { sent: false, reason: error?.message || "Email delivery failed." };
+  }
 }
 
 function getFallbackLoginUser(identifier, password, expectedRole) {

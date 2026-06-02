@@ -7,10 +7,7 @@ import { ensureSeedData } from "@/lib/seed-db";
 const credentialRoles = {
   admin: "Enterprise Admin",
   hr: "HR",
-  payrollAts: "Payroll + ATS",
-  ats: "ATS",
-  invoice: "Invoice",
-  employeeHrms: "Employee HRMS",
+  employeeHrms: "Employee",
   payroll: "Payroll",
   employee: "Employee"
 };
@@ -32,10 +29,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       async authorize(credentials) {
         const identifier = credentials.email?.trim();
         const password = credentials.password?.trim();
-        const expectedRole = credentialRoles[credentials.role] || credentials.role;
+        const rawRole = credentialRoles[credentials.role] || credentials.role;
+        const expectedRole = rawRole === "Employee HRMS" ? "Employee" : rawRole;
 
         if (!identifier || !password) return null;
-        if (expectedRole === "Employee HRMS" && identifier.includes("@")) return null;
+        if (["Employee", "Employee HRMS"].includes(expectedRole) && identifier.includes("@")) return null;
 
         await ensureSeedData();
 

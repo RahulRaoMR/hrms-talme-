@@ -73,6 +73,32 @@ const requirementFields = [
   { key: "originalJobPostDate", label: "Original Job Post Date", type: "date" }
 ];
 
+const requirementColumnClasses = {
+  agingDays: "requirement-aging-column",
+  hireType: "requirement-hire-type-column",
+  jobId: "requirement-job-id-column",
+  postedDate: "requirement-posted-date-column",
+  businessUnit: "requirement-business-unit-column",
+  department: "requirement-department-column",
+  client: "requirement-client-column",
+  domain: "requirement-domain-column",
+  position: "requirement-position-column",
+  priority: "requirement-priority-column",
+  numberOfOpenings: "requirement-openings-column",
+  status: "requirement-status-column",
+  remarks: "requirement-remarks-column",
+  candidateConcerned: "requirement-candidate-column",
+  holdDate: "requirement-hold-date-column",
+  offerStageDate: "requirement-offer-stage-date-column",
+  offerDate: "requirement-offer-date-column",
+  joiningDate: "requirement-joining-date-column",
+  candidateCtc: "requirement-candidate-ctc-column",
+  source: "requirement-source-column",
+  harmonizedRole: "requirement-harmonized-role-column",
+  recruiterTagged: "requirement-recruiter-column",
+  originalJobPostDate: "requirement-original-posted-date-column"
+};
+
 const requirementDateFields = new Set([
   "postedDate",
   "holdDate",
@@ -470,9 +496,9 @@ export default function AtsPageClient({ data = {} }) {
                 <thead>
                   <tr>
                     {requirementFields.map((field) => (
-                      <th key={field.key}>{field.label}</th>
+                      <th className={requirementColumnClasses[field.key]} key={field.key}>{field.label}</th>
                     ))}
-                    <th>Actions</th>
+                    <th className="requirement-row-actions-column">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -480,7 +506,7 @@ export default function AtsPageClient({ data = {} }) {
                     <tr key={opening.id || opening.jobId || `${opening.position}-${index}`}>
                       {requirementFields.map((field) => (
                         <td
-                          className={field.key === "position" ? "requirement-position-cell" : undefined}
+                          className={requirementColumnClasses[field.key]}
                           key={field.key}
                         >
                           {field.key === "status" ? (
@@ -494,7 +520,7 @@ export default function AtsPageClient({ data = {} }) {
                           )}
                         </td>
                       ))}
-                      <td>
+                      <td className="requirement-row-actions-column">
                         <button
                           aria-label={`Delete ${opening.position || opening.jobId || "requirement"}`}
                           className="mini-button danger-button requirement-delete-button"

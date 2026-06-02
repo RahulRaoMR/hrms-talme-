@@ -95,15 +95,17 @@ function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
     hr: "HR",
-    payrollAts: "Payroll + ATS",
-    ats: "ATS",
-    invoice: "Invoice",
-    employeeHrms: "Employee HRMS",
+    employeeHrms: "Employee",
     payroll: "Payroll",
     employee: "Employee"
   };
 
-  return roles[role] || role || "";
+  const normalizedRole = roles[role] || role || "";
+  return normalizedRole === "Employee HRMS" ? "Employee" : normalizedRole;
+}
+
+function isEmployeeIdLoginRole(role) {
+  return ["Employee", "Employee HRMS"].includes(role);
 }
 
 function isEmployeeIdLoginRole(role) {

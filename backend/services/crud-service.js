@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import {
+  isAtsSharePointResource,
+  maybeImportAtsFromSharePoint,
+  queueAtsSharePointExport
+} from "@/lib/ats-sharepoint-sync";
 import { ensureSeedData } from "@/lib/seed-db";
 import { getResourceConfig } from "@/lib/api-resources";
 import { ApiRouteError } from "@/lib/api-route-factory";
@@ -28,6 +33,7 @@ export function createCrudService(resourceName) {
         await ensureSeedData();
       }
 
+      await refreshAtsResource(resourceName);
       const model = getModelOrThrow(config.model);
       return model.findMany({
         orderBy: config.orderBy,
@@ -61,21 +67,27 @@ export function createCrudService(resourceName) {
       const model = getModelOrThrow(config.model);
       const data = await config.createData(payload);
 
-      return model.create({
+      const record = await model.create({
         data,
         ...buildSelectArgs(config.itemSelect)
       });
+
+      queueAtsResourceExport(resourceName);
+      return record;
     },
 
     async update(id, payload) {
       const model = getModelOrThrow(config.model);
       const data = await config.updateData(payload);
 
-      return model.update({
+      const record = await model.update({
         where: { id },
         data,
         ...buildSelectArgs(config.itemSelect)
       });
+
+      queueAtsResourceExport(resourceName);
+      return record;
     },
 
     async remove(id) {
@@ -90,7 +102,22 @@ export function createCrudService(resourceName) {
       }
 
       await model.delete({ where: { id } });
+      queueAtsResourceExport(resourceName);
       return record;
     }
   };
+}
+
+async function refreshAtsResource(resourceName) {
+  if (!isAtsSharePointResource(resourceName)) return;
+
+  await maybeImportAtsFromSharePoint(prisma).catch((error) => {
+    console.error("SharePoint ATS import failed:", error);
+  });
+}
+
+function queueAtsResourceExport(resourceName) {
+  if (isAtsSharePointResource(resourceName)) {
+    queueAtsSharePointExport(prisma, resourceName);
+  }
 }

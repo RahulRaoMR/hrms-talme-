@@ -3,8 +3,16 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
-import { canAccess, defaultPathForRole, resolveRole } from "@/lib/permissions";
-import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
+import { canAccess, resolveRole } from "@/lib/permissions";
+import { clearSuiteSession } from "@/lib/auth-session";
+
+const previewSession = {
+  token: "local-preview",
+  user: {
+    email: "director@talme.ai",
+    role: "Enterprise Admin"
+  }
+};
 
 export default function SuiteShell({
   eyebrow,
@@ -196,7 +204,11 @@ export default function SuiteShell({
             </button>
             <button
               className="ghost-button"
-              onClick={handleLogout}
+              onClick={() => {
+                clearSuiteSession();
+                router.replace("/login");
+                router.refresh();
+              }}
               type="button"
             >
               Log Out

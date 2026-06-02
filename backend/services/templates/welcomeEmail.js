@@ -9,8 +9,24 @@ function detailRow(label, value) {
   `;
 }
 
+function getFrontendBaseUrl() {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL;
+  const baseUrl = String(configuredUrl || "http://localhost:3000").trim().replace(/^"|"$/g, "").replace(/\/$/, "");
+
+  if (!baseUrl) {
+    return "http://localhost:3000";
+  }
+
+  return baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+}
+
 export const welcomeTemplate = (employee, password) => {
   const name = employee?.name || "Team Member";
+  const loginUrl = `${getFrontendBaseUrl()}/employee-app/login`;
 
   return renderEmailShell(
     "Welcome to Talme",
@@ -29,11 +45,12 @@ export const welcomeTemplate = (employee, password) => {
 
       <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 18px 0;">
         <p style="margin: 0 0 8px; font-weight: 700;">Employee portal login</p>
+        <p style="margin: 0;">Login page: <a href="${escapeHtml(loginUrl)}" style="color: #0f766e; font-weight: 700;">${escapeHtml(loginUrl)}</a></p>
         <p style="margin: 0;">Employee ID: <strong>${escapeHtml(employee?.employeeId || "-")}</strong></p>
         <p style="margin: 4px 0 0;">Temporary password: <strong>${escapeHtml(password || "-")}</strong></p>
       </div>
 
-      <p>You can now log in and start using the platform for HRMS, payroll, attendance, and leave workflows.</p>
+      <p>Use these credentials to log in to the employee app, open attendance, and punch in or punch out.</p>
       <p>Please keep this password private.</p>
       <p>We are glad to have you with us.</p>
     `

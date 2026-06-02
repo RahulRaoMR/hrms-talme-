@@ -881,6 +881,81 @@ p {
   font-size: 0.92rem;
 }
 
+.modal-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cv-header-import-button {
+  white-space: nowrap;
+}
+
+.record-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.record-detail-section-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.resume-download-button {
+  width: auto;
+}
+
+.candidate-detail-edit-form {
+  display: grid;
+  gap: 16px;
+}
+
+.candidate-detail-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.candidate-detail-edit-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.candidate-detail-edit-field input,
+.candidate-detail-edit-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 11px 12px;
+  font: inherit;
+  resize: vertical;
+}
+
+.candidate-detail-edit-field input:focus,
+.candidate-detail-edit-field textarea:focus {
+  outline: 2px solid rgba(223, 166, 74, 0.28);
+  border-color: rgba(223, 166, 74, 0.55);
+}
+
+.candidate-detail-edit-field.wide-field {
+  grid-column: 1 / -1;
+}
+
+.candidate-detail-edit-actions {
+  margin-top: 0;
+  justify-content: flex-end;
+}
+
 .requirement-overview-grid {
   margin-top: 0;
 }
@@ -906,17 +981,25 @@ p {
 }
 
 .requirement-table {
-  width: max-content;
-  min-width: 3400px;
-  table-layout: auto;
+  min-width: 4620px;
+  table-layout: fixed;
 }
 
 .requirement-table th,
 .requirement-table td {
-  min-width: 140px;
-  white-space: nowrap;
-  overflow-wrap: normal;
+  overflow: hidden;
   word-break: normal;
+  text-overflow: ellipsis;
+}
+
+.requirement-table td {
+  white-space: nowrap;
+}
+
+.requirement-table th {
+  white-space: normal;
+  overflow-wrap: normal;
+  line-height: 1.25;
 }
 
 .requirement-table th {
@@ -931,29 +1014,118 @@ p {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.requirement-table .requirement-position-cell {
-  min-width: 280px;
+.requirement-table .requirement-aging-column {
+  width: 90px;
 }
 
-.requirement-table th:nth-child(1),
-.requirement-table td:nth-child(1),
-.requirement-table th:nth-child(10),
-.requirement-table td:nth-child(10),
-.requirement-table th:nth-child(11),
-.requirement-table td:nth-child(11) {
-  min-width: 90px;
+.requirement-table .requirement-hire-type-column {
+  width: 150px;
 }
 
-.requirement-table th:nth-child(12),
-.requirement-table td:nth-child(12),
-.requirement-table th:nth-child(13),
-.requirement-table td:nth-child(13),
-.requirement-table th:nth-child(14),
-.requirement-table td:nth-child(14) {
-  min-width: 180px;
+.requirement-table .requirement-job-id-column {
+  width: 130px;
+}
+
+.requirement-table .requirement-posted-date-column {
+  width: 170px;
+}
+
+.requirement-table .requirement-business-unit-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-department-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-client-column {
+  width: 220px;
+}
+
+.requirement-table .requirement-domain-column {
+  width: 150px;
+}
+
+.requirement-table .requirement-position-column {
+  width: 360px;
+}
+
+.requirement-table td.requirement-business-unit-column,
+.requirement-table td.requirement-department-column,
+.requirement-table td.requirement-client-column,
+.requirement-table td.requirement-position-column,
+.requirement-table td.requirement-remarks-column,
+.requirement-table td.requirement-candidate-column,
+.requirement-table td.requirement-source-column,
+.requirement-table td.requirement-harmonized-role-column,
+.requirement-table td.requirement-recruiter-column {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.requirement-table .requirement-priority-column {
+  width: 130px;
+}
+
+.requirement-table .requirement-openings-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-status-column {
+  width: 210px;
+}
+
+.requirement-table .requirement-remarks-column {
+  width: 280px;
+}
+
+.requirement-table .requirement-candidate-column {
+  width: 230px;
+}
+
+.requirement-table .requirement-hold-date-column {
+  width: 160px;
+}
+
+.requirement-table .requirement-offer-stage-date-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-offer-date-column {
+  width: 170px;
+}
+
+.requirement-table .requirement-joining-date-column {
+  width: 180px;
+}
+
+.requirement-table .requirement-candidate-ctc-column {
+  width: 180px;
+}
+
+.requirement-table .requirement-source-column {
+  width: 180px;
+}
+
+.requirement-table .requirement-harmonized-role-column {
+  width: 210px;
+}
+
+.requirement-table .requirement-recruiter-column {
+  width: 200px;
+}
+
+.requirement-table .requirement-original-posted-date-column {
+  width: 210px;
+}
+
+.requirement-table .requirement-row-actions-column {
+  width: 110px;
 }
 
 .requirement-table td strong {
+  display: block;
   font-family: inherit;
 }
 
@@ -7019,6 +7191,7 @@ body.light-mode .invoice-action-bar {
   .bar-chart,
   .landing-grid,
   .form-grid,
+  .candidate-detail-edit-grid,
   .approval-flow,
   .payroll-donut-chart,
   .vendor-spend-chart,
