@@ -677,6 +677,163 @@ p {
   box-shadow: var(--shadow);
 }
 
+.login-body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(119, 216, 203, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(214, 176, 106, 0.16), transparent 22%),
+    linear-gradient(180deg, #eef4fb 0%, #f7fafc 52%, #edf2f8 100%);
+  color: #142132;
+}
+
+.login-card {
+  background: rgba(248, 251, 255, 0.96);
+  border-color: rgba(16, 27, 42, 0.1);
+  box-shadow: 0 24px 70px rgba(16, 27, 42, 0.16);
+  color: #142132;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.login-brand img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(16, 27, 42, 0.1);
+  padding: 6px;
+}
+
+.login-brand strong,
+.login-brand span {
+  display: block;
+}
+
+.login-brand strong {
+  color: #142132;
+  font-size: 1.18rem;
+  font-weight: 900;
+}
+
+.login-brand span {
+  margin-top: 2px;
+  color: #566779;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.login-card h1 {
+  color: #142132;
+}
+
+.login-card p,
+.login-card label span,
+.login-card .landing-modules span {
+  color: #566779;
+}
+
+.login-card input,
+.login-card select {
+  background: #ffffff;
+  border-color: rgba(16, 27, 42, 0.12);
+  color: #142132;
+}
+
+.login-card select option {
+  background: #ffffff;
+  color: #142132;
+}
+
+.login-card .landing-modules span {
+  background: rgba(16, 27, 42, 0.04);
+  border-color: rgba(16, 27, 42, 0.1);
+}
+
+.login-card .form-error {
+  color: #b23b28;
+}
+
+.forgot-password-button {
+  margin-top: 10px;
+  padding: 0;
+  background: transparent;
+  color: #9a6b21;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.password-reset-panel {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid rgba(16, 27, 42, 0.1);
+  border-radius: 18px;
+  background: rgba(16, 27, 42, 0.035);
+}
+
+.password-reset-head,
+.password-reset-actions,
+.password-reset-done {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.password-reset-head {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.password-reset-head strong,
+.password-reset-done strong {
+  color: #142132;
+  font-size: 1rem;
+}
+
+.password-reset-head button {
+  padding: 0;
+  background: transparent;
+  color: #9a6b21;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.password-reset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.password-reset-actions {
+  margin-top: 16px;
+}
+
+.password-reset-note,
+.password-reset-message {
+  color: #566779;
+  line-height: 1.6;
+}
+
+.password-reset-note {
+  margin-bottom: 14px;
+}
+
+.password-reset-message {
+  margin-top: 12px;
+}
+
+.password-reset-done {
+  justify-content: space-between;
+}
+
 .landing-card h1 {
   font-size: clamp(3rem, 7vw, 5rem);
 }
@@ -743,8 +900,60 @@ p {
   margin-top: 18px;
 }
 
+.record-detail-section-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .resume-download-button {
   width: auto;
+}
+
+.candidate-detail-edit-form {
+  display: grid;
+  gap: 16px;
+}
+
+.candidate-detail-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.candidate-detail-edit-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.candidate-detail-edit-field input,
+.candidate-detail-edit-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 11px 12px;
+  font: inherit;
+  resize: vertical;
+}
+
+.candidate-detail-edit-field input:focus,
+.candidate-detail-edit-field textarea:focus {
+  outline: 2px solid rgba(223, 166, 74, 0.28);
+  border-color: rgba(223, 166, 74, 0.55);
+}
+
+.candidate-detail-edit-field.wide-field {
+  grid-column: 1 / -1;
+}
+
+.candidate-detail-edit-actions {
+  margin-top: 0;
+  justify-content: flex-end;
 }
 
 .requirement-overview-grid {
@@ -788,15 +997,25 @@ p {
 }
 
 .requirement-table {
-  min-width: 2750px;
-  table-layout: auto;
+  min-width: 4620px;
+  table-layout: fixed;
 }
 
 .requirement-table th,
 .requirement-table td {
-  white-space: nowrap;
-  overflow-wrap: normal;
+  overflow: hidden;
   word-break: normal;
+  text-overflow: ellipsis;
+}
+
+.requirement-table td {
+  white-space: nowrap;
+}
+
+.requirement-table th {
+  white-space: normal;
+  overflow-wrap: normal;
+  line-height: 1.25;
 }
 
 .requirement-table th {
@@ -811,11 +1030,118 @@ p {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.requirement-table .requirement-position-cell {
-  min-width: 250px;
+.requirement-table .requirement-aging-column {
+  width: 90px;
+}
+
+.requirement-table .requirement-hire-type-column {
+  width: 150px;
+}
+
+.requirement-table .requirement-job-id-column {
+  width: 130px;
+}
+
+.requirement-table .requirement-posted-date-column {
+  width: 170px;
+}
+
+.requirement-table .requirement-business-unit-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-department-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-client-column {
+  width: 220px;
+}
+
+.requirement-table .requirement-domain-column {
+  width: 150px;
+}
+
+.requirement-table .requirement-position-column {
+  width: 360px;
+}
+
+.requirement-table td.requirement-business-unit-column,
+.requirement-table td.requirement-department-column,
+.requirement-table td.requirement-client-column,
+.requirement-table td.requirement-position-column,
+.requirement-table td.requirement-remarks-column,
+.requirement-table td.requirement-candidate-column,
+.requirement-table td.requirement-source-column,
+.requirement-table td.requirement-harmonized-role-column,
+.requirement-table td.requirement-recruiter-column {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.requirement-table .requirement-priority-column {
+  width: 130px;
+}
+
+.requirement-table .requirement-openings-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-status-column {
+  width: 210px;
+}
+
+.requirement-table .requirement-remarks-column {
+  width: 280px;
+}
+
+.requirement-table .requirement-candidate-column {
+  width: 230px;
+}
+
+.requirement-table .requirement-hold-date-column {
+  width: 160px;
+}
+
+.requirement-table .requirement-offer-stage-date-column {
+  width: 190px;
+}
+
+.requirement-table .requirement-offer-date-column {
+  width: 170px;
+}
+
+.requirement-table .requirement-joining-date-column {
+  width: 180px;
+}
+
+.requirement-table .requirement-candidate-ctc-column {
+  width: 180px;
+}
+
+.requirement-table .requirement-source-column {
+  width: 180px;
+}
+
+.requirement-table .requirement-harmonized-role-column {
+  width: 210px;
+}
+
+.requirement-table .requirement-recruiter-column {
+  width: 200px;
+}
+
+.requirement-table .requirement-original-posted-date-column {
+  width: 210px;
+}
+
+.requirement-table .requirement-row-actions-column {
+  width: 110px;
 }
 
 .requirement-table td strong {
+  display: block;
   font-family: inherit;
 }
 
@@ -6291,6 +6617,10 @@ body.light-mode .invoice-action-bar {
 }
 
 @media (max-width: 900px) {
+  .password-reset-grid {
+    grid-template-columns: 1fr;
+  }
+
   .performance-rating-form {
     padding: 24px;
   }
@@ -6536,6 +6866,7 @@ body.light-mode .invoice-action-bar {
   .bar-chart,
   .landing-grid,
   .form-grid,
+  .candidate-detail-edit-grid,
   .approval-flow,
   .payroll-donut-chart,
   .vendor-spend-chart,

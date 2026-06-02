@@ -1,4 +1,5 @@
 import json
+import sys
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
@@ -98,6 +99,22 @@ def row_to_dict(header, row):
         for idx in range(len(header))
         if normalize_text(header[idx])
     }
+
+
+def value_at_header(header, row, name, occurrence=1):
+    seen = 0
+    target = normalize_text(name)
+
+    for idx, item in enumerate(header):
+        if normalize_text(item) != target:
+            continue
+
+        seen += 1
+
+        if seen == occurrence:
+            return normalize_text(row[idx]) if idx < len(row) else ""
+
+    return ""
 
 
 def col_to_index(col):
@@ -211,62 +228,62 @@ def transform_candidates(rows):
 
     for row in rows[1:]:
         record = row_to_dict(header, row)
-        candidate_name = record.get("Candidate Name")
-        position = record.get("Position")
+        candidate_name = value_at_header(header, row, "Candidate Name")
+        position = value_at_header(header, row, "Position") or value_at_header(header, row, "Domain", 2)
 
         if not candidate_name or not position:
             continue
 
-        current_status = record.get("Candidate Current Status", "")
+        current_status = value_at_header(header, row, "Candidate Current Status")
         items.append(
             {
-                "jobId": record.get("Job Id", ""),
-                "recruiterId": record.get("Recruiter Id", ""),
-                "recruiterName": record.get("Recruiter Name", ""),
+                "jobId": value_at_header(header, row, "Job Id"),
+                "recruiterId": value_at_header(header, row, "Recruiter Id"),
+                "recruiterName": value_at_header(header, row, "Recruiter Name"),
                 "name": candidate_name,
                 "role": position,
                 "stage": stage_from_status(current_status),
                 "status": current_status or "Pipeline",
                 "tone": tone_from_status(current_status),
-                "source": record.get("Source", ""),
-                "businessUnit": record.get("Business Unit", ""),
-                "domain": record.get("Domain", ""),
-                "client": record.get("Client", ""),
-                "noticePeriod": record.get("Notice Period", ""),
-                "email": record.get("Candidate Email", ""),
-                "phone": record.get("Phone No.", ""),
-                "qualification": record.get("Qualification", ""),
-                "yearsOfExperience": normalize_float(record.get("Years of Exp")),
-                "previousCompany": record.get("Previous Company", ""),
-                "previousCtc": record.get("Previous CTC", ""),
-                "location": record.get("Location", ""),
-                "preferredLocation": record.get("Prefered Location", ""),
-                "expectedCtc": record.get("Expected CTC", ""),
-                "sourceDate": excel_date(record.get("Source Date")),
-                "screeningDate": excel_date(record.get("Screening Date")),
-                "screeningNotes": record.get("Screening Notes", ""),
-                "tech1Date": excel_date(record.get("Tech 1 date")),
-                "tech1Status": record.get("Tech 1 Status", ""),
-                "tech1Remarks": record.get("Tech 1 Remarks", ""),
-                "tech1Panel": record.get("Tech 1 Panel", ""),
-                "tech2Date": excel_date(record.get("Tech 2 date")),
-                "tech2Status": record.get("Tech 2 Status", ""),
-                "tech2Remarks": record.get("Tech 2 Remarks", ""),
-                "tech2Panel": record.get("Tech 2 Panel", ""),
-                "tech3Date": excel_date(record.get("Tech 3 date")),
-                "tech3Status": record.get("Tech 3 Status", ""),
-                "tech3Remarks": record.get("Tech 3 Remarks", ""),
-                "tech3Panel": record.get("Tech 3 Panel", ""),
-                "offerStageInputDate": excel_date(record.get("Offer Stage Input date")),
-                "documentCollectionDate": excel_date(record.get("Date of Document Collection")),
-                "approvalDate": excel_date(record.get("Date of Approval")),
-                "offerDate": excel_date(record.get("Offer Date")),
-                "offerStatus": record.get("Offer Status", ""),
-                "offerDecisionDate": excel_date(record.get("Date of Offer Accept/Reject")),
-                "offerAcceptStatus": record.get("Offer Accept Status", ""),
-                "joiningDate": excel_date(record.get("Date Of Joining")),
-                "joiningStatus": record.get("Joining Status", ""),
-                "offeredCtc": record.get("CTC Offered", ""),
+                "source": value_at_header(header, row, "Source"),
+                "businessUnit": value_at_header(header, row, "Business Unit"),
+                "domain": value_at_header(header, row, "Domain", 1),
+                "client": value_at_header(header, row, "Client"),
+                "noticePeriod": value_at_header(header, row, "Notice Period"),
+                "email": value_at_header(header, row, "Candidate Email"),
+                "phone": value_at_header(header, row, "Phone No."),
+                "qualification": value_at_header(header, row, "Qualification"),
+                "yearsOfExperience": normalize_float(value_at_header(header, row, "Years of Exp")),
+                "previousCompany": value_at_header(header, row, "Previous Company"),
+                "previousCtc": value_at_header(header, row, "Previous CTC"),
+                "location": value_at_header(header, row, "Location"),
+                "preferredLocation": value_at_header(header, row, "Prefered Location"),
+                "expectedCtc": value_at_header(header, row, "Expected CTC"),
+                "sourceDate": excel_date(value_at_header(header, row, "Source Date")),
+                "screeningDate": excel_date(value_at_header(header, row, "Screening Date")),
+                "screeningNotes": value_at_header(header, row, "Screening Notes"),
+                "tech1Date": excel_date(value_at_header(header, row, "Tech 1 date")),
+                "tech1Status": value_at_header(header, row, "Tech 1 Status"),
+                "tech1Remarks": value_at_header(header, row, "Tech 1 Remarks"),
+                "tech1Panel": value_at_header(header, row, "Tech 1 Panel"),
+                "tech2Date": excel_date(value_at_header(header, row, "Tech 2 date")),
+                "tech2Status": value_at_header(header, row, "Tech 2 Status"),
+                "tech2Remarks": value_at_header(header, row, "Tech 2 Remarks"),
+                "tech2Panel": value_at_header(header, row, "Tech 2 Panel"),
+                "tech3Date": excel_date(value_at_header(header, row, "Tech 3 date")),
+                "tech3Status": value_at_header(header, row, "Tech 3 Status"),
+                "tech3Remarks": value_at_header(header, row, "Tech 3 Remarks"),
+                "tech3Panel": value_at_header(header, row, "Tech 3 Panel"),
+                "offerStageInputDate": excel_date(value_at_header(header, row, "Offer Stage Input date")),
+                "documentCollectionDate": excel_date(value_at_header(header, row, "Date of Document Collection")),
+                "approvalDate": excel_date(value_at_header(header, row, "Date of Approval")),
+                "offerDate": excel_date(value_at_header(header, row, "Offer Date")),
+                "offerStatus": value_at_header(header, row, "Offer Status"),
+                "offerDecisionDate": excel_date(value_at_header(header, row, "Date of Offer Accept/Reject")),
+                "offerAcceptStatus": value_at_header(header, row, "Offer Accept Status"),
+                "joiningDate": excel_date(value_at_header(header, row, "Date Of Joining")),
+                "joiningStatus": value_at_header(header, row, "Joining Status"),
+                "offeredCtc": value_at_header(header, row, "CTC Offered"),
             }
         )
 
@@ -353,9 +370,9 @@ def write_json(path, payload):
 
 
 def main():
-    workbook_path = Path("sharepoint-import.xlsx")
+    workbook_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("sharepoint-import.xlsx")
     if not workbook_path.exists():
-        raise SystemExit("Workbook sharepoint-import.xlsx not found.")
+        raise SystemExit(f"Workbook {workbook_path} not found.")
 
     sheets = load_workbook_rows(workbook_path)
     output_dir = Path("data") / "recruitment"

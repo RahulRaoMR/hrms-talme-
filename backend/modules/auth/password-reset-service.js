@@ -43,9 +43,14 @@ function getDisplayName(email) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function normalizeRole(role) {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  return ["employee", "employeehrms", "employee hrms"].includes(normalizedRole) ? "employee" : normalizedRole;
+}
+
 export async function requestPasswordReset(payload) {
   const identifier = normalizeIdentifier(payload?.identifier || payload?.email);
-  const role = String(payload?.role || "").trim().toLowerCase();
+  const role = normalizeRole(payload?.role);
   let email = normalizeEmail(payload?.email);
   let employeeContext = null;
 

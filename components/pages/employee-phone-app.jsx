@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api-client";
+import { clearSuiteSession } from "@/lib/auth-session";
 
 const tabs = [
   { id: "calendar", label: "Calendar", icon: "CAL" },
@@ -23,6 +24,7 @@ const dayStatus = {
 
 const shiftAssignmentsStorageKey = "talme-employee-shift-assignments";
 const employeeSessionStorageKey = "talme-employee-app-employee-id";
+const punchActivityApiPath = "/api/punch-activity";
 
 const defaultShiftAssignment = {
   shiftName: "General",
@@ -209,12 +211,12 @@ function getCalendarStatus(monthDate, day, today, records = []) {
   return isApril2026 ? dayStatus[day] || "weekoff" : "weekoff";
 }
 
-function nowTime() {
+function nowTime(date = new Date()) {
   return new Intl.DateTimeFormat("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true
-  }).format(new Date()).toLowerCase();
+  }).format(date).toLowerCase();
 }
 
 function formatDisplayDate(date) {
@@ -348,6 +350,80 @@ function getActivityState(records = []) {
 
 function sortActivity(records = []) {
   return [...records].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+}
+
+function normalizeActivityEntry(entry = {}) {
+  return {
+    ...entry,
+    type: entry.type,
+    time: entry.time || nowTime(new Date(entry.timestamp || entry.createdAt || Date.now())),
+    timestamp: entry.timestamp || entry.createdAt
+  };
+}
+
+function getActivityEntryKey(entry = {}) {
+  return [entry.employeeId || "", entry.workDate || "", entry.type || "", entry.timestamp || ""].join("|");
+}
+
+function mergeActivityRecords(records = []) {
+  const entries = [];
+  const seen = new Set();
+
+  records.map(normalizeActivityEntry).forEach((entry) => {
+    const key = getActivityEntryKey(entry);
+
+    if (!entry.type || !entry.timestamp || seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    entries.push(entry);
+  });
+
+  return sortActivity(entries).reverse();
+}
+
+function buildActivityFromSession(session, employeeId, employeeName, todayKey) {
+  if (!session?.startAt) {
+    return [];
+  }
+
+  const punchInTime = new Date(session.startAt);
+
+  if (Number.isNaN(punchInTime.getTime()) || formatStorageDate(punchInTime) !== todayKey) {
+    return [];
+  }
+
+  const punchIn = {
+    employeeId,
+    employeeName,
+    type: "Punch In",
+    time: nowTime(punchInTime),
+    timestamp: punchInTime.toISOString(),
+    workDate: todayKey
+  };
+
+  if (!session.breakStartedAt) {
+    return [punchIn];
+  }
+
+  const punchOutTime = new Date(session.breakStartedAt);
+
+  if (Number.isNaN(punchOutTime.getTime())) {
+    return [punchIn];
+  }
+
+  return [
+    punchIn,
+    {
+      employeeId,
+      employeeName,
+      type: "Punch Out",
+      time: nowTime(punchOutTime),
+      timestamp: punchOutTime.toISOString(),
+      workDate: todayKey
+    }
+  ];
 }
 
 function formatClockParts(totalSeconds) {
@@ -766,17 +842,56 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   }, [data.shiftAssignments]);
 
   useEffect(() => {
+    let cancelled = false;
     const storedActivity = window.localStorage.getItem(activityStorageKey);
     const storedSession = window.localStorage.getItem(sessionStorageKey);
+    const localActivity = storedActivity ? JSON.parse(storedActivity) : [];
+    const parsedSession = storedSession ? JSON.parse(storedSession) : null;
+    const sessionBackfillActivity = buildActivityFromSession(parsedSession, employeeId, employeeName, todayKey);
+    const initialDatabaseActivity = (data.punchActivity || []).filter((entry) =>
+      normalizeEmployeeId(entry.employeeId) === normalizeEmployeeId(employeeId) &&
+      String(entry.workDate || "") === todayKey
+    );
+    const initialActivity = mergeActivityRecords([...initialDatabaseActivity, ...localActivity, ...sessionBackfillActivity]);
 
-    setActivity(storedActivity ? JSON.parse(storedActivity) : []);
+    setActivity(initialActivity);
     setWorkSession(storedSession ? JSON.parse(storedSession) : {
       startAt: null,
       endAt: null,
       breakStartedAt: null,
       breakSeconds: 0
     });
-  }, [activityStorageKey, sessionStorageKey]);
+
+    sessionBackfillActivity.forEach((entry) => {
+      if (!initialDatabaseActivity.some((item) => getActivityEntryKey(item) === getActivityEntryKey(entry))) {
+        persistPunchActivity(entry);
+      }
+    });
+
+    async function refreshPunchActivity() {
+      try {
+        const response = await fetch(`${punchActivityApiPath}?employeeId=${encodeURIComponent(employeeId)}&date=${todayKey}`, {
+          cache: "no-store"
+        });
+
+        if (!response.ok) return;
+
+        const rows = await response.json();
+
+        if (!cancelled) {
+          setActivity(mergeActivityRecords([...(Array.isArray(rows) ? rows : []), ...localActivity, ...sessionBackfillActivity]));
+        }
+      } catch {
+        // Local punch activity remains available when the API is offline.
+      }
+    }
+
+    refreshPunchActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activityStorageKey, data.punchActivity, employeeId, sessionStorageKey, todayKey]);
 
   useEffect(() => {
     if (activity.length) {
@@ -842,8 +957,39 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
 
   const [workHours, workMinutes, workSeconds] = formatClockParts(elapsedWorkSeconds);
 
+  async function persistPunchActivity(entry) {
+    try {
+      await fetch(punchActivityApiPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId,
+          employeeName,
+          type: entry.type,
+          timestamp: entry.timestamp,
+          time: entry.time,
+          workDate: entry.workDate,
+          geoCoordinates: employee.location || employee.employeeDetails?.punchInBranch || employee.employeeDetails?.masterBranch || undefined
+        })
+      });
+    } catch (error) {
+      console.error("Unable to persist punch activity.", error);
+    }
+  }
+
   function addActivity(type) {
-    setActivity((current) => [{ type, time: nowTime(), timestamp: new Date().toISOString() }, ...current]);
+    const punchTime = new Date();
+    const entry = {
+      employeeId,
+      employeeName,
+      type,
+      time: nowTime(punchTime),
+      timestamp: punchTime.toISOString(),
+      workDate: formatStorageDate(punchTime)
+    };
+
+    setActivity((current) => mergeActivityRecords([entry, ...current]));
+    persistPunchActivity(entry);
   }
 
   function togglePunch() {
@@ -1329,8 +1475,10 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
               <button
                 className="logout"
                 onClick={() => {
+                  clearSuiteSession();
                   window.localStorage.removeItem(employeeSessionStorageKey);
-                  router.push("/employee-app/login");
+                  router.replace("/employee-app/login");
+                  router.refresh();
                 }}
                 type="button"
               >

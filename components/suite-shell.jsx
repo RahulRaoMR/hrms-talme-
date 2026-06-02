@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
 import { canAccess, resolveRole } from "@/lib/permissions";
-import { clearSuiteSession, saveSuiteSession } from "@/lib/auth-session";
+import { clearSuiteSession } from "@/lib/auth-session";
 
 const previewSession = {
   token: "local-preview",
@@ -33,7 +33,6 @@ export default function SuiteShell({
   const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
-    saveSuiteSession(previewSession);
     const savedTheme = window.localStorage.getItem("talme-theme-mode");
     const nextLightMode = savedTheme ? savedTheme === "light" : true;
     setLightMode(nextLightMode);
@@ -163,7 +162,8 @@ export default function SuiteShell({
               className="ghost-button"
               onClick={() => {
                 clearSuiteSession();
-                router.push("/");
+                router.replace("/login");
+                router.refresh();
               }}
               type="button"
             >

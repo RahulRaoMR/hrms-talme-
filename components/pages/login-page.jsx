@@ -21,11 +21,11 @@ const roleOptions = {
     destination: "/dashboard"
   },
   employeeHrms: {
-    label: "Employee HRMS",
+    label: "Employee Attendance",
     identifierLabel: "Employee ID",
     identifier: "",
     password: "",
-    destination: "/hrms"
+    destination: "/employee-app"
   },
   payroll: {
     label: "Payroll",
@@ -51,7 +51,19 @@ export default function LoginPageClient() {
     password: roleOptions.admin.password,
     role: "admin"
   });
+  const [resetForm, setResetForm] = useState({
+    open: false,
+    step: "request",
+    identifier: "",
+    email: "",
+    otp: "",
+    password: "",
+    confirmPassword: "",
+    message: "",
+    error: ""
+  });
   const [submitting, setSubmitting] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedRole = roleOptions[formState.role];
   const selectedCredentials = {
@@ -61,10 +73,124 @@ export default function LoginPageClient() {
   };
   const usesEmployeeIdLogin = ["employee", "employeeHrms"].includes(formState.role);
 
+  function openPasswordReset() {
+    setResetForm({
+      open: true,
+      step: "request",
+      identifier: formState.identifier,
+      email: "",
+      otp: "",
+      password: "",
+      confirmPassword: "",
+      message: "",
+      error: ""
+    });
+  }
+
+  async function requestPasswordReset() {
+    setResetSubmitting(true);
+    setResetForm((current) => ({ ...current, error: "", message: "" }));
+
+    try {
+      const identifier = resetForm.identifier.trim();
+
+      if (!identifier) {
+        throw new Error(usesEmployeeIdLogin ? "Enter Employee ID first." : "Enter corporate email first.");
+      }
+
+      const response = await fetch("/api/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier,
+          email: identifier,
+          role: formState.role
+        })
+      });
+      const payload = await response.json().catch(() => ({
+        error: "Unable to send OTP. Check email settings and try again."
+      }));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to send OTP.");
+      }
+
+      setResetForm((current) => ({
+        ...current,
+        step: "confirm",
+        email: payload.email || identifier,
+        message: payload.message || "OTP sent to your registered email account.",
+        error: ""
+      }));
+    } catch (resetError) {
+      setResetForm((current) => ({
+        ...current,
+        error: resetError?.message || "Unable to send OTP."
+      }));
+    } finally {
+      setResetSubmitting(false);
+    }
+  }
+
+  async function confirmPasswordReset() {
+    setResetSubmitting(true);
+    setResetForm((current) => ({ ...current, error: "", message: "" }));
+
+    try {
+      if (resetForm.password !== resetForm.confirmPassword) {
+        throw new Error("New password and confirm password must match.");
+      }
+
+      const response = await fetch("/api/auth/password-reset/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: resetForm.email,
+          otp: resetForm.otp,
+          password: resetForm.password,
+          role: formState.role
+        })
+      });
+      const payload = await response.json().catch(() => ({
+        error: "Unable to reset password. Please try again."
+      }));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to reset password.");
+      }
+
+      setFormState((current) => ({
+        ...current,
+        identifier: resetForm.identifier,
+        password: resetForm.password
+      }));
+      setResetForm((current) => ({
+        ...current,
+        step: "done",
+        message: payload.message || "Password changed successfully. You can sign in now.",
+        error: ""
+      }));
+    } catch (resetError) {
+      setResetForm((current) => ({
+        ...current,
+        error: resetError?.message || "Unable to reset password."
+      }));
+    } finally {
+      setResetSubmitting(false);
+    }
+  }
+
   return (
-    <main className="landing-body">
+    <main className="landing-body login-body">
       <section className="landing-shell">
-        <article className="landing-card">
+        <article className="landing-card login-card">
+          <div className="login-brand">
+            <img src="/talme-logo.png" alt="Talme Technologies" />
+            <div>
+              <strong>Talme</strong>
+              <span>HRMS Suite</span>
+            </div>
+          </div>
           <div className="landing-badge">Secure Enterprise Access</div>
           <h1>Talme Login</h1>
           <p>
@@ -109,7 +235,7 @@ export default function LoginPageClient() {
                 }
 
                 const loginEmployeeId =
-                  formState.role === "employee"
+                  usesEmployeeIdLogin
                     ? payload?.user?.employeeId || selectedCredentials.email.trim()
                     : "";
                 const loginDestination = loginEmployeeId
@@ -151,7 +277,7 @@ export default function LoginPageClient() {
                 >
                   <option value="admin">Enterprise Admin</option>
                   <option value="hr">HR</option>
-                  <option value="employeeHrms">Employee HRMS</option>
+                  <option value="employeeHrms">Employee Attendance</option>
                   <option value="payroll">Payroll</option>
                   <option value="employee">Employee</option>
                 </select>
@@ -174,8 +300,89 @@ export default function LoginPageClient() {
                     setFormState((current) => ({ ...current, password: event.target.value }))
                   }
                 />
+                <button className="forgot-password-button" onClick={openPasswordReset} type="button">
+                  Forgot Password?
+                </button>
               </label>
             </div>
+
+            {resetForm.open ? (
+              <div className="password-reset-panel">
+                {resetForm.step === "request" ? (
+                  <>
+                    <div className="password-reset-head">
+                      <strong>Reset Password</strong>
+                      <button onClick={() => setResetForm((current) => ({ ...current, open: false }))} type="button">Close</button>
+                    </div>
+                    <label>
+                      <span>{usesEmployeeIdLogin ? "Employee ID" : "Registered Email"}</span>
+                      <input
+                        value={resetForm.identifier}
+                        onChange={(event) => setResetForm((current) => ({ ...current, identifier: event.target.value }))}
+                      />
+                    </label>
+                    <div className="password-reset-actions">
+                      <button className="primary-button" disabled={resetSubmitting} onClick={requestPasswordReset} type="button">
+                        {resetSubmitting ? "Sending OTP..." : "Send OTP"}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {resetForm.step === "confirm" ? (
+                  <>
+                    <div className="password-reset-head">
+                      <strong>Enter OTP</strong>
+                      <button onClick={requestPasswordReset} disabled={resetSubmitting} type="button">Resend</button>
+                    </div>
+                    <p className="password-reset-note">OTP sent to {resetForm.email}.</p>
+                    <div className="password-reset-grid">
+                      <label>
+                        <span>OTP</span>
+                        <input
+                          inputMode="numeric"
+                          value={resetForm.otp}
+                          onChange={(event) => setResetForm((current) => ({ ...current, otp: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>New Password</span>
+                        <input
+                          type="password"
+                          value={resetForm.password}
+                          onChange={(event) => setResetForm((current) => ({ ...current, password: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>Confirm Password</span>
+                        <input
+                          type="password"
+                          value={resetForm.confirmPassword}
+                          onChange={(event) => setResetForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                        />
+                      </label>
+                    </div>
+                    <div className="password-reset-actions">
+                      <button className="primary-button" disabled={resetSubmitting} onClick={confirmPasswordReset} type="button">
+                        {resetSubmitting ? "Resetting..." : "Reset Password"}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {resetForm.step === "done" ? (
+                  <div className="password-reset-done">
+                    <strong>Password Updated</strong>
+                    <button className="primary-button" onClick={() => setResetForm((current) => ({ ...current, open: false }))} type="button">
+                      Back to Login
+                    </button>
+                  </div>
+                ) : null}
+
+                {resetForm.message ? <p className="password-reset-message">{resetForm.message}</p> : null}
+                {resetForm.error ? <p className="form-error">{resetForm.error}</p> : null}
+              </div>
+            ) : null}
 
             <div className="landing-actions">
               <button className="primary-button" disabled={submitting} type="submit">

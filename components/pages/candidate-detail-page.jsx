@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import RecordDetailPage from "@/components/pages/record-detail-page";
+import { updateCandidateAction } from "@/lib/api-actions";
 import { storeKeys } from "@/lib/demo-data";
 
 const selectedCandidateKey = "talme-selected-candidate";
@@ -66,6 +67,12 @@ const knownCandidateFieldKeys = new Set([
   ...candidateFields.map(([, key]) => key),
   ...hiddenCandidateFieldKeys
 ]);
+const interviewTimelineFields = candidateFields.slice(28, 40);
+const offerAndJoiningFields = candidateFields.slice(40, 50);
+const editableSectionFields = {
+  interviewTimeline: interviewTimelineFields,
+  offerAndJoining: offerAndJoiningFields
+};
 
 function formatValue(value, label) {
   if (value === null || value === undefined || value === "") return "-";
@@ -76,6 +83,7 @@ function formatValue(value, label) {
 function fieldItems(candidate, fields) {
   return fields.map(([label, key]) => ({
     label,
+    key,
     value: formatValue(candidate?.[key], label)
   }));
 }
@@ -116,6 +124,22 @@ export function rememberCandidateForDetail(candidate) {
   } catch {}
 }
 
+function updateBrowserCandidate(candidate) {
+  rememberCandidateForDetail(candidate);
+
+  try {
+    const storedCandidates = readJson(window.localStorage.getItem(storeKeys.candidates));
+    if (!Array.isArray(storedCandidates)) return;
+
+    window.localStorage.setItem(
+      storeKeys.candidates,
+      JSON.stringify(
+        storedCandidates.map((item) => (String(item.id) === String(candidate.id) ? { ...item, ...candidate } : item))
+      )
+    );
+  } catch {}
+}
+
 function downloadCandidateResume(candidate) {
   if (!candidate?.resumeDataUrl) return;
 
@@ -130,6 +154,9 @@ function downloadCandidateResume(candidate) {
 export default function CandidateDetailPageClient({ id, initialCandidate = null }) {
   const [candidate, setCandidate] = useState(initialCandidate);
   const [checkedBrowserStore, setCheckedBrowserStore] = useState(Boolean(initialCandidate));
+  const [editingSection, setEditingSection] = useState("");
+  const [draft, setDraft] = useState({});
+  const [saveState, setSaveState] = useState({ saving: false, message: "" });
 
   useEffect(() => {
     if (candidate) return;
@@ -140,6 +167,99 @@ export default function CandidateDetailPageClient({ id, initialCandidate = null 
     }
     setCheckedBrowserStore(true);
   }, [candidate, id]);
+
+  const startSectionEdit = (sectionKey) => {
+    const fields = editableSectionFields[sectionKey] || [];
+
+    setEditingSection(sectionKey);
+    setSaveState({ saving: false, message: "" });
+    setDraft(
+      fields.reduce((values, [, key]) => {
+        values[key] = candidate?.[key] ?? "";
+        return values;
+      }, {})
+    );
+  };
+
+  const cancelSectionEdit = () => {
+    setEditingSection("");
+    setDraft({});
+    setSaveState({ saving: false, message: "" });
+  };
+
+  const updateDraft = (field, value) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveSectionEdit = async (sectionKey) => {
+    const fields = editableSectionFields[sectionKey] || [];
+    const patch = fields.reduce((values, [, key]) => {
+      values[key] = draft[key] ?? "";
+      return values;
+    }, {});
+
+    setSaveState({ saving: true, message: "" });
+
+    try {
+      const updated = await updateCandidateAction(candidate.id, patch);
+      const nextCandidate = { ...candidate, ...patch, ...updated };
+      setCandidate(nextCandidate);
+      updateBrowserCandidate(nextCandidate);
+      setEditingSection("");
+      setDraft({});
+      setSaveState({ saving: false, message: "Saved." });
+    } catch (error) {
+      setSaveState({ saving: false, message: error?.message || "Unable to save candidate details." });
+    }
+  };
+
+  const renderEditableSection = (sectionKey, fields) => {
+    const isEditing = editingSection === sectionKey;
+
+    if (!isEditing) return null;
+
+    return (
+      <form className="candidate-detail-edit-form" onSubmit={(event) => {
+        event.preventDefault();
+        saveSectionEdit(sectionKey);
+      }}>
+        <div className="candidate-detail-edit-grid">
+          {fields.map(([label, key]) => {
+            const isRemark = /remark|note/i.test(label);
+            const isDate = /date/i.test(label);
+            const value = draft[key] ?? "";
+
+            return (
+              <label className={isRemark ? "candidate-detail-edit-field wide-field" : "candidate-detail-edit-field"} key={key}>
+                <span>{label}</span>
+                {isRemark ? (
+                  <textarea value={value} onChange={(event) => updateDraft(key, event.target.value)} rows={4} />
+                ) : (
+                  <input type={isDate ? "date" : "text"} value={value} onChange={(event) => updateDraft(key, event.target.value)} />
+                )}
+              </label>
+            );
+          })}
+        </div>
+        {saveState.message ? <p className="form-note">{saveState.message}</p> : null}
+        <div className="modal-actions candidate-detail-edit-actions">
+          <button className="ghost-button" onClick={cancelSectionEdit} type="button">
+            Cancel
+          </button>
+          <button className="primary-button" disabled={saveState.saving} type="submit">
+            {saveState.saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
+    );
+  };
+
+  const editableSectionActions = (sectionKey) =>
+    editingSection === sectionKey ? null : (
+      <button className="mini-button" onClick={() => startSectionEdit(sectionKey)} type="button">
+        Edit
+      </button>
+    );
 
   const pageData = useMemo(() => {
     if (!candidate) return null;
@@ -158,12 +278,16 @@ export default function CandidateDetailPageClient({ id, initialCandidate = null 
         {
           eyebrow: "Candidate Data",
           title: "Interview Timeline",
-          items: fieldItems(candidate, candidateFields.slice(28, 40))
+          items: fieldItems(candidate, interviewTimelineFields),
+          actions: editableSectionActions("interviewTimeline"),
+          content: renderEditableSection("interviewTimeline", interviewTimelineFields)
         },
         {
           eyebrow: "Candidate Data",
           title: "Offer And Joining",
-          items: fieldItems(candidate, candidateFields.slice(40, 50))
+          items: fieldItems(candidate, offerAndJoiningFields),
+          actions: editableSectionActions("offerAndJoining"),
+          content: renderEditableSection("offerAndJoining", offerAndJoiningFields)
         },
         {
           eyebrow: "Record Data",
@@ -185,7 +309,7 @@ export default function CandidateDetailPageClient({ id, initialCandidate = null 
       details: fieldItems(candidate, candidateFields.slice(0, 17)).map((item) => [item.label, item.value]),
       sections
     };
-  }, [candidate]);
+  }, [candidate, draft, editingSection, saveState]);
 
   if (!candidate) {
     return (

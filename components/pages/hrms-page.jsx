@@ -252,10 +252,21 @@ async function fetchResourceRows(path, key) {
   return normalizeResourceRows(await response.json(), key);
 }
 
+async function fetchPunchActivityRows(query = "") {
+  const response = await fetch(`/api/punch-activity${query}`, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`/api/punch-activity failed with ${response.status}`);
+  }
+
+  return normalizeResourceRows(await response.json(), "punchActivity");
+}
+
 export default function HrmsPageClient({ data }) {
   const [employees, setEmployees] = useState(data?.employees || []);
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
   const [attendanceRecords, setAttendanceRecords] = useState(data?.attendanceRecords || []);
+  const [punchActivityRecords, setPunchActivityRecords] = useState(data?.punchActivity || []);
   const [quickAttendance, setQuickAttendance] = useState(() => ({
     dateLabel: "Today",
     rows: [],
@@ -293,11 +304,12 @@ export default function HrmsPageClient({ data }) {
 
     async function refreshHrmsResources() {
       try {
-        const [nextEmployees, nextLeaveRequests, nextAttendanceRecords, nextDocuments] = await Promise.all([
+        const [nextEmployees, nextLeaveRequests, nextAttendanceRecords, nextDocuments, nextPunchActivity] = await Promise.all([
           fetchResourceRows("/api/employees", "employees"),
           fetchResourceRows("/api/leave-requests", "leaveRequests"),
           fetchResourceRows("/api/attendance-records", "attendanceRecords"),
-          fetchResourceRows("/api/documents", "documents")
+          fetchResourceRows("/api/documents", "documents"),
+          fetchPunchActivityRows()
         ]);
 
         if (cancelled) return;
@@ -306,6 +318,7 @@ export default function HrmsPageClient({ data }) {
         setLeaveRequests(nextLeaveRequests);
         setAttendanceRecords(nextAttendanceRecords);
         setDocuments(nextDocuments);
+        setPunchActivityRecords(nextPunchActivity);
       } catch (error) {
         console.error("Unable to refresh HRMS resources.", error);
       }
@@ -320,7 +333,7 @@ export default function HrmsPageClient({ data }) {
 
   useEffect(() => {
     const syncQuickAttendance = () => {
-      setQuickAttendance(buildQuickAttendanceDashboard(sortEmployeesById(employees)));
+      setQuickAttendance(buildQuickAttendanceDashboard(sortEmployeesById(employees), punchActivityRecords));
     };
 
     syncQuickAttendance();
@@ -334,7 +347,32 @@ export default function HrmsPageClient({ data }) {
       window.removeEventListener("focus", syncQuickAttendance);
       window.clearInterval(refreshTimer);
     };
-  }, [employees]);
+  }, [employees, punchActivityRecords]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshPunchActivity() {
+      try {
+        const rows = await fetchPunchActivityRows();
+
+        if (!cancelled) {
+          setPunchActivityRecords(rows);
+        }
+      } catch (error) {
+        console.error("Unable to refresh punch activity.", error);
+      }
+    }
+
+    window.addEventListener("focus", refreshPunchActivity);
+    const timer = window.setInterval(refreshPunchActivity, 15000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshPunchActivity);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const generateSalarySheet = () => {
     setSalarySheet(generateSalaryRows(sortedEmployees, attendanceRecords));
@@ -837,6 +875,7 @@ export default function HrmsPageClient({ data }) {
         employee={attendanceMasterEmployee}
         month={attendanceMasterMonth}
         onClose={() => setAttendanceMasterEmployee(null)}
+        punchActivityRecords={punchActivityRecords}
         records={attendanceRecords}
         setMonth={setAttendanceMasterMonth}
       />
@@ -1013,9 +1052,9 @@ export default function HrmsPageClient({ data }) {
   );
 }
 
-function buildQuickAttendanceDashboard(employees) {
+function buildQuickAttendanceDashboard(employees, punchActivityRecords = []) {
   const now = new Date();
-  const rows = employees.map((employee) => buildQuickAttendanceRow(employee, now));
+  const rows = employees.map((employee) => buildQuickAttendanceRow(employee, now, punchActivityRecords));
 
   return {
     dateLabel: formatAttendanceDate(now),
@@ -1029,8 +1068,8 @@ function buildQuickAttendanceDashboard(employees) {
   };
 }
 
-function buildQuickAttendanceRow(employee, now) {
-  const activity = readEmployeePunchActivity(employee.employeeId, now);
+function buildQuickAttendanceRow(employee, now, punchActivityRecords = []) {
+  const activity = readEmployeePunchActivity(employee.employeeId, now, punchActivityRecords);
   const sortedActivity = sortPunchActivity(activity);
   const firstPunch = sortedActivity[0];
   const lastPunch = sortedActivity[sortedActivity.length - 1];
@@ -1052,21 +1091,98 @@ function buildQuickAttendanceRow(employee, now) {
   };
 }
 
-function readEmployeePunchActivity(employeeId, date) {
-  if (typeof window === "undefined" || !employeeId) {
+function readEmployeePunchActivity(employeeId, date, punchActivityRecords = []) {
+  if (!employeeId) {
     return [];
   }
 
-  const storageKey = `talme-employee-phone-activity-${employeeId}-${formatAttendanceStorageDate(date)}`;
+  const dateKey = formatAttendanceStorageDate(date);
+  const normalizedEmployeeId = String(employeeId).trim().toLowerCase();
+  const databaseActivity = punchActivityRecords
+    .filter((entry) =>
+      String(entry.employeeId || "").trim().toLowerCase() === normalizedEmployeeId &&
+      String(entry.workDate || "").trim() === dateKey
+    )
+    .map(normalizePunchActivityEntry);
+
+  if (typeof window === "undefined") {
+    return databaseActivity;
+  }
+
+  const storageKey = `talme-employee-phone-activity-${employeeId}-${dateKey}`;
+  const sessionKey = `talme-employee-phone-session-${employeeId}-${dateKey}`;
 
   try {
     const storedActivity = window.localStorage.getItem(storageKey);
+    const storedSession = window.localStorage.getItem(sessionKey);
     const parsedActivity = storedActivity ? JSON.parse(storedActivity) : [];
+    const parsedSession = storedSession ? JSON.parse(storedSession) : null;
+    const fallbackActivity = Array.isArray(parsedActivity) ? parsedActivity : [];
+    const sessionActivity = buildPunchActivityFromSession(parsedSession, employeeId, dateKey);
 
-    return Array.isArray(parsedActivity) ? parsedActivity : [];
+    return mergePunchActivity([...databaseActivity, ...fallbackActivity, ...sessionActivity]);
   } catch {
+    return databaseActivity;
+  }
+}
+
+function normalizePunchActivityEntry(entry) {
+  return {
+    ...entry,
+    type: entry.type,
+    time: entry.time || formatPunchTime(entry.timestamp),
+    timestamp: entry.timestamp || entry.createdAt
+  };
+}
+
+function buildPunchActivityFromSession(session, employeeId, dateKey) {
+  if (!session?.startAt) {
     return [];
   }
+
+  const punchIn = {
+    employeeId,
+    type: "Punch In",
+    timestamp: session.startAt,
+    time: formatPunchTime(session.startAt),
+    workDate: dateKey
+  };
+
+  if (!session.breakStartedAt) {
+    return [punchIn];
+  }
+
+  return [
+    punchIn,
+    {
+      employeeId,
+      type: "Punch Out",
+      timestamp: session.breakStartedAt,
+      time: formatPunchTime(session.breakStartedAt),
+      workDate: dateKey
+    }
+  ];
+}
+
+function getPunchActivityKey(entry = {}) {
+  return [entry.employeeId || "", entry.workDate || "", entry.type || "", entry.timestamp || ""].join("|");
+}
+
+function mergePunchActivity(records = []) {
+  const seen = new Set();
+
+  return records
+    .map(normalizePunchActivityEntry)
+    .filter((entry) => {
+      const key = getPunchActivityKey(entry);
+
+      if (!entry.type || !entry.timestamp || seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
 }
 
 function sortPunchActivity(records = []) {
@@ -1156,7 +1272,7 @@ function formatDuration(totalSeconds) {
   return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
 }
 
-function buildEmployeeAttendanceMasterRows(employee, month) {
+function buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords = []) {
   const { year, monthIndex } = parseMonthValue(month);
   const monthDays = new Date(year, monthIndex + 1, 0).getDate();
   const now = new Date();
@@ -1164,7 +1280,7 @@ function buildEmployeeAttendanceMasterRows(employee, month) {
 
   for (let day = monthDays; day >= 1; day -= 1) {
     const date = new Date(year, monthIndex, day);
-    const activity = sortPunchActivity(readEmployeePunchActivity(employee.employeeId, date));
+    const activity = sortPunchActivity(readEmployeePunchActivity(employee.employeeId, date, punchActivityRecords));
     const punchIn = activity.find((entry) => entry.type === "Punch In");
     const punchOut = [...activity].reverse().find((entry) => entry.type === "Punch Out");
     const hasActivity = Boolean(activity.length);
@@ -1986,9 +2102,9 @@ function EmployeeDetailsModal({ employee, onClose }) {
   );
 }
 
-function AttendanceMasterModal({ employee, month, onClose, records, setMonth }) {
+function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords = [], records, setMonth }) {
   const [isDownloading, setIsDownloading] = useState(false);
-  const rows = employee ? buildEmployeeAttendanceMasterRows(employee, month) : [];
+  const rows = employee ? buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords) : [];
   const monthRecord = employee ? findEmployeeMonthAttendanceRecord(employee, month, records) : null;
   const monthLabel = formatMonthLabel(month);
 

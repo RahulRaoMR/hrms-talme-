@@ -218,6 +218,22 @@ model AttendanceRecord {
   updatedAt DateTime @updatedAt
 }
 
+model PunchActivity {
+  id             String   @id @default(cuid())
+  employeeId     String
+  employeeName   String?
+  type           String
+  timestamp      DateTime
+  time           String
+  workDate       String
+  geoCoordinates Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([employeeId, workDate])
+  @@index([timestamp])
+}
+
 model VendorWorker {
   id         String   @id @default(cuid())
   workerId   String   @unique

@@ -20,9 +20,9 @@ export async function POST(request) {
     );
   }
 
-  if (expectedRole === "Employee HRMS" && identifier.includes("@")) {
+  if (isEmployeeIdLoginRole(expectedRole) && identifier.includes("@")) {
     return Response.json(
-      { error: "Employee HRMS login requires Employee ID, not email." },
+      { error: "Employee login requires Employee ID, not email." },
       { status: 400 }
     );
   }
@@ -86,12 +86,17 @@ function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
     hr: "HR",
-    employeeHrms: "Employee HRMS",
+    employeeHrms: "Employee",
     payroll: "Payroll",
     employee: "Employee"
   };
 
-  return roles[role] || role || "";
+  const normalizedRole = roles[role] || role || "";
+  return normalizedRole === "Employee HRMS" ? "Employee" : normalizedRole;
+}
+
+function isEmployeeIdLoginRole(role) {
+  return ["Employee", "Employee HRMS"].includes(role);
 }
 
 async function getLocalLoginUser(identifier, password, expectedRole) {
