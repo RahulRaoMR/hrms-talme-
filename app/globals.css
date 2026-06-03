@@ -677,6 +677,163 @@ p {
   box-shadow: var(--shadow);
 }
 
+.login-body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(119, 216, 203, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(214, 176, 106, 0.16), transparent 22%),
+    linear-gradient(180deg, #eef4fb 0%, #f7fafc 52%, #edf2f8 100%);
+  color: #142132;
+}
+
+.login-card {
+  background: rgba(248, 251, 255, 0.96);
+  border-color: rgba(16, 27, 42, 0.1);
+  box-shadow: 0 24px 70px rgba(16, 27, 42, 0.16);
+  color: #142132;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.login-brand img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(16, 27, 42, 0.1);
+  padding: 6px;
+}
+
+.login-brand strong,
+.login-brand span {
+  display: block;
+}
+
+.login-brand strong {
+  color: #142132;
+  font-size: 1.18rem;
+  font-weight: 900;
+}
+
+.login-brand span {
+  margin-top: 2px;
+  color: #566779;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.login-card h1 {
+  color: #142132;
+}
+
+.login-card p,
+.login-card label span,
+.login-card .landing-modules span {
+  color: #566779;
+}
+
+.login-card input,
+.login-card select {
+  background: #ffffff;
+  border-color: rgba(16, 27, 42, 0.12);
+  color: #142132;
+}
+
+.login-card select option {
+  background: #ffffff;
+  color: #142132;
+}
+
+.login-card .landing-modules span {
+  background: rgba(16, 27, 42, 0.04);
+  border-color: rgba(16, 27, 42, 0.1);
+}
+
+.login-card .form-error {
+  color: #b23b28;
+}
+
+.forgot-password-button {
+  margin-top: 10px;
+  padding: 0;
+  background: transparent;
+  color: #9a6b21;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.password-reset-panel {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid rgba(16, 27, 42, 0.1);
+  border-radius: 18px;
+  background: rgba(16, 27, 42, 0.035);
+}
+
+.password-reset-head,
+.password-reset-actions,
+.password-reset-done {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.password-reset-head {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.password-reset-head strong,
+.password-reset-done strong {
+  color: #142132;
+  font-size: 1rem;
+}
+
+.password-reset-head button {
+  padding: 0;
+  background: transparent;
+  color: #9a6b21;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.password-reset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.password-reset-actions {
+  margin-top: 16px;
+}
+
+.password-reset-note,
+.password-reset-message {
+  color: #566779;
+  line-height: 1.6;
+}
+
+.password-reset-note {
+  margin-bottom: 14px;
+}
+
+.password-reset-message {
+  margin-top: 12px;
+}
+
+.password-reset-done {
+  justify-content: space-between;
+}
+
 .landing-card h1 {
   font-size: clamp(3rem, 7vw, 5rem);
 }
@@ -6401,6 +6558,10 @@ body.light-mode .invoice-action-bar {
 }
 
 @media (max-width: 900px) {
+  .password-reset-grid {
+    grid-template-columns: 1fr;
+  }
+
   .performance-rating-form {
     padding: 24px;
   }
