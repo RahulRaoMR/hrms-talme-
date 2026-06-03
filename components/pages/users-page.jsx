@@ -141,6 +141,7 @@ export default function UsersPageClient() {
         title="Create User"
         state={formState}
         setState={setFormState}
+        requirePassword
         isPending={isPending}
         onClose={() => setModalOpen(false)}
         onSubmit={() =>
@@ -148,6 +149,7 @@ export default function UsersPageClient() {
             const created = await createUserAction(formState);
             prepend(created);
             await reload();
+            setFormState((current) => ({ ...current, password: "" }));
             setModalOpen(false);
           })
         }
@@ -177,7 +179,7 @@ export default function UsersPageClient() {
   );
 }
 
-function UserModal({ open, title, state, setState, onSubmit, onClose, isPending }) {
+function UserModal({ open, title, state, setState, onSubmit, onClose, isPending, requirePassword = false }) {
   return (
     <Modal open={open} eyebrow="Access Control" title={title} onClose={onClose}>
       {state ? (
@@ -224,7 +226,8 @@ function UserModal({ open, title, state, setState, onSubmit, onClose, isPending 
               <input
                 type="password"
                 value={state.password || ""}
-                placeholder="Leave blank to keep current password"
+                placeholder={requirePassword ? "Set login password" : "Leave blank to keep current password"}
+                required={requirePassword}
                 onChange={(event) =>
                   setState((current) => ({ ...current, password: event.target.value }))
                 }
