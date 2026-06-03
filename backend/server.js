@@ -816,13 +816,12 @@ function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
     hr: "HR",
-    employeeHrms: "Employee",
+    employeeHrms: "Employee HRMS",
     payroll: "Payroll",
     employee: "Employee"
   };
 
-  const normalizedRole = roles[role] || role || "";
-  return normalizedRole === "Employee HRMS" ? "Employee" : normalizedRole;
+  return roles[role] || role || "";
 }
 
 function isDatabaseUnavailableError(error) {
