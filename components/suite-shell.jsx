@@ -4,15 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
 import { canAccess, resolveRole } from "@/lib/permissions";
-import { clearSuiteSession } from "@/lib/auth-session";
-
-const previewSession = {
-  token: "local-preview",
-  user: {
-    email: "director@talme.ai",
-    role: "Enterprise Admin"
-  }
-};
+import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
 
 export default function SuiteShell({
   eyebrow,
@@ -30,9 +22,8 @@ export default function SuiteShell({
   const [navOpen, setNavOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const resolvedRole = resolveRole(session?.user?.role || "");
-  const role = resolvedRole || "";
-  const hasRouteAccess = Boolean(session && resolvedRole && canAccess(role, pathname));
+  const role = resolveRole(session?.user?.role || "") || "Enterprise Admin";
+  const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("talme-theme-mode");
@@ -48,20 +39,6 @@ export default function SuiteShell({
 
     window.location.replace("/login");
   }, [session, sessionChecked]);
-
-  useEffect(() => {
-    if (!sessionChecked || !session) return;
-
-    if (!resolvedRole) {
-      clearSuiteSession();
-      window.location.replace("/login");
-      return;
-    }
-
-    if (pathname && !canAccess(role, pathname)) {
-      router.replace(defaultPathForRole(role));
-    }
-  }, [pathname, resolvedRole, role, router, session, sessionChecked]);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -103,7 +80,7 @@ export default function SuiteShell({
     window.location.replace("/login");
   }
 
-  if (!sessionChecked || !session || !hasRouteAccess) {
+  if (!sessionChecked || !session) {
     return null;
   }
 
@@ -204,11 +181,7 @@ export default function SuiteShell({
             </button>
             <button
               className="ghost-button"
-              onClick={() => {
-                clearSuiteSession();
-                router.replace("/login");
-                router.refresh();
-              }}
+              onClick={handleLogout}
               type="button"
             >
               Log Out
