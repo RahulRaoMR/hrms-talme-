@@ -4,15 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
 import { canAccess, resolveRole } from "@/lib/permissions";
-import { clearSuiteSession, saveSuiteSession } from "@/lib/auth-session";
-
-const previewSession = {
-  token: "local-preview",
-  user: {
-    email: "director@talme.ai",
-    role: "Enterprise Admin"
-  }
-};
+import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
 
 export default function SuiteShell({
   eyebrow,
@@ -28,17 +20,25 @@ export default function SuiteShell({
   const [lightMode, setLightMode] = useState(true);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
-  const [session] = useState(previewSession);
-  const role = resolveRole(session?.user?.role || "Enterprise Admin") || "Enterprise Admin";
+  const [session, setSession] = useState(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const role = resolveRole(session?.user?.role || "") || "Enterprise Admin";
   const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
   useEffect(() => {
-    saveSuiteSession(previewSession);
     const savedTheme = window.localStorage.getItem("talme-theme-mode");
     const nextLightMode = savedTheme ? savedTheme === "light" : true;
     setLightMode(nextLightMode);
+    setSession(getSuiteSession());
+    setSessionChecked(true);
     setPreferencesLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (!sessionChecked || session) return;
+
+    window.location.replace("/login");
+  }, [session, sessionChecked]);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -73,6 +73,15 @@ export default function SuiteShell({
 
       return nextLightMode;
     });
+  }
+
+  function handleLogout() {
+    clearSuiteSession();
+    window.location.replace("/login");
+  }
+
+  if (!sessionChecked || !session) {
+    return null;
   }
 
   return (
@@ -161,10 +170,7 @@ export default function SuiteShell({
             </button>
             <button
               className="ghost-button"
-              onClick={() => {
-                clearSuiteSession();
-                router.push("/");
-              }}
+              onClick={handleLogout}
               type="button"
             >
               Log Out
