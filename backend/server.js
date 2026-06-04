@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
 
 const databaseUrl =
   process.env.DATABASE_URL ||
@@ -50,6 +51,7 @@ const resourceMap = {
 app.use(cors({ origin: allowedOrigin, credentials: allowedOrigin !== "*" }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static("public/uploads"));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "HRMS Backend" });
@@ -68,8 +70,8 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Email or employee ID and password are required." });
   }
 
-  if (expectedRole === "Employee HRMS" && identifier.includes("@")) {
-    return res.status(400).json({ error: "Employee HRMS login requires Employee ID, not email." });
+  if (["Employee", "Employee HRMS"].includes(expectedRole) && identifier.includes("@")) {
+    return res.status(400).json({ error: "Employee login requires Employee ID, not email." });
   }
 
   if (!databaseUrl) {
@@ -324,6 +326,24 @@ app.all("/api/pdf/:kind", (req, res) => {
   res.json({ kind: req.params.kind, message: "PDF endpoint is available on the Express backend." });
 });
 
+app.get("/api/uploads", asyncHandler(async (req, res) => {
+  const module = String(req.query.module || "All").trim();
+  const where = module && module !== "All" ? { module } : undefined;
+  const rows = await prisma.uploadedAsset.findMany({
+    where,
+    orderBy: resourceMap.uploads.orderBy
+  });
+
+  res.json(rows);
+}));
+
+app.post("/api/uploads", asyncHandler(async (req, res) => {
+  const payload = await buildUploadPayload(req);
+  const row = await prisma.uploadedAsset.create({ data: pick(payload, resourceMap.uploads.fields) });
+
+  res.status(201).json(row);
+}));
+
 app.get("/api/:resource", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
@@ -360,7 +380,14 @@ app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
 app.delete("/api/:resource/:id", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
+  const row = req.params.resource === "uploads"
+    ? await prisma.uploadedAsset.findUnique({ where: { id: req.params.id } })
+    : null;
+
   await prisma[config.model].delete({ where: { id: req.params.id } });
+  if (row?.fileUrl) {
+    await deleteUploadedFile(row.fileUrl);
+  }
   res.json({ id: req.params.id });
 }));
 
@@ -387,6 +414,202 @@ async function getSuiteData() {
   ]);
 
   return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings };
+}
+
+async function buildUploadPayload(req) {
+  const contentType = String(req.headers["content-type"] || "");
+
+  if (contentType.includes("multipart/form-data")) {
+    const { fields, file } = await parseMultipartUpload(req, contentType);
+
+    if (!file) {
+      const error = new Error("File is required.");
+      error.status = 400;
+      throw error;
+    }
+
+    const savedFile = await saveUploadedFile({
+      fileName: file.fileName || "upload",
+      bytes: file.bytes,
+      mimeType: file.mimeType
+    });
+
+    return normalizeUploadPayload({
+      ...fields,
+      fileName: file.fileName,
+      fileUrl: savedFile.fileUrl,
+      mimeType: file.mimeType,
+      sizeLabel: formatFileSize(file.bytes.length)
+    });
+  }
+
+  return normalizeUploadPayload(req.body || {});
+}
+
+async function parseMultipartUpload(req, contentType) {
+  const boundary = getMultipartBoundary(contentType);
+
+  if (!boundary) {
+    const error = new Error("Multipart boundary is missing.");
+    error.status = 400;
+    throw error;
+  }
+
+  const body = await readRequestBody(req);
+  const parts = splitBuffer(body, Buffer.from(`--${boundary}`));
+  const fields = {};
+  let file = null;
+
+  for (const part of parts) {
+    const parsedPart = parseMultipartPart(part);
+
+    if (!parsedPart?.name) {
+      continue;
+    }
+
+    if (parsedPart.fileName !== undefined) {
+      file = {
+        fileName: parsedPart.fileName || "upload",
+        mimeType: parsedPart.mimeType || "application/octet-stream",
+        bytes: parsedPart.content
+      };
+      continue;
+    }
+
+    fields[parsedPart.name] = parsedPart.content.toString("utf8");
+  }
+
+  return { fields, file };
+}
+
+function getMultipartBoundary(contentType) {
+  const match = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  return match?.[1] || match?.[2] || "";
+}
+
+function readRequestBody(req) {
+  const chunks = [];
+  let totalBytes = 0;
+  const maxBytes = 25 * 1024 * 1024;
+
+  return new Promise((resolve, reject) => {
+    req.on("data", (chunk) => {
+      totalBytes += chunk.length;
+
+      if (totalBytes > maxBytes) {
+        const error = new Error("Upload exceeds the 25 MB limit.");
+        error.status = 413;
+        reject(error);
+        req.destroy(error);
+        return;
+      }
+
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+function parseMultipartPart(part) {
+  let chunk = part;
+
+  if (!chunk.length) {
+    return null;
+  }
+
+  if (chunk.subarray(0, 2).toString() === "\r\n") {
+    chunk = chunk.subarray(2);
+  }
+
+  if (chunk.subarray(0, 2).toString() === "--") {
+    return null;
+  }
+
+  if (chunk.subarray(-2).toString() === "\r\n") {
+    chunk = chunk.subarray(0, -2);
+  }
+
+  const headerEnd = chunk.indexOf(Buffer.from("\r\n\r\n"));
+
+  if (headerEnd === -1) {
+    return null;
+  }
+
+  const headerText = chunk.subarray(0, headerEnd).toString("utf8");
+  const content = chunk.subarray(headerEnd + 4);
+  const headers = parseMultipartHeaders(headerText);
+  const disposition = parseContentDisposition(headers["content-disposition"] || "");
+
+  return {
+    name: disposition.name,
+    fileName: disposition.filename,
+    mimeType: headers["content-type"],
+    content
+  };
+}
+
+function parseMultipartHeaders(headerText) {
+  return headerText.split("\r\n").reduce((headers, line) => {
+    const separator = line.indexOf(":");
+
+    if (separator !== -1) {
+      headers[line.slice(0, separator).trim().toLowerCase()] = line.slice(separator + 1).trim();
+    }
+
+    return headers;
+  }, {});
+}
+
+function parseContentDisposition(value) {
+  const disposition = {};
+  const matches = value.matchAll(/;\s*([^=]+)="([^"]*)"/g);
+
+  for (const match of matches) {
+    disposition[match[1].trim().toLowerCase()] = match[2];
+  }
+
+  return disposition;
+}
+
+function splitBuffer(buffer, separator) {
+  const parts = [];
+  let start = 0;
+  let index = buffer.indexOf(separator, start);
+
+  while (index !== -1) {
+    parts.push(buffer.subarray(start, index));
+    start = index + separator.length;
+    index = buffer.indexOf(separator, start);
+  }
+
+  parts.push(buffer.subarray(start));
+  return parts;
+}
+
+function normalizeUploadPayload(payload = {}) {
+  return {
+    module: stringOrDefault(payload.module, "Employee"),
+    owner: stringOrDefault(payload.owner, "Unassigned"),
+    label: stringOrDefault(payload.label, "Document"),
+    fileName: stringOrDefault(payload.fileName, "document"),
+    fileUrl: String(payload.fileUrl || ""),
+    mimeType: stringOrDefault(payload.mimeType, "document"),
+    sizeLabel: stringOrDefault(payload.sizeLabel, "-"),
+    status: stringOrDefault(payload.status, "Uploaded")
+  };
+}
+
+function stringOrDefault(value, fallback) {
+  const normalized = String(value || "").trim();
+  return normalized || fallback;
+}
+
+function formatFileSize(size = 0) {
+  if (!size) return "-";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function pick(payload, fields) {
