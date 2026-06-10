@@ -2067,6 +2067,53 @@ button.flow-card {
   width: min(420px, 100%);
 }
 
+.daily-update-body p {
+  white-space: pre-wrap;
+}
+
+.daily-edit-form {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-edit-form textarea {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.daily-update-card.mine .daily-edit-form textarea {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.daily-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.daily-update-actions .ghost-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+.daily-update-actions .danger {
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.3);
+  background: rgba(180, 35, 24, 0.08);
+}
+
 .letters-workspace {
   display: grid;
   grid-template-columns: minmax(320px, 0.78fr) minmax(560px, 1.22fr);
