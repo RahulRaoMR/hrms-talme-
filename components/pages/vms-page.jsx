@@ -35,6 +35,12 @@ const initialRows = [
 
 const unitOptions = ["NONE", "BAGS (BAG)", "BOTTLES (BTL)", "BOX (BOX)", "BUNDLES (BDL)", "DOZENS (DZN)", "GRAMMES (GM)", "KILOGRAMS (KG)", "LITRE (LTR)", "MONTH (MTH)", "PIECES (PCS)"];
 
+const defaultBuyerTaxProfile = {
+  gstin: "29AACY0840P1ZV",
+  pan: "AAACY0840P",
+  state: "Karnataka"
+};
+
 const transactions = [
   { id: "demo-siddha", date: "06/05/2026", invoiceNo: "98352651136", party: "Siddha Space", transaction: "Sale", paymentType: "Credit", amount: "₹ 55,696", balance: "₹ 55,696", status: "Unpaid", tone: "red" },
   { id: "demo-8", date: "06/05/2026", invoiceNo: "8", party: "YOKOGAWA INDIA LIMITED", transaction: "Sale", paymentType: "Cash", amount: "₹ 114943.8", balance: "₹ 114943.8", status: "Unpaid", tone: "red" },
@@ -211,6 +217,95 @@ function toSafeNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getTaxRate(tax) {
+  switch (String(tax || "").trim().toUpperCase()) {
+    case "GST@18%":
+    case "IGST@18%":
+      return 0.18;
+    case "GST@12%":
+      return 0.12;
+    default:
+      return 0;
+  }
+}
+
+function isIgstTax(tax) {
+  return String(tax || "").trim().toUpperCase().startsWith("IGST");
+}
+
+function formatTaxPercent(rate, spaced = false) {
+  const percent = Number(rate) * 100;
+  const formatted = Number.isInteger(percent)
+    ? String(percent)
+    : percent.toFixed(2).replace(/\.?0+$/, "");
+
+  return `${formatted}${spaced ? " %" : "%"}`;
+}
+
+function getRowAmount(row) {
+  return toSafeNumber(row.qty) * toSafeNumber(row.price);
+}
+
+function getRowTaxAmount(row) {
+  return getRowAmount(row) * getTaxRate(row.tax);
+}
+
+function hasTaxableRow(rows) {
+  return rows.some((row) => getTaxRate(row.tax) > 0);
+}
+
+function getInvoiceTaxSource(invoice, rows) {
+  const invoiceTax = invoice?.tax;
+  if (isIgstTax(invoiceTax) && getTaxRate(invoiceTax) > 0) return invoiceTax;
+
+  const igstRowTax = rows.find((row) => isIgstTax(row.tax) && getTaxRate(row.tax) > 0)?.tax;
+  if (igstRowTax) return igstRowTax;
+
+  if (getTaxRate(invoiceTax) > 0) return invoiceTax;
+  return rows.find((row) => getTaxRate(row.tax) > 0)?.tax || invoice?.tax;
+}
+
+function getRowsTaxAmount(rows) {
+  return rows.reduce((sum, row) => sum + getRowTaxAmount(row), 0);
+}
+
+function getInvoiceTaxBreakdown(invoice, rows, taxAmount) {
+  const sourceTax = getInvoiceTaxSource(invoice, rows);
+  const sourceRate = getTaxRate(sourceTax);
+  const totalTax = toSafeNumber(taxAmount);
+
+  if (!sourceRate || !totalTax) return [];
+
+  if (isIgstTax(sourceTax)) {
+    return [
+      {
+        type: "IGST",
+        label: `OUTPUT IGST @ ${formatTaxPercent(sourceRate)}`,
+        rate: sourceRate,
+        amount: totalTax
+      }
+    ];
+  }
+
+  const splitRate = sourceRate / 2;
+  const splitAmount = totalTax / 2;
+
+  return [
+    {
+      type: "CGST",
+      label: `OUTPUT CGST @ ${formatTaxPercent(splitRate)}`,
+      rate: splitRate,
+      amount: splitAmount
+    },
+    {
+      type: "SGST",
+      label: `OUTPUT SGST @ ${formatTaxPercent(splitRate)}`,
+      rate: splitRate,
+      amount: splitAmount
+    }
+  ];
+}
+
 function extractAmount(value) {
   return Number(String(value || "").replace(/[^\d.]/g, "")) || 0;
 }
@@ -222,6 +317,43 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function normalizeAddressLines(value) {
+  return String(value ?? "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function removeAddressLabelLines(lines, labels) {
+  const labelSet = new Set(labels.map((label) => label.toLowerCase()));
+  return lines.filter((line) => !labelSet.has(line.toLowerCase()));
+}
+
+function displayAddress(address) {
+  return removeAddressLabelLines(normalizeAddressLines(address), ["Billing Address"]).join("\n");
+}
+
+function formatAddressHtml(address) {
+  const lines = normalizeAddressLines(address);
+  if (!lines.length) return "";
+
+  const restLines = lines.slice(1).map((line) => escapeHtml(line));
+  return [
+    `<strong>${escapeHtml(lines[0])}</strong>`,
+    restLines.join("<br />")
+  ].filter(Boolean).join("");
+}
+
+function buildBuyerAddressBlock(billing, shipping, fallback = "") {
+  const billingAddress = displayAddress(billing) || displayAddress(fallback);
+  const shippingAddress = displayAddress(shipping);
+
+  return shippingAddress
+    ? `${billingAddress}\nShipping Address\n${shippingAddress}`
+    : billingAddress;
 }
 
 function numberToWords(value) {
@@ -302,21 +434,25 @@ function buildPdfDocument({ lines, texts, width = 595.28, height = 841.89 }) {
 }
 
 function wrapPdfText(text, maxChars) {
-  const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
-  let current = "";
 
-  words.forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
+  String(text || "").replace(/\r\n/g, "\n").split("\n").forEach((sourceLine) => {
+    const words = sourceLine.split(/\s+/).filter(Boolean);
+    let current = "";
+
+    words.forEach((word) => {
+      const next = current ? `${current} ${word}` : word;
+      if (next.length > maxChars && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = next;
+      }
+    });
+
+    if (current) lines.push(current);
   });
 
-  if (current) lines.push(current);
   return lines.length ? lines : [""];
 }
 
@@ -404,11 +540,12 @@ export default function VmsPageClient() {
 
   const totals = useMemo(() => {
     const subtotal = rows.reduce((sum, row) => {
-      const qty = toSafeNumber(row.qty);
-      const price = toSafeNumber(row.price);
-      return sum + qty * price;
+      return sum + getRowAmount(row);
     }, 0);
-    const tax = invoice.tax === "GST@18%" ? subtotal * 0.18 : 0;
+    const hasRowTax = hasTaxableRow(rows);
+    const tax = hasRowTax
+      ? getRowsTaxAmount(rows)
+      : subtotal * getTaxRate(invoice.tax);
     return {
       subtotal,
       tax,
@@ -428,6 +565,20 @@ export default function VmsPageClient() {
 
   function updateRow(id, key, value) {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
+    if (key === "tax" && (getTaxRate(value) > 0 || value === "NONE")) {
+      setInvoice((current) => ({ ...current, tax: value }));
+    }
+  }
+
+  function updateInvoiceTax(value) {
+    setInvoice((current) => ({ ...current, tax: value }));
+    setRows((current) =>
+      current.map((row) => {
+        const rowTaxRate = getTaxRate(row.tax);
+        const shouldSyncRowTax = rowTaxRate > 0 || row.tax === "Select" || row.tax === "NONE";
+        return shouldSyncRowTax ? { ...row, tax: value === "NONE" ? "NONE" : value } : row;
+      })
+    );
   }
 
   function addRow() {
@@ -579,9 +730,10 @@ export default function VmsPageClient() {
   function buildInvoicePdf(transaction) {
     const snapshot = getTransactionSnapshot(transaction);
     const invoiceDate = transaction.date || formatDateForList(snapshot.invoice.invoiceDate);
+    const buyerAddress = displayAddress(snapshot.party.billing) || displayAddress(`${transaction.party}\nBilling Address`);
+    const shippingAddress = displayAddress(snapshot.party.shipping);
     const taxableAmount = snapshot.totals.subtotal || snapshot.totals.grand - snapshot.totals.tax;
-    const cgst = snapshot.totals.tax / 2;
-    const sgst = snapshot.totals.tax / 2;
+    const taxBreakdown = getInvoiceTaxBreakdown(snapshot.invoice, snapshot.rows, snapshot.totals.tax);
     const roundedTotal = Math.round(snapshot.totals.grand);
     const signatoryName = String(snapshot.invoice.signatoryName || "").trim();
     const lines = [];
@@ -592,20 +744,18 @@ export default function VmsPageClient() {
     const top = 812;
     const bottom = 32;
     const titleBottom = top - 20;
-    const headerBottom = 660;
-    const partyBottom = 552;
-    const tableTop = partyBottom;
-    const tableHeaderBottom = 528;
-    const itemBottom = 450;
-    const taxRow1Bottom = 426;
-    const taxRow2Bottom = 402;
-    const taxRow3Bottom = 378;
-    const totalBottom = 350;
-    const wordsBottom = 318;
+    const tableTop = 510;
+    const tableHeaderBottom = 486;
+    const itemBottom = 408;
+    const taxRow1Bottom = 384;
+    const taxRow2Bottom = 360;
+    const taxRow3Bottom = 336;
+    const totalBottom = 308;
+    const wordsBottom = 276;
     const taxSummaryTop = wordsBottom;
-    const taxSummaryBottom = 232;
-    const taxWordsBottom = 204;
-    const bottomTop = 168;
+    const taxSummaryBottom = 190;
+    const taxWordsBottom = 162;
+    const bottomTop = 126;
 
     function line(x1, y1, x2, y2) {
       lines.push([x1, y1, x2, y2]);
@@ -621,6 +771,20 @@ export default function VmsPageClient() {
       });
     }
 
+    function addressText(x, y, value, maxChars, gap = 9, options = {}) {
+      let offset = 0;
+      normalizeAddressLines(value).forEach((lineValue, lineIndex) => {
+        wrapPdfText(lineValue, maxChars).forEach((part, partIndex) => {
+          text(x, y - offset * gap, part, {
+            ...options,
+            bold: lineIndex === 0 && partIndex === 0
+          });
+          offset += 1;
+        });
+      });
+      return y - offset * gap;
+    }
+
     line(left, bottom, right, bottom);
     line(left, top, right, top);
     line(left, bottom, left, top);
@@ -629,27 +793,31 @@ export default function VmsPageClient() {
     line(left, titleBottom, right, titleBottom);
 
     const mid = 300;
-    line(mid, titleBottom, mid, headerBottom);
-    line(left, headerBottom, right, headerBottom);
-    text(left + 8, top - 34, "TALME TECHNOLOGIES PRIVATE LIMITED", { size: 8, bold: true });
-    multiText(left + 8, top - 45, "No 24 Vittal Mallya Road, Level 14, Concorde Towers UB City, Bangalore - 560001", 50, 9);
-    text(left + 8, top - 72, "UDYAM Reg No.: UDYAM-KR-03-0262217 (Micro)", { size: 7 });
-    text(left + 8, top - 82, "GSTIN/UIN: 29AACTJ8187F1ZO", { size: 7 });
-    text(left + 8, top - 92, "State Name: Karnataka, Code: 29", { size: 7 });
-    text(left + 8, top - 102, "CIN: U74999KA2022PTC168666", { size: 7 });
-    text(left + 8, top - 112, "E-Mail: accounts@talme.in", { size: 7 });
+    const termsTop = 682;
+    line(mid, titleBottom, mid, tableTop);
+    line(left, tableTop, right, tableTop);
+
+    let addressBottomY = addressText(left + 8, top - 34, buyerAddress, 48, 9, { size: 6.7 });
+    if (shippingAddress) {
+      text(left + 8, addressBottomY - 4, "Shipping Address", { size: 6.7, bold: true });
+      addressBottomY = addressText(left + 8, addressBottomY - 14, shippingAddress, 48, 9, { size: 6.7 });
+    }
+    const buyerState = snapshot.party.state || defaultBuyerTaxProfile.state;
+    text(left + 8, 548, `GSTIN/UIN        : ${snapshot.party.gstin || defaultBuyerTaxProfile.gstin}`, { size: 6.7 });
+    text(left + 8, 538, `PAN/IT No        : ${defaultBuyerTaxProfile.pan}`, { size: 6.7 });
+    text(left + 8, 528, `State Name       : ${buyerState}`, { size: 6.7 });
+    text(left + 8, 518, `Place of Supply  : ${buyerState} State- 29`, { size: 6.7 });
 
     const metaX = [mid, 432, right];
-    const metaY = [titleBottom, 770, 748, 726, 704, 682, headerBottom];
+    const metaY = [titleBottom, 770, 748, 726, 704, termsTop, tableTop];
     metaY.forEach((y) => line(mid, y, right, y));
-    line(metaX[1], titleBottom, metaX[1], headerBottom);
+    line(metaX[1], titleBottom, metaX[1], termsTop);
     const meta = [
       ["Invoice No.", transaction.invoiceNo, "Dated", invoiceDate],
       ["Delivery Note", snapshot.invoice.poNo || "-", "Mode/Terms of Payment", transaction.paymentType || snapshot.invoice.mode || "Immediate"],
       ["Purchase Order No.", snapshot.invoice.poNo || "4513721078", "Dated", formatDateForList(snapshot.invoice.poDate) || invoiceDate],
       ["Dispatch Doc No.", "-", "Delivery Note Date", "-"],
-      ["Dispatched through", "-", "Destination", snapshot.party.state || "-"],
-      ["Terms of Delivery", transaction.status || "-", "Reference", "Tax Invoice PDF"]
+      ["Dispatched through", "-", "Destination", snapshot.party.state || "-"]
     ];
     meta.forEach((row, index) => {
       const y = 778 - index * 22;
@@ -658,19 +826,8 @@ export default function VmsPageClient() {
       text(metaX[1] + 6, y + 5, row[2], { size: 5.6 });
       text(metaX[1] + 6, y - 4, row[3], { size: 6.8, bold: true });
     });
-
-    line(left, partyBottom, right, partyBottom);
-    line(mid, headerBottom, mid, partyBottom);
-    text(left + 8, 646, "Buyer (Bill to)", { size: 6 });
-    text(left + 8, 635, snapshot.party.name || transaction.party, { size: 8, bold: true });
-    multiText(left + 8, 624, snapshot.party.billing || `${transaction.party} Billing Address`, 48, 9, { size: 6.7, maxLines: 5 });
-    text(mid + 8, 646, "Consignee (Ship to)", { size: 6 });
-    text(mid + 8, 635, snapshot.party.name || transaction.party, { size: 8, bold: true });
-    multiText(mid + 8, 624, snapshot.party.shipping || snapshot.party.billing || "Shipping Address", 44, 9, { size: 6.7, maxLines: 4 });
-    text(mid + 8, 588, `GSTIN/UIN: ${snapshot.party.gstin || "29AAACY0840P1ZV"}`, { size: 6.7 });
-    text(mid + 8, 578, "PAN/IT No: AAACY0840P", { size: 6.7 });
-    text(mid + 8, 568, `State Name: ${snapshot.party.state || "Karnataka"}`, { size: 6.7 });
-    text(mid + 8, 558, `Place of Supply: ${snapshot.party.state || "Karnataka"} State-29`, { size: 6.7 });
+    text(mid + 6, termsTop - 13, "Terms of Delivery", { size: 5.6 });
+    text(mid + 6, termsTop - 24, transaction.status || "-", { size: 6.8, bold: true });
 
     const cols = [left, 62, 285, 350, 400, 448, 492, right];
     cols.forEach((x) => line(x, totalBottom, x, tableTop));
@@ -689,12 +846,12 @@ export default function VmsPageClient() {
     text(440, 502, formatCurrency(firstRow.price || rowAmount), { size: 7, align: "right" });
     text(470, 502, firstRow.unit || "Nos", { size: 7, align: "center" });
     text(558, 502, formatCurrency(rowAmount), { size: 7, align: "right" });
-    text(236, 435, "OUTPUT CGST @ 9%", { size: 6.4, bold: true, align: "right" });
-    text(440, 435, "9 %", { size: 7, align: "right" });
-    text(558, 435, formatCurrency(cgst), { size: 7, bold: true, align: "right" });
-    text(236, 411, "OUTPUT SGST @ 9%", { size: 6.4, bold: true, align: "right" });
-    text(440, 411, "9 %", { size: 7, align: "right" });
-    text(558, 411, formatCurrency(sgst), { size: 7, bold: true, align: "right" });
+    taxBreakdown.slice(0, 2).forEach((taxItem, index) => {
+      const y = index === 0 ? 435 : 411;
+      text(236, y, taxItem.label, { size: 6.4, bold: true, align: "right" });
+      text(440, y, formatTaxPercent(taxItem.rate, true), { size: 7, align: "right" });
+      text(558, y, formatCurrency(taxItem.amount), { size: 7, bold: true, align: "right" });
+    });
     text(236, 387, "Round off", { size: 6.4, bold: true, align: "right" });
     text(558, 387, formatCurrency(roundedTotal - snapshot.totals.grand), { size: 7, align: "right" });
     text(236, 360, "Total", { size: 7, bold: true, align: "right" });
@@ -705,15 +862,20 @@ export default function VmsPageClient() {
     const taxCols = [left, 118, 206, 278, 342, 414, 478, right];
     taxCols.forEach((x) => line(x, taxSummaryBottom, x, taxSummaryTop));
     [302, 280, 256, taxSummaryBottom].forEach((y) => line(left, y, right, y));
-    ["HSN/SAC", "Taxable Value", "CGST Rate", "CGST Amount", "SGST Rate", "SGST Amount", "Total Tax"].forEach((heading, index) => {
+    const firstTax = taxBreakdown[0];
+    const secondTax = taxBreakdown[1];
+    const taxSummaryHeadings = firstTax?.type === "IGST"
+      ? ["HSN/SAC", "Taxable Value", "IGST Rate", "IGST Amount", "", "", "Total Tax"]
+      : ["HSN/SAC", "Taxable Value", "CGST Rate", "CGST Amount", "SGST Rate", "SGST Amount", "Total Tax"];
+    taxSummaryHeadings.forEach((heading, index) => {
       text((taxCols[index] + taxCols[index + 1]) / 2, 306, heading, { size: 6, bold: true, align: "center" });
     });
     text(74, 288, "995461", { size: 7, align: "center" });
     text(198, 288, formatCurrency(taxableAmount), { size: 7, align: "right" });
-    text(310, 288, "9%", { size: 7, align: "center" });
-    text(406, 288, formatCurrency(cgst), { size: 7, align: "right" });
-    text(446, 288, "9%", { size: 7, align: "center" });
-    text(526, 288, formatCurrency(sgst), { size: 7, align: "right" });
+    text(310, 288, firstTax ? formatTaxPercent(firstTax.rate) : "", { size: 7, align: "center" });
+    text(406, 288, firstTax ? formatCurrency(firstTax.amount) : "", { size: 7, align: "right" });
+    text(446, 288, secondTax ? formatTaxPercent(secondTax.rate) : "", { size: 7, align: "center" });
+    text(526, 288, secondTax ? formatCurrency(secondTax.amount) : "", { size: 7, align: "right" });
     text(558, 288, formatCurrency(snapshot.totals.tax), { size: 7, align: "right" });
     text(left + 6, 220, "Tax Amount (in words):", { size: 6 });
     text(left + 6, 210, `INR ${numberToWords(Math.round(snapshot.totals.tax))} only`, { size: 8, bold: true });
@@ -773,10 +935,9 @@ export default function VmsPageClient() {
       }
     ];
     const subtotal = snapshotRows.reduce((sum, row) => sum + toSafeNumber(row.qty) * toSafeNumber(row.price), 0);
-    const tax = snapshotRows.reduce((sum, row) => {
-      const amount = toSafeNumber(row.qty) * toSafeNumber(row.price);
-      return sum + (row.tax === "GST@18%" ? amount * 0.18 : row.tax === "GST@12%" ? amount * 0.12 : 0);
-    }, 0);
+    const tax = hasTaxableRow(snapshotRows)
+      ? getRowsTaxAmount(snapshotRows)
+      : subtotal * (transaction.invoiceData ? getTaxRate(snapshotInvoice.tax) : 0);
     const grand = subtotal + tax || extractAmount(transaction.amount);
 
     return {
@@ -794,12 +955,83 @@ export default function VmsPageClient() {
   function buildInvoiceHtml(transaction, documentType = "Tax Invoice") {
     const snapshot = getTransactionSnapshot(transaction);
     const invoiceDate = transaction.date || formatDateForList(snapshot.invoice.invoiceDate);
+    const buyerAddress = displayAddress(snapshot.party.billing) || displayAddress(`${transaction.party}\nBilling Address`);
+    const shippingAddress = displayAddress(snapshot.party.shipping);
+    const buyerState = snapshot.party.state || defaultBuyerTaxProfile.state;
     const taxableAmount = snapshot.totals.subtotal || snapshot.totals.grand - snapshot.totals.tax;
-    const cgst = snapshot.totals.tax / 2;
-    const sgst = snapshot.totals.tax / 2;
+    const taxBreakdown = getInvoiceTaxBreakdown(snapshot.invoice, snapshot.rows, snapshot.totals.tax);
     const roundedTotal = Math.round(snapshot.totals.grand);
     const amountWords = `${numberToWords(roundedTotal)} only`;
     const signatoryName = String(snapshot.invoice.signatoryName || "").trim();
+    const taxLineHtml = taxBreakdown
+      .map((taxItem) => `
+                <tr class="tax-line">
+                  <td></td>
+                  <td class="particulars">${escapeHtml(taxItem.label)}</td>
+                  <td></td><td></td><td class="right">${formatTaxPercent(taxItem.rate, true)}</td><td></td><td class="right">${formatCurrency(taxItem.amount)}</td>
+                </tr>
+      `)
+      .join("");
+    const firstTax = taxBreakdown[0];
+    const secondTax = taxBreakdown[1];
+    const taxSummaryHeaderHtml = firstTax?.type === "IGST"
+      ? `
+                <tr>
+                  <th rowspan="2">HSN/SAC</th>
+                  <th rowspan="2">Taxable Value</th>
+                  <th colspan="2">IGST</th>
+                  <th rowspan="2">Total Tax Amount</th>
+                </tr>
+                <tr>
+                  <th>Rate</th><th>Amount</th>
+                </tr>
+      `
+      : `
+                <tr>
+                  <th rowspan="2">HSN/SAC</th>
+                  <th rowspan="2">Taxable Value</th>
+                  <th colspan="2">CGST</th>
+                  <th colspan="2">SGST/UTGST</th>
+                  <th rowspan="2">Total Tax Amount</th>
+                </tr>
+                <tr>
+                  <th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th>
+                </tr>
+      `;
+    const taxSummaryBodyHtml = firstTax?.type === "IGST"
+      ? `
+                <tr>
+                  <td>995461</td>
+                  <td class="right">${formatCurrency(taxableAmount)}</td>
+                  <td class="center">${formatTaxPercent(firstTax.rate)}</td>
+                  <td class="right">${formatCurrency(firstTax.amount)}</td>
+                  <td class="right">${formatCurrency(snapshot.totals.tax)}</td>
+                </tr>
+                <tr>
+                  <td class="right"><strong>Total</strong></td>
+                  <td class="right"><strong>${formatCurrency(taxableAmount)}</strong></td>
+                  <td></td><td class="right"><strong>${formatCurrency(firstTax.amount)}</strong></td>
+                  <td class="right"><strong>${formatCurrency(snapshot.totals.tax)}</strong></td>
+                </tr>
+      `
+      : `
+                <tr>
+                  <td>995461</td>
+                  <td class="right">${formatCurrency(taxableAmount)}</td>
+                  <td class="center">${firstTax ? formatTaxPercent(firstTax.rate) : ""}</td>
+                  <td class="right">${firstTax ? formatCurrency(firstTax.amount) : ""}</td>
+                  <td class="center">${secondTax ? formatTaxPercent(secondTax.rate) : ""}</td>
+                  <td class="right">${secondTax ? formatCurrency(secondTax.amount) : ""}</td>
+                  <td class="right">${formatCurrency(snapshot.totals.tax)}</td>
+                </tr>
+                <tr>
+                  <td class="right"><strong>Total</strong></td>
+                  <td class="right"><strong>${formatCurrency(taxableAmount)}</strong></td>
+                  <td></td><td class="right"><strong>${firstTax ? formatCurrency(firstTax.amount) : ""}</strong></td>
+                  <td></td><td class="right"><strong>${secondTax ? formatCurrency(secondTax.amount) : ""}</strong></td>
+                  <td class="right"><strong>${formatCurrency(snapshot.totals.tax)}</strong></td>
+                </tr>
+      `;
     const rowHtml = snapshot.rows
       .map((row, index) => {
         const amount = toSafeNumber(row.qty) * toSafeNumber(row.price);
@@ -832,19 +1064,19 @@ export default function VmsPageClient() {
             button { padding: 9px 15px; border: 0; border-radius: 4px; background: #111827; color: #fff; cursor: pointer; font-weight: 700; }
             .sheet { width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; border: 1px solid #333; font-size: 10px; line-height: 1.25; }
             .title { height: 22px; display: grid; place-items: center; border-bottom: 1px solid #333; font-size: 14px; font-weight: 800; }
-            .top-grid { display: grid; grid-template-columns: 1.08fr 1fr; border-bottom: 1px solid #333; }
-            .seller-box, .meta-grid, .buyer-box, .consignee-box, .words-box, .bank-box, .tax-words-box, .signature-box, .pan-box { padding: 6px 8px; }
-            .seller-box { border-right: 1px solid #333; min-height: 112px; }
-            .seller-box strong, .buyer-box strong, .consignee-box strong { display: block; font-size: 11px; }
-            .meta-grid { padding: 0; display: grid; grid-template-columns: 1fr 1fr; }
+            .top-grid { display: grid; grid-template-columns: 1.08fr 1fr; border-bottom: 1px solid #333; min-height: 330px; }
+            .left-invoice-stack { border-right: 1px solid #333; }
+            .meta-grid, .buyer-box, .words-box, .bank-box, .tax-words-box, .signature-box, .pan-box { padding: 6px 8px; }
+            .buyer-box strong { display: block; font-size: 11px; }
+            .buyer-tax-lines { margin-top: 22px; }
+            .meta-grid { padding: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, 38px) 1fr; }
             .meta-cell { min-height: 38px; padding: 5px 7px; border-right: 1px solid #333; border-bottom: 1px solid #333; }
             .meta-cell:nth-child(2n) { border-right: 0; }
-            .meta-cell:nth-last-child(-n + 2) { border-bottom: 0; }
+            .terms-cell { grid-column: 1 / -1; border-right: 0; border-bottom: 0; min-height: 128px; }
             .label { display: block; color: #555; font-size: 9px; }
             .value { display: block; margin-top: 2px; font-weight: 700; }
-            .party-grid { display: grid; grid-template-columns: 1.08fr 1fr; border-bottom: 1px solid #333; }
-            .buyer-box { border-right: 1px solid #333; min-height: 110px; }
-            .consignee-box { min-height: 110px; }
+            .invoice-address-text { white-space: pre-line; }
+            .invoice-shipping-label { display: block; margin-top: 8px; font-weight: 700; font-size: 9px; }
             table { width: 100%; border-collapse: collapse; }
             th, td { border-right: 1px solid #333; border-bottom: 1px solid #333; padding: 5px 6px; vertical-align: top; }
             th:last-child, td:last-child { border-right: 0; }
@@ -870,10 +1102,31 @@ export default function VmsPageClient() {
             .pan-box div:first-child { border-right: 1px solid #333; }
             .muted { color: #555; }
             @media print {
-              @page { size: A4; margin: 8mm; }
+              @page { size: A4; margin: 4mm; }
               body { padding: 0; background: #fff; }
               .actions { display: none; }
-              .sheet { width: 100%; min-height: auto; border: 1px solid #333; }
+              .sheet { width: 100%; min-height: 0; border: 1px solid #333; font-size: 8px; line-height: 1.12; page-break-after: avoid; }
+              .title { height: 18px; font-size: 12px; }
+              .top-grid { min-height: 170px; }
+              .meta-grid { grid-template-rows: repeat(5, 28px) 1fr; }
+              .meta-cell { min-height: 28px; padding: 3px 5px; }
+              .terms-cell { min-height: 30px; }
+              .meta-grid, .buyer-box, .words-box, .bank-box, .tax-words-box, .signature-box, .pan-box { padding: 4px 6px; }
+              .buyer-tax-lines { margin-top: 8px; }
+              .invoice-shipping-label { margin-top: 5px; font-size: 8px; }
+              th, td { padding: 2px 4px; }
+              thead th { height: 18px; font-size: 8px; }
+              .items tbody tr.item-row td, .items tbody tr:first-child td { height: 142px; }
+              .particulars strong { margin: 4px 0; }
+              .particulars em { padding-left: 14px; font-size: 8px; }
+              .tax-line td { height: 16px; }
+              .total-row td { height: 18px; }
+              .words-box { min-height: 30px; }
+              .tax-summary th, .tax-summary td { font-size: 8px; padding: 2px 3px; }
+              .bank-box, .signature-box { min-height: 78px; }
+              .signature-name { bottom: 24px; font-size: 16px; }
+              .signature-label { bottom: 8px; }
+              .pan-box div { padding: 4px 6px; }
             }
           </style>
         </head>
@@ -885,14 +1138,20 @@ export default function VmsPageClient() {
           <main class="sheet">
             <div class="title">Tax Invoice</div>
             <section class="top-grid">
-              <div class="seller-box">
-                <strong>TALME TECHNOLOGIES PRIVATE LIMITED</strong>
-                <div>No 24 Vittal Mallya Road, Level 14, Concorde Towers UB City, Bangalore - 560001</div>
-                <div>UDYAM Reg No.: UDYAM-KR-03-0262217 (Micro)</div>
-                <div>GSTIN/UIN: 29AACTJ8187F1ZO</div>
-                <div>State Name: Karnataka, Code: 29</div>
-                <div>CIN: U74999KA2022PTC168666</div>
-                <div>E-Mail: accounts@talme.in</div>
+              <div class="left-invoice-stack">
+                <div class="buyer-box">
+                  <div class="invoice-address-text">${formatAddressHtml(buyerAddress)}</div>
+                  ${shippingAddress ? `
+                    <span class="invoice-shipping-label">Shipping Address</span>
+                    <div class="invoice-address-text">${formatAddressHtml(shippingAddress)}</div>
+                  ` : ""}
+                  <div class="buyer-tax-lines">
+                    <div>GSTIN/UIN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${escapeHtml(snapshot.party.gstin || defaultBuyerTaxProfile.gstin)}</div>
+                    <div>PAN/IT No&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${escapeHtml(defaultBuyerTaxProfile.pan)}</div>
+                    <div>State Name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${escapeHtml(buyerState)}</div>
+                    <div>Place of Supply&nbsp;: ${escapeHtml(buyerState)} State- 29</div>
+                  </div>
+                </div>
               </div>
               <div class="meta-grid">
                 <div class="meta-cell"><span class="label">Invoice No.</span><span class="value">${escapeHtml(transaction.invoiceNo)}</span></div>
@@ -905,25 +1164,7 @@ export default function VmsPageClient() {
                 <div class="meta-cell"><span class="label">Delivery Note Date</span><span class="value">-</span></div>
                 <div class="meta-cell"><span class="label">Dispatched through</span><span class="value">-</span></div>
                 <div class="meta-cell"><span class="label">Destination</span><span class="value">${escapeHtml(snapshot.party.state || "-")}</span></div>
-                <div class="meta-cell"><span class="label">Terms of Delivery</span><span class="value">${escapeHtml(transaction.status || "-")}</span></div>
-                <div class="meta-cell"><span class="label">Reference</span><span class="value">${escapeHtml(documentType)}</span></div>
-              </div>
-            </section>
-            <section class="party-grid">
-              <div class="buyer-box">
-                <span class="muted">Buyer (Bill to)</span>
-                <strong>${escapeHtml(snapshot.party.name || transaction.party)}</strong>
-                <div>${escapeHtml(snapshot.party.billing || `${transaction.party}\nBilling Address`)}</div>
-              </div>
-              <div class="consignee-box">
-                <span class="muted">Consignee (Ship to)</span>
-                <strong>${escapeHtml(snapshot.party.name || transaction.party)}</strong>
-                <div>${escapeHtml(snapshot.party.shipping || snapshot.party.billing || "Shipping Address")}</div>
-                <br />
-                <div><strong>GSTIN/UIN:</strong> ${escapeHtml(snapshot.party.gstin || "29AAACY0840P1ZV")}</div>
-                <div><strong>PAN/IT No:</strong> AAACY0840P</div>
-                <div><strong>State Name:</strong> ${escapeHtml(snapshot.party.state || "Karnataka")}</div>
-                <div><strong>Place of Supply:</strong> ${escapeHtml(snapshot.party.state || "Karnataka")} State-29</div>
+                <div class="meta-cell terms-cell"><span class="label">Terms of Delivery</span><span class="value">${escapeHtml(transaction.status || "-")}</span></div>
               </div>
             </section>
             <table class="items">
@@ -940,16 +1181,7 @@ export default function VmsPageClient() {
               </thead>
               <tbody>
                 ${rowHtml}
-                <tr class="tax-line">
-                  <td></td>
-                  <td class="particulars">OUTPUT CGST @ 9%</td>
-                  <td></td><td></td><td class="right">9 %</td><td></td><td class="right">${formatCurrency(cgst)}</td>
-                </tr>
-                <tr class="tax-line">
-                  <td></td>
-                  <td class="particulars">OUTPUT SGST @ 9%</td>
-                  <td></td><td></td><td class="right">9 %</td><td></td><td class="right">${formatCurrency(sgst)}</td>
-                </tr>
+                ${taxLineHtml}
                 <tr class="tax-line">
                   <td></td>
                   <td class="particulars">Round off</td>
@@ -968,34 +1200,10 @@ export default function VmsPageClient() {
             </section>
             <table class="tax-summary">
               <thead>
-                <tr>
-                  <th rowspan="2">HSN/SAC</th>
-                  <th rowspan="2">Taxable Value</th>
-                  <th colspan="2">CGST</th>
-                  <th colspan="2">SGST/UTGST</th>
-                  <th rowspan="2">Total Tax Amount</th>
-                </tr>
-                <tr>
-                  <th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th>
-                </tr>
+                ${taxSummaryHeaderHtml}
               </thead>
               <tbody>
-                <tr>
-                  <td>995461</td>
-                  <td class="right">${formatCurrency(taxableAmount)}</td>
-                  <td class="center">9%</td>
-                  <td class="right">${formatCurrency(cgst)}</td>
-                  <td class="center">9%</td>
-                  <td class="right">${formatCurrency(sgst)}</td>
-                  <td class="right">${formatCurrency(snapshot.totals.tax)}</td>
-                </tr>
-                <tr>
-                  <td class="right"><strong>Total</strong></td>
-                  <td class="right"><strong>${formatCurrency(taxableAmount)}</strong></td>
-                  <td></td><td class="right"><strong>${formatCurrency(cgst)}</strong></td>
-                  <td></td><td class="right"><strong>${formatCurrency(sgst)}</strong></td>
-                  <td class="right"><strong>${formatCurrency(snapshot.totals.tax)}</strong></td>
-                </tr>
+                ${taxSummaryBodyHtml}
               </tbody>
             </table>
             <section class="tax-words-box">
@@ -1622,8 +1830,8 @@ export default function VmsPageClient() {
                   </thead>
                   <tbody>
                     {rows.map((row, index) => {
-                      const amount = toSafeNumber(row.qty) * toSafeNumber(row.price);
-                      const taxAmount = row.tax === "GST@18%" ? amount * 0.18 : 0;
+                      const amount = getRowAmount(row);
+                      const taxAmount = getRowTaxAmount(row);
                       return (
                         <tr key={row.id}>
                           <td>
@@ -1669,7 +1877,7 @@ export default function VmsPageClient() {
                             ) : null}
                           </td>
                           <td><input value={row.price} onChange={(event) => updateRow(row.id, "price", event.target.value)} /></td>
-                          <td><select value={row.tax} onChange={(event) => updateRow(row.id, "tax", event.target.value)}><option>Select</option><option>GST@18%</option><option>GST@12%</option><option>IGST@18%</option></select></td>
+                          <td><select value={row.tax} onChange={(event) => updateRow(row.id, "tax", event.target.value)}><option>Select</option><option>GST@18%</option><option>GST@12%</option><option>IGST@18%</option><option>NONE</option></select></td>
                           <td>{taxAmount.toLocaleString("en-IN")}</td>
                           <td>{(amount + taxAmount).toLocaleString("en-IN")}</td>
                         </tr>
@@ -1734,7 +1942,7 @@ export default function VmsPageClient() {
                   {attachedDocument ? <span className="invoice-file-name">{attachedDocument}</span> : null}
                 </div>
                 <div className="invoice-tax-box">
-                  <label><span>Tax</span><select value={invoice.tax} onChange={(event) => setInvoice((current) => ({ ...current, tax: event.target.value }))}><option>GST@18%</option><option>GST@12%</option><option>NONE</option></select><strong>{totals.tax.toLocaleString("en-IN")}</strong></label>
+                  <label><span>Tax</span><select value={invoice.tax} onChange={(event) => updateInvoiceTax(event.target.value)}><option>GST@18%</option><option>GST@12%</option><option>IGST@18%</option><option>NONE</option></select><strong>{totals.tax.toLocaleString("en-IN")}</strong></label>
                   <label><span>TDS</span><select value={invoice.tds} onChange={(event) => setInvoice((current) => ({ ...current, tds: event.target.value }))}><option>NONE</option><option>1%</option><option>2%</option></select><strong>0</strong></label>
                   <div className="invoice-total-line"><span>Total</span><strong>{totals.grand.toLocaleString("en-IN")}</strong></div>
                   <label className="invoice-received-row">
