@@ -13,9 +13,9 @@ export default async function InvoiceDetailPage({ params }) {
     <RecordDetailPage
       eyebrow="Invoice Detail"
       title={invoice.invoiceNo}
-      brandEyebrow="Payroll Suite"
-      primaryHref="/payroll"
-      primaryLabel="Back To Payroll"
+      brandEyebrow="Invoice Suite"
+      primaryHref="/invoices"
+      primaryLabel="Back To Invoice"
       summary={`${invoice.invoiceNo} from ${invoice.vendor} is tracked for ${invoice.amount} with ${invoice.status} status.`}
       details={[
         ["Vendor", invoice.vendor],

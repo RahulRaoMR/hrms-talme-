@@ -85,6 +85,57 @@ const requirementDateFields = new Set([
 const dateMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const candidatePageSize = 10;
 const requirementPageSize = 10;
+const sharePointAtsWorkbookUrl =
+  "https://talmetech-my.sharepoint.com/:x:/g/personal/badri_talme_in/IQBWSBaW6j6WTrqR2hkOgXvxAe7HF1cb0Wh7_ult4BL2TRY?e=yPN54q&nav=MTVfe0VGREI5Q0U2LUU1MTUtNEY5OC1BMDA0LTQ1QkRBQURERkQ5QX0";
+const candidateFields = [
+  { key: "jobId", label: "Job ID" },
+  { key: "recruiterId", label: "Recruiter ID" },
+  { key: "recruiterName", label: "Recruiter Name" },
+  { key: "name", label: "Candidate Name", sortable: true },
+  { key: "role", label: "Position", sortable: true },
+  { key: "stage", label: "Stage", sortable: true },
+  { key: "label", label: "Candidate Current Status", sortable: true, status: true },
+  { key: "source", label: "Source", sortable: true },
+  { key: "businessUnit", label: "Business Unit" },
+  { key: "domain", label: "Domain" },
+  { key: "client", label: "Client" },
+  { key: "noticePeriod", label: "Notice Period" },
+  { key: "email", label: "Candidate Email" },
+  { key: "phone", label: "Phone No." },
+  { key: "qualification", label: "Qualification" },
+  { key: "yearsOfExperience", label: "Years of Exp" },
+  { key: "previousCompany", label: "Previous Company" },
+  { key: "previousCtc", label: "Previous CTC" },
+  { key: "location", label: "Location" },
+  { key: "preferredLocation", label: "Preferred Location" },
+  { key: "expectedCtc", label: "Expected CTC" },
+  { key: "sourceDate", label: "Source Date" },
+  { key: "screeningDate", label: "Screening Date" },
+  { key: "screeningNotes", label: "Screening Notes" },
+  { key: "tech1Date", label: "Tech 1 Date" },
+  { key: "tech1Status", label: "Tech 1 Status" },
+  { key: "tech1Remarks", label: "Tech 1 Remarks" },
+  { key: "tech1Panel", label: "Tech 1 Panel" },
+  { key: "tech2Date", label: "Tech 2 Date" },
+  { key: "tech2Status", label: "Tech 2 Status" },
+  { key: "tech2Remarks", label: "Tech 2 Remarks" },
+  { key: "tech2Panel", label: "Tech 2 Panel" },
+  { key: "tech3Date", label: "Tech 3 Date" },
+  { key: "tech3Status", label: "Tech 3 Status" },
+  { key: "tech3Remarks", label: "Tech 3 Remarks" },
+  { key: "tech3Panel", label: "Tech 3 Panel" },
+  { key: "offerStageInputDate", label: "Offer Stage Input Date" },
+  { key: "documentCollectionDate", label: "Document Collection Date" },
+  { key: "approvalDate", label: "Approval Date" },
+  { key: "offerDate", label: "Offer Date" },
+  { key: "offerStatus", label: "Offer Status" },
+  { key: "offerDecisionDate", label: "Offer Accept/Reject Date" },
+  { key: "offerAcceptStatus", label: "Offer Accept Status" },
+  { key: "joiningDate", label: "Date Of Joining" },
+  { key: "joiningStatus", label: "Joining Status" },
+  { key: "offeredCtc", label: "CTC Offered" }
+];
+const candidateSearchKeys = candidateFields.map((field) => field.key);
 
 function formatRequirementDate(value) {
   if (!value) return "-";
@@ -104,6 +155,16 @@ function formatRequirementValue(opening, field) {
   if (requirementDateFields.has(field.key)) {
     return formatRequirementDate(value);
   }
+
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  return value;
+}
+
+function formatCandidateValue(candidate, field) {
+  const value = candidate[field.key];
 
   if (value === null || value === undefined || value === "") {
     return "-";
@@ -233,9 +294,7 @@ export default function AtsPageClient({ data = {} }) {
       const q = query.trim().toLowerCase();
       const matchesQuery =
         !q ||
-        candidate.name.toLowerCase().includes(q) ||
-        candidate.role.toLowerCase().includes(q) ||
-        candidate.stage.toLowerCase().includes(q);
+        candidateSearchKeys.some((key) => String(candidate[key] || "").toLowerCase().includes(q));
       return matchesSource && matchesQuery;
     });
 
@@ -359,6 +418,14 @@ export default function AtsPageClient({ data = {} }) {
           >
             Candidate Shortlist
           </button>
+          <a
+            className="ghost-button"
+            href={sharePointAtsWorkbookUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open SharePoint ATS
+          </a>
         </>
       }
       brandEyebrow="ATS Suite"
@@ -529,7 +596,7 @@ export default function AtsPageClient({ data = {} }) {
           <form className="candidate-search-form" onSubmit={submitCandidateSearch}>
             <input
               className="search-input"
-              placeholder="Search candidate, role, or stage"
+              placeholder="Search Candidate Master"
               value={candidateSearchInput}
               onChange={(event) => {
                 setCandidateSearchInput(event.target.value);
@@ -563,20 +630,14 @@ export default function AtsPageClient({ data = {} }) {
             <CsvActions
               filename="talme-candidates.csv"
               rows={filteredCandidates}
-              columns={[
-                { key: "name", label: "Name" },
-                { key: "role", label: "Role" },
-                { key: "stage", label: "Stage" },
-                { key: "source", label: "Source" },
-                { key: "label", label: "Status" }
-              ]}
+              columns={candidateFields.map(({ key, label }) => ({ key, label }))}
               sample={"Asha Verma,Talent Specialist,Screening,Direct ATS,Imported"}
               onImport={importCandidatesAction}
               onImported={reload}
             />
           </div>
         </div>
-        <table className="data-table">
+        <table className="data-table candidate-master-table">
           <thead>
             <tr>
               <th>
@@ -593,11 +654,17 @@ export default function AtsPageClient({ data = {} }) {
                   type="checkbox"
                 />
               </th>
-              <th><button className="table-sort" onClick={() => toggleSort("name")} type="button">Name</button></th>
-              <th><button className="table-sort" onClick={() => toggleSort("role")} type="button">Role</button></th>
-              <th><button className="table-sort" onClick={() => toggleSort("stage")} type="button">Stage</button></th>
-              <th><button className="table-sort" onClick={() => toggleSort("source")} type="button">Source</button></th>
-              <th><button className="table-sort" onClick={() => toggleSort("label")} type="button">Decision</button></th>
+              {candidateFields.map((field) => (
+                <th key={field.key}>
+                  {field.sortable ? (
+                    <button className="table-sort" onClick={() => toggleSort(field.key)} type="button">
+                      {field.label}
+                    </button>
+                  ) : (
+                    field.label
+                  )}
+                </th>
+              ))}
               <th>Actions</th>
             </tr>
           </thead>
@@ -618,13 +685,20 @@ export default function AtsPageClient({ data = {} }) {
                     type="checkbox"
                   />
                 </td>
-                <td>{candidate.name}</td>
-                <td>{candidate.role}</td>
-                <td>{candidate.stage}</td>
-                <td>{candidate.source}</td>
-                <td>
-                  <StatusBadge tone={candidate.tone}>{candidate.label}</StatusBadge>
-                </td>
+                {candidateFields.map((field) => (
+                  <td
+                    className={field.key === "name" ? "candidate-name-cell" : undefined}
+                    key={field.key}
+                  >
+                    {field.status ? (
+                      <StatusBadge tone={candidate.tone}>{candidate.label}</StatusBadge>
+                    ) : field.key === "name" ? (
+                      <strong>{formatCandidateValue(candidate, field)}</strong>
+                    ) : (
+                      formatCandidateValue(candidate, field)
+                    )}
+                  </td>
+                ))}
                 <td>
                   <div className="row-actions">
                     <Link
@@ -685,7 +759,7 @@ export default function AtsPageClient({ data = {} }) {
             ))}
             {!pagedCandidates.length ? (
               <tr>
-                <td colSpan="7">No matching candidates found.</td>
+                <td colSpan={candidateFields.length + 2}>No matching candidates found.</td>
               </tr>
             ) : null}
           </tbody>
