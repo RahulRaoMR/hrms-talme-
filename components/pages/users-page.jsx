@@ -14,14 +14,23 @@ import { useDemoStore } from "@/lib/use-demo-store";
 const seedUsers = [
   {
     id: "seed-user",
-    name: "Talme Director",
-    email: "director@talme.ai",
+    name: "Saidarshaan",
+    email: "saidarshaan@talme.in",
     role: "Enterprise Admin",
     active: true
   }
 ];
 
-const accessRoles = ["Enterprise Admin", "HR", "Employee HRMS", "Payroll", "Employee"];
+const accessRoles = [
+  "Enterprise Admin",
+  "Payroll + ATS",
+  "ATS",
+  "Invoice",
+  "HR",
+  "Employee HRMS",
+  "Payroll",
+  "Employee"
+];
 
 export default function UsersPageClient() {
   const { items: users, prepend, reload, replace, remove } = useDemoStore(

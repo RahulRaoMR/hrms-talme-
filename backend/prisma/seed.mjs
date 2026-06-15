@@ -14,6 +14,17 @@ import {
 
 const prisma = new PrismaClient();
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
+const defaultAccessPassword = process.env.DEFAULT_ACCESS_PASSWORD || defaultAdminPassword;
+
+const accessUsers = [
+  ["Saidarshaan", "saidarshaan@talme.in", "Enterprise Admin"],
+  ["Nandhini", "nandhini@talme.in", "Payroll + ATS"],
+  ["Amrutha", "accounts@talme.in", "Invoice"],
+  ["Harshitha", "harshitha@talme.in", "ATS"],
+  ["Himanshu", "himanshu@talme.in", "ATS"],
+  ["Pooja", "hr@talme.in", "ATS"],
+  ["Sreehari", "sreehari@talme.in", "ATS"]
+];
 
 const candidates = [
   ["Neha Sharma", "HRBP", "Final Interview", "Direct ATS", "Pending", "gold"],
@@ -49,6 +60,27 @@ async function main() {
       passwordHash: await bcrypt.hash(defaultAdminPassword, 10)
     }
   });
+
+  const accessPasswordHash = await bcrypt.hash(defaultAccessPassword, 10);
+
+  for (const [name, email, role] of accessUsers) {
+    await prisma.user.upsert({
+      where: { email },
+      update: {
+        name,
+        role,
+        active: true,
+        passwordHash: accessPasswordHash
+      },
+      create: {
+        name,
+        email,
+        role,
+        active: true,
+        passwordHash: accessPasswordHash
+      }
+    });
+  }
 
   for (const [name, role, stage, source, status, tone] of candidates) {
     const existing = await prisma.candidate.findFirst({ where: { name, role } });

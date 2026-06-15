@@ -6,6 +6,7 @@ import { hasPersistentDatabase, prisma } from "@/lib/prisma-store";
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 const defaultHrPassword = process.env.DEFAULT_HR_PASSWORD || "hr123";
+const defaultAccessPassword = process.env.DEFAULT_ACCESS_PASSWORD || defaultAdminPassword;
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
@@ -27,7 +28,15 @@ export async function POST(request) {
     );
   }
 
-  const persistentUser = await getPersistentLoginUser(identifier, password, expectedRole);
+  const persistentUser = await getPersistentLoginUser(identifier, password, expectedRole)
+    .catch((error) => {
+      if (!isDatabaseUnavailableError(error)) {
+        throw error;
+      }
+
+      console.error("Login database is unavailable; trying local authentication.", error.code);
+      return null;
+    });
   const user = persistentUser || await getLocalLoginUser(identifier, password, expectedRole);
 
   if (!user) {
@@ -86,6 +95,9 @@ function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
     hr: "HR",
+    payrollAts: "Payroll + ATS",
+    ats: "ATS",
+    invoice: "Invoice",
     employeeHrms: "Employee HRMS",
     payroll: "Payroll",
     employee: "Employee"
@@ -96,6 +108,10 @@ function normalizeLoginRole(role) {
 
 function isEmployeeIdLoginRole(role) {
   return ["Employee", "Employee HRMS"].includes(role);
+}
+
+function isDatabaseUnavailableError(error) {
+  return ["P1000", "P1001", "P1003", "P1017", "P2021", "P2022"].includes(error?.code);
 }
 
 async function getLocalLoginUser(identifier, password, expectedRole) {
@@ -124,6 +140,62 @@ async function getLocalLoginUser(identifier, password, expectedRole) {
       email: "hr@talme.ai",
       role: "HR",
       password: defaultHrPassword,
+      employeeId: null
+    },
+    {
+      id: "local-saidarshaan",
+      name: "Saidarshaan",
+      email: "saidarshaan@talme.in",
+      role: "Enterprise Admin",
+      password: defaultAccessPassword,
+      employeeId: null
+    },
+    {
+      id: "local-nandhini",
+      name: "Nandhini",
+      email: "nandhini@talme.in",
+      role: "Payroll + ATS",
+      password: defaultAccessPassword,
+      employeeId: null
+    },
+    {
+      id: "local-amrutha",
+      name: "Amrutha",
+      email: "accounts@talme.in",
+      role: "Invoice",
+      password: defaultAccessPassword,
+      employeeId: null
+    },
+    {
+      id: "local-harshitha",
+      name: "Harshitha",
+      email: "harshitha@talme.in",
+      role: "ATS",
+      password: defaultAccessPassword,
+      employeeId: null
+    },
+    {
+      id: "local-himanshu",
+      name: "Himanshu",
+      email: "himanshu@talme.in",
+      role: "ATS",
+      password: defaultAccessPassword,
+      employeeId: null
+    },
+    {
+      id: "local-pooja",
+      name: "Pooja",
+      email: "hr@talme.in",
+      role: "ATS",
+      password: defaultAccessPassword,
+      employeeId: null
+    },
+    {
+      id: "local-sreehari",
+      name: "Sreehari",
+      email: "sreehari@talme.in",
+      role: "ATS",
+      password: defaultAccessPassword,
       employeeId: null
     }
   ];

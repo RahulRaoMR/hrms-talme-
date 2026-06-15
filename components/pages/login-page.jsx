@@ -9,9 +9,30 @@ const roleOptions = {
   admin: {
     label: "Enterprise Admin",
     identifierLabel: "Corporate Email",
-    identifier: "director@talme.ai",
+    identifier: "saidarshaan@talme.in",
     password: "",
     destination: "/dashboard"
+  },
+  payrollAts: {
+    label: "Payroll + ATS",
+    identifierLabel: "Corporate Email",
+    identifier: "Nandhini@talme.in",
+    password: "",
+    destination: "/payroll"
+  },
+  invoice: {
+    label: "Invoice",
+    identifierLabel: "Corporate Email",
+    identifier: "accounts@talme.in",
+    password: "",
+    destination: "/invoices"
+  },
+  ats: {
+    label: "ATS",
+    identifierLabel: "Corporate Email",
+    identifier: "Harshitha@talme.in",
+    password: "",
+    destination: "/ats"
   },
   hr: {
     label: "HR",
@@ -276,6 +297,9 @@ export default function LoginPageClient() {
                   }}
                 >
                   <option value="admin">Enterprise Admin</option>
+                  <option value="payrollAts">Payroll + ATS</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="ats">ATS</option>
                   <option value="hr">HR</option>
                   <option value="employeeHrms">Employee Attendance</option>
                   <option value="payroll">Payroll</option>

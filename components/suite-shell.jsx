@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
-import { canAccess, resolveRole } from "@/lib/permissions";
+import { canAccess, defaultPathForRole, resolveRole } from "@/lib/permissions";
 import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
 
 export default function SuiteShell({
@@ -22,8 +22,9 @@ export default function SuiteShell({
   const [navOpen, setNavOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const role = resolveRole(session?.user?.role || "") || "Enterprise Admin";
-  const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
+  const resolvedRole = resolveRole(session?.user?.role || "");
+  const role = resolvedRole || "";
+  const hasRouteAccess = Boolean(session && resolvedRole && canAccess(role, pathname));
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("talme-theme-mode");
@@ -39,6 +40,20 @@ export default function SuiteShell({
 
     window.location.replace("/login");
   }, [session, sessionChecked]);
+
+  useEffect(() => {
+    if (!sessionChecked || !session) return;
+
+    if (!resolvedRole) {
+      clearSuiteSession();
+      window.location.replace("/login");
+      return;
+    }
+
+    if (pathname && !canAccess(role, pathname)) {
+      router.replace(defaultPathForRole(role));
+    }
+  }, [pathname, resolvedRole, role, router, session, sessionChecked]);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -80,7 +95,7 @@ export default function SuiteShell({
     window.location.replace("/login");
   }
 
-  if (!sessionChecked || !session) {
+  if (!sessionChecked || !session || !hasRouteAccess) {
     return null;
   }
 
@@ -110,22 +125,33 @@ export default function SuiteShell({
               x
             </button>
           </div>
-          {visibleNavItems.map((item, index) => (
+          {navItems.map((item, index) => {
+            const allowed = canAccess(role, item.href);
+            return (
             <a
               key={item.href}
-              className={`nav-link ${pathname === item.href ? "active" : ""}`}
+              className={`nav-link ${pathname === item.href ? "active" : ""} ${allowed ? "" : "blocked"}`}
               href={item.href}
+              aria-disabled={!allowed}
+              title={allowed ? item.label : "Access blocked"}
+              onClick={(event) => {
+                if (!allowed) {
+                  event.preventDefault();
+                }
+              }}
             >
-              <span>{String(index + 1).padStart(2, "0")}</span>
+              <span className="nav-index">{String(index + 1).padStart(2, "0")}</span>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <strong>{item.label}</strong>
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
+                  {!allowed && <span className="nav-lock">Blocked</span>}
                 </div>
                 <small>{item.meta}</small>
               </div>
             </a>
-          ))}
+          );
+          })}
         </div>
       </aside>
 
