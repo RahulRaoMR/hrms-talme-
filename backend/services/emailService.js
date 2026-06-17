@@ -68,7 +68,7 @@ function shouldUseResend() {
     return false;
   }
 
-  return hasResendKey() && !hasSmtpCredentials();
+  return hasResendKey();
 }
 
 function getDefaultFrom(provider = "smtp") {

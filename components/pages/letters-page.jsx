@@ -20,11 +20,40 @@ const initialOfferLetter = {
   ctc: "Rs. 3,60,000 per annum",
   monthlySalary: "Rs. 15,000",
   joiningBonus: "Rs. 0",
+  
+  employeeEsi: "Rs. 1,350",
+  employerEsi: "Rs. 5,850",
+  medicalInsurance: "Rs. 6,000",
   leaveEntitlement: leavePolicy,
+  
   reportingManager: "HR Manager",
   weekdayShiftTiming: "08:00 AM to 5:30 PM",
   saturdayShiftTiming: "08:00 AM to 12:00 PM"
 };
+
+
+const fields = [
+  ["candidateName", "Name"],
+  ["jobRole", "Job Role"],
+  ["companyName", "Company Name"],
+  ["offerDate", "Offer Letter Date"],
+  ["offerDay", "Offer Letter Day"],
+  ["dateOfJoining", "Date of Joining"],
+  ["joiningDay", "Date Day"],
+  ["employmentType", "Employment Type"],
+  ["workLocation", "Place / Location"],
+  ["acceptanceDate", "Acceptance Date"],
+  ["ctc", "CTC"],
+  ["monthlySalary", "Monthly Salary"],
+  ["joiningBonus", "Joining Bonus"],
+  ["employeeEsi", "Employee's Contribution to ESIC"],
+  ["employerEsi", "Employer's Contribution to ESIC"],
+  ["medicalInsurance", "Medical Insurance"],
+  ["leaveEntitlement", "Leave"],
+  ["reportingManager", "Reporting Manager"],
+  ["weekdayShiftTiming", "Monday to Friday Timing"],
+ ["saturdayShiftTiming", "Saturday Timing"],
+  ];
 
 const experienceLetterBody =
   "This is to certify that Mr.Chandan Y C was employed with Talme Technologies Private Ltd in the role of Design Engineer from 15th MAY 2024 to 13th March 2026.\n\n" +
@@ -164,6 +193,7 @@ const letterTypes = [
       ["body", "Confidentiality Text", "textarea"]
     ]
   }
+ 
 ];
 
 const typeById = Object.fromEntries(letterTypes.map((type) => [type.id, type]));

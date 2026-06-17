@@ -243,7 +243,18 @@ function normalizeResourceRows(payload, key) {
 }
 
 async function fetchResourceRows(path, key) {
-  const response = await fetch(apiUrl(path), { cache: "no-store" });
+  const url = apiUrl(path);
+  let response;
+
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    if (url === path) {
+      throw error;
+    }
+
+    response = await fetch(path, { cache: "no-store" });
+  }
 
   if (!response.ok) {
     throw new Error(`${path} failed with ${response.status}`);
@@ -345,14 +356,27 @@ export default function HrmsPageClient({ data }) {
   };
 
   const downloadSalarySlips = async () => {
-    const response = await fetch(apiUrl("/api/pdf/salary-slips"), {
+    const path = "/api/pdf/salary-slips";
+    const endpointUrl = apiUrl(path);
+    const requestOptions = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         month: salarySheet.monthLabel,
         rows: salarySheet.rows
       })
-    });
+    };
+    let response;
+
+    try {
+      response = await fetch(endpointUrl, requestOptions);
+    } catch (error) {
+      if (endpointUrl === path) {
+        throw error;
+      }
+
+      response = await fetch(path, requestOptions);
+    }
 
     if (!response.ok) {
       throw new Error("Unable to generate salary slips.");
@@ -373,14 +397,27 @@ export default function HrmsPageClient({ data }) {
     setShareSummary(null);
 
     try {
-      const response = await fetch(apiUrl("/api/pdf/share-salary-slips"), {
+      const path = "/api/pdf/share-salary-slips";
+      const endpointUrl = apiUrl(path);
+      const requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           month: salarySheet.monthLabel,
           rows: salarySheet.rows
         })
-      });
+      };
+      let response;
+
+      try {
+        response = await fetch(endpointUrl, requestOptions);
+      } catch (error) {
+        if (endpointUrl === path) {
+          throw error;
+        }
+
+        response = await fetch(path, requestOptions);
+      }
 
       if (!response.ok) {
         throw new Error("Unable to share salary slips.");
@@ -1450,6 +1487,7 @@ function normalizeAttendancePayload(payload) {
 
   return {
     ...payload,
+    salaryNetPay: Number(payload.salaryNetPay) || 0,
     month: payload.month || getMonthInputValue(new Date()),
     monthDays: meta.monthDays,
     sundays: meta.sundays,
@@ -1750,7 +1788,7 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
                 <TextField label="Employee Name" required placeholder="Enter Employee Name" value={state.employeeName} onChange={update("employeeName")} />
                 <TextField label="Display Name" placeholder="Enter Display Name" value={state.displayName} onChange={update("displayName")} />
                 <PhoneField label="Mobile Number" required country={state.mobileCountry} number={state.mobileNumber} onCountryChange={update("mobileCountry")} onNumberChange={update("mobileNumber")} />
-                <TextField label="Email" type="email" placeholder="Enter Employee Email" value={state.email} onChange={update("email")} />
+                <TextField label="Email" required type="email" placeholder="Enter Employee Email" value={state.email} onChange={update("email")} />
                 <RadioGroup label="Gender" required name="gender" value={state.gender} options={["Male", "Female", "Other"]} onChange={update("gender")} />
                 <SelectField label="Punch In Branch" required allowManual placeholder="Select Branches" value={state.punchInBranch} onChange={update("punchInBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
                 <SelectField label="Master Branch" required allowManual placeholder="Select Master Branches" value={state.masterBranch} onChange={update("masterBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
