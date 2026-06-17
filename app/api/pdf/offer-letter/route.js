@@ -31,6 +31,10 @@ function formatAmount(value) {
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(value || 0));
 }
 
+function manualAmount(value, fallback) {
+  return clean(value) ? amountFrom(value) : fallback;
+}
+
 function numberToIndianWords(value) {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
@@ -130,28 +134,37 @@ function buildCtcTail(ctcValue) {
   return `${formatAmount(amount)}/- (${numberToIndianWords(amount)} Only) per annum.`;
 }
 
-function calculateAnnexure(ctcValue) {
-  const ctc = amountFrom(ctcValue);
-  const basicYearly = Math.round(ctc * 0.5);
-  const hraYearly = Math.round(ctc * 0.25);
-  const conveyanceYearly = Math.round(ctc * 0.025);
-  const communicationYearly = ctc > 720000 ? 36000 : Math.round(ctc * 0.05);
-  const employeePfMonthly = Math.min(Math.round((basicYearly / 12) * 0.12), 1800);
+function calculateAnnexure(data) {
+  const ctc = amountFrom(data.ctc);
+  const monthlyCtc = ctc / 12;
+  const basicMonthly = monthlyCtc * 0.5;
+  const hraMonthly = monthlyCtc * 0.25;
+  const conveyanceMonthly = monthlyCtc * 0.025;
+  const communicationMonthly = monthlyCtc < 60000 ? monthlyCtc * 0.05 : 3000;
+  const basicYearly = basicMonthly * 12;
+  const hraYearly = hraMonthly * 12;
+  const conveyanceYearly = conveyanceMonthly * 12;
+  const communicationYearly = communicationMonthly * 12;
+  const employeePfMonthly = basicMonthly > 15000 ? 1800 : basicMonthly * 0.12;
   const employeePfYearly = employeePfMonthly * 12;
   const employerPfMonthly = employeePfMonthly;
   const employerPfYearly = employeePfYearly;
-  const edliYearly = Math.round(basicYearly * 0.005);
-  const epfAdminYearly = Math.round(basicYearly * 0.005);
-  const employerEsiYearly = Math.round(basicYearly < 252000 ? basicYearly * 0.0325 : 0);
-  const employerLwfYearly = 100;
+  const edliMonthly = basicMonthly > 15000 ? 75 : basicMonthly * 0.005;
+  const epfAdminMonthly = basicMonthly > 15000 ? 75 : basicMonthly * 0.005;
+  const edliYearly = edliMonthly * 12;
+  const epfAdminYearly = epfAdminMonthly * 12;
+  const calculatedEmployerEsiYearly = (basicMonthly <= 21000 ? basicMonthly * 0.0325 : 0) * 12;
+  const employerEsiYearly = manualAmount(data.employerEsi, calculatedEmployerEsiYearly);
+  const employerLwfYearly = 0;
   const employerTotalYearly = employerEsiYearly + employerPfYearly + edliYearly + epfAdminYearly + employerLwfYearly;
   const grossYearly = ctc - employerTotalYearly;
   const ltaYearly = grossYearly - basicYearly - hraYearly - conveyanceYearly - communicationYearly;
-  const employeeEsiYearly = Math.round(basicYearly < 252000 ? basicYearly * 0.0075 : 0);
-  const employeeLwfYearly = 50;
-  const professionalTaxYearly = grossYearly / 12 > 15000 ? 2400 : 0;
+  const calculatedEmployeeEsiYearly = (basicMonthly <= 21000 ? basicMonthly * 0.0075 : 0) * 12;
+  const employeeEsiYearly = manualAmount(data.employeeEsi, calculatedEmployeeEsiYearly);
+  const employeeLwfYearly = 0;
+  const professionalTaxYearly = grossYearly / 12 >= 25000 ? 2400 : 0;
   const employeeTotalYearly = employeeEsiYearly + employeePfYearly + employeeLwfYearly + professionalTaxYearly;
-  const medicalInsuranceYearly = 0;
+  const medicalInsuranceYearly = manualAmount(data.medicalInsurance, 6000);
   const incomeTaxYearly = 0;
   const totalTaxesYearly = incomeTaxYearly;
   const totalDeductionsYearly = medicalInsuranceYearly;
@@ -159,7 +172,7 @@ function calculateAnnexure(ctcValue) {
 
   return {
     ctc,
-    monthlyCtc: ctc / 12,
+    monthlyCtc,
     basic: basicYearly,
     hra: hraYearly,
     conveyance: conveyanceYearly,
@@ -444,7 +457,7 @@ function replacePolicyPage(page, fonts, data) {
 
 function drawAnnexureTable(page, fonts, data) {
   const { regular, bold } = fonts;
-  const values = calculateAnnexure(data.ctc);
+  const values = calculateAnnexure(data);
   const x = 24;
   const top = 674;
   const rowHeight = 15;
@@ -566,6 +579,9 @@ export async function POST(request) {
     employmentType: clean(data.employmentType),
     workLocation: clean(data.workLocation),
     ctc: clean(data.ctc),
+    employeeEsi: clean(data.employeeEsi),
+    employerEsi: clean(data.employerEsi),
+    medicalInsurance: clean(data.medicalInsurance),
     leaveEntitlement: clean(data.leaveEntitlement),
     acceptanceDate: clean(data.acceptanceDate),
     weekdayShiftTiming: clean(data.weekdayShiftTiming) || "08:00 AM to 5:30 PM",

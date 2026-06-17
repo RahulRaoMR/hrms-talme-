@@ -65,6 +65,20 @@ const roleOptions = {
 };
 const employeeSessionKey = "talme-employee-app-employee-id";
 
+async function fetchWithLocalFallback(path, options) {
+  const endpointUrl = apiUrl(path);
+
+  try {
+    return await fetch(endpointUrl, options);
+  } catch (error) {
+    if (endpointUrl === path) {
+      throw error;
+    }
+
+    return fetch(path, options);
+  }
+}
+
 export default function LoginPageClient() {
   const router = useRouter();
   const [formState, setFormState] = useState({
@@ -238,7 +252,7 @@ export default function LoginPageClient() {
                   throw new Error("Enter your password.");
                 }
 
-                const response = await fetch(apiUrl("/api/auth/login"), {
+                const response = await fetchWithLocalFallback("/api/auth/login", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
