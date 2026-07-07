@@ -155,10 +155,28 @@ model Invoice {
   invoiceNo  String   @unique
   attendance String
   amount     String
+  tds        String?
   status     String
   tone       String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model InvoiceParty {
+  id        String   @id @default(cuid())
+  name      String
+  gstin     String?  @unique
+  phone     String?
+  gstType   String?
+  state     String?
+  email     String?
+  billing   String?
+  shipping  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([phone])
 }
 
 model Employee {
@@ -213,6 +231,22 @@ model AttendanceRecord {
   tone      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PunchActivity {
+  id             String   @id @default(cuid())
+  employeeId     String
+  employeeName   String?
+  type           String
+  timestamp      DateTime
+  time           String
+  workDate       String
+  geoCoordinates Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([employeeId, workDate])
+  @@index([timestamp])
 }
 
 model VendorWorker {

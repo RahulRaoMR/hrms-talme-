@@ -3,7 +3,7 @@ import { confirmLocalPasswordReset } from "@/lib/password-reset-store";
 export async function POST(request) {
   try {
     const payload = await request.json();
-    const result = confirmLocalPasswordReset(payload);
+    const result = await confirmLocalPasswordReset(payload);
 
     return Response.json(result);
   } catch (error) {

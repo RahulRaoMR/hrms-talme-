@@ -10,6 +10,26 @@ services:
         value: production
       - key: NEXT_PUBLIC_API_URL
         sync: false
+      - key: ATS_SHAREPOINT_SYNC_ENABLED
+        value: "false"
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: ATS_SHAREPOINT_WORKBOOK_URL
+        sync: false
+      - key: ATS_SHAREPOINT_DRIVE_ID
+        sync: false
+      - key: ATS_SHAREPOINT_ITEM_ID
+        sync: false
+      - key: ATS_SHAREPOINT_REQUIREMENTS_SHEET
+        value: Requirement Overview
+      - key: ATS_SHAREPOINT_CANDIDATES_SHEET
+        value: Candidate Master
+      - key: ATS_SHAREPOINT_IMPORT_INTERVAL_MS
+        value: "60000"
 
   - type: web
     name: talme-hrms-backend
@@ -48,3 +68,23 @@ services:
         value: "false"
       - key: RESEND_API_KEY
         sync: false
+      - key: ATS_SHAREPOINT_SYNC_ENABLED
+        value: "false"
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: ATS_SHAREPOINT_WORKBOOK_URL
+        sync: false
+      - key: ATS_SHAREPOINT_DRIVE_ID
+        sync: false
+      - key: ATS_SHAREPOINT_ITEM_ID
+        sync: false
+      - key: ATS_SHAREPOINT_REQUIREMENTS_SHEET
+        value: Requirement Overview
+      - key: ATS_SHAREPOINT_CANDIDATES_SHEET
+        value: Candidate Master
+      - key: ATS_SHAREPOINT_IMPORT_INTERVAL_MS
+        value: "60000"

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "prisma:generate": "prisma generate --schema backend/prisma/schema.prisma",
     "build": "next build",
+    "test:dashboard": "node --test tests/dashboard-*.test.mjs",
     "start": "next start"
   },
   "dependencies": {

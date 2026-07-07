@@ -22,6 +22,7 @@ function getUniqueFieldLabel(error) {
 
   if (target === "employeeId") return "Employee ID";
   if (target === "email") return "Email";
+  if (target === "gstin") return "GSTIN";
   if (target === "invoiceNo") return "Invoice number";
   if (target === "jobId") return "Job ID";
   if (target === "recruiterId") return "Recruiter ID";
@@ -33,6 +34,10 @@ function persistentErrorResponse(error) {
   if (error?.code === "P2002") {
     const label = getUniqueFieldLabel(error);
     return Response.json({ error: `${label} already exists. Please use a different ${label.toLowerCase()}.` }, { status: 409 });
+  }
+
+  if (error?.status) {
+    return Response.json({ error: error.message }, { status: error.status });
   }
 
   console.error(error);

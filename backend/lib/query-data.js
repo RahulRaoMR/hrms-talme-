@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { maybeImportAtsFromSharePoint } from "@/lib/ats-sharepoint-sync";
 import { getRecruitmentPrisma, safeCount, safeFindMany } from "@/lib/recruitment-prisma";
 import { ensureSeedData } from "@/lib/seed-db";
 import {
@@ -115,6 +116,7 @@ function paginateItems(items, page = 1) {
 
 export async function getDashboardMetrics() {
   await ensureSeedData();
+  await refreshAtsFromSharePoint();
   const recruitmentPrisma = getRecruitmentPrisma();
 
   const [jobOpeningCount, candidateCount, vendorCount, approvedInvoiceCount, employeeCount] = await Promise.all([
@@ -143,6 +145,7 @@ export async function getDashboardMetrics() {
 
 export async function getJobOpenings() {
   await ensureSeedData();
+  await refreshAtsFromSharePoint();
   const recruitmentPrisma = getRecruitmentPrisma();
 
   return safeFindMany(recruitmentPrisma.jobOpening, {
@@ -170,7 +173,8 @@ export async function getEnterpriseSuiteData() {
       vendorWorkers,
       documents,
       approvals,
-      settings
+      settings,
+      punchActivity
     ] = await Promise.all([
       prisma.employee.findMany({ orderBy: { createdAt: "desc" } }),
       prisma.leaveRequest.findMany({ orderBy: { createdAt: "desc" } }),
@@ -178,7 +182,8 @@ export async function getEnterpriseSuiteData() {
       prisma.vendorWorker.findMany({ orderBy: { createdAt: "desc" } }),
       prisma.documentRecord.findMany({ orderBy: { createdAt: "desc" } }),
       prisma.approvalItem.findMany({ orderBy: { createdAt: "desc" } }),
-      prisma.companySetting.findMany({ orderBy: { category: "asc" } })
+      prisma.companySetting.findMany({ orderBy: { category: "asc" } }),
+      prisma.punchActivity.findMany({ orderBy: { timestamp: "desc" } }).catch(() => [])
     ]);
 
     return {
@@ -188,7 +193,8 @@ export async function getEnterpriseSuiteData() {
       vendorWorkers,
       documents,
       approvals,
-      settings
+      settings,
+      punchActivity
     };
   } catch (error) {
     console.error("Falling back to demo HRMS data", error);
@@ -446,6 +452,7 @@ export async function getGlobalSearchResults(query) {
 
 export async function getCandidates({ query = "", source = "All", page = 1 }) {
   await ensureSeedData();
+  await refreshAtsFromSharePoint();
 
   const where = {
     AND: [
@@ -473,6 +480,12 @@ export async function getCandidates({ query = "", source = "All", page = 1 }) {
   ]);
 
   return { items, total, page, pageSize: PAGE_SIZE };
+}
+
+async function refreshAtsFromSharePoint() {
+  await maybeImportAtsFromSharePoint(prisma).catch((error) => {
+    console.error("SharePoint ATS import failed:", error);
+  });
 }
 
 export async function getVendors({ query = "", category = "All", page = 1 }) {

@@ -7,7 +7,7 @@ import { saveSuiteSession } from "@/lib/auth-session";
 
 const roleOptions = {
   admin: {
-    label: "Enterprise Admin",
+    label: "Super Admin",
     identifierLabel: "Corporate Email",
     identifier: "saidarshaan@talme.in",
     password: "",
@@ -21,7 +21,7 @@ const roleOptions = {
     destination: "/payroll"
   },
   invoice: {
-    label: "Invoice",
+    label: "Accounts",
     identifierLabel: "Corporate Email",
     identifier: "accounts@talme.in",
     password: "",
@@ -310,9 +310,9 @@ export default function LoginPageClient() {
                     });
                   }}
                 >
-                  <option value="admin">Enterprise Admin</option>
+                  <option value="admin">Super Admin</option>
                   <option value="payrollAts">Payroll + ATS</option>
-                  <option value="invoice">Invoice</option>
+                  <option value="invoice">Accounts</option>
                   <option value="ats">ATS</option>
                   <option value="hr">HR</option>
                   <option value="employeeHrms">Employee Attendance</option>

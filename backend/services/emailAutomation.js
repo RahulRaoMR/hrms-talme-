@@ -55,7 +55,11 @@ async function findEmployeeByReference(reference) {
 
   return prisma.employee.findFirst({
     where: {
-      OR: [{ employeeId: lookup }, { name: lookup }]
+      OR: [
+        { employeeId: { equals: lookup, mode: "insensitive" } },
+        { name: { equals: lookup, mode: "insensitive" } },
+        { email: { equals: lookup, mode: "insensitive" } }
+      ]
     }
   });
 }
@@ -67,17 +71,25 @@ export function shouldSendOfferEmail(previousStatus, nextStatus) {
 function getLeaveEmailStatus(status) {
   const normalizedStatus = String(status || "").trim().toLowerCase();
 
-  return ["accepted", "leave accepted"].includes(normalizedStatus) ? "Approved" : status || "Updated";
+  return ["accepted", "approved", "leave accepted"].includes(normalizedStatus) ? "Accepted" : status || "Updated";
 }
 
 export async function sendWelcomeEmailToEmployee(employee, options = {}) {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL;
+  const baseUrl = String(configuredUrl || "http://localhost:3000").trim().replace(/^"|"$/g, "").replace(/\/$/, "");
+  const frontendUrl = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+  const loginUrl = `${frontendUrl}/employee-app/login`;
   const passwordLine = options.password ? ` Temporary password: ${options.password}.` : "";
 
   return sendEmailSafely({
     to: employee?.email,
     subject: "Welcome to Talme",
     html: welcomeTemplate(employee, options.password),
-    text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully. Employee ID: ${employee?.employeeId || "-"}. Department: ${employee?.department || "-"}. Manager: ${employee?.manager || "-"}.${passwordLine}`,
+    text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully. Login page: ${loginUrl}. Employee ID: ${employee?.employeeId || "-"}. Department: ${employee?.department || "-"}. Manager: ${employee?.manager || "-"}.${passwordLine}`,
     context: "employee welcome"
   });
 }
