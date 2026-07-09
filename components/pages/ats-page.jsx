@@ -162,6 +162,63 @@ const candidateFields = [
   { key: "offeredCtc", label: "CTC Offered" }
 ];
 const candidateSearchKeys = candidateFields.map((field) => field.key);
+const candidateRequiredFields = new Set(["name", "role", "stage", "source"]);
+const candidateDateFields = new Set(candidateFields.filter((field) => /date/i.test(field.label)).map((field) => field.key));
+const candidateLongTextFields = new Set(["screeningNotes", "tech1Remarks", "tech2Remarks", "tech3Remarks"]);
+const candidateFormSeed = {
+  ...Object.fromEntries(candidateFields.map((field) => [field.key, ""])),
+  name: "Asha Verma",
+  email: "asha.verma@talme.ai",
+  role: "Talent Specialist",
+  stage: "Screening",
+  label: "New",
+  source: "Direct ATS"
+};
+
+function buildCandidatePayload(state) {
+  const payload = Object.fromEntries(
+    candidateFields
+      .filter((field) => field.key !== "label")
+      .map((field) => [field.key, state?.[field.key] ?? ""])
+  );
+  const status = state?.label || state?.status || "New";
+
+  return {
+    ...payload,
+    status,
+    tone: state?.tone || statusTone(status, "gold")
+  };
+}
+
+function CandidateFormFields({ state, onChange }) {
+  return (
+    <div className="form-grid candidate-record-grid">
+      {candidateFields.map((field) => {
+        const value = state?.[field.key] ?? "";
+        const commonProps = {
+          required: candidateRequiredFields.has(field.key),
+          value,
+          onChange: (event) => onChange(field.key, event.target.value)
+        };
+
+        return (
+          <label className={candidateLongTextFields.has(field.key) ? "candidate-wide-field" : ""} key={field.key}>
+            <span>{field.label}</span>
+            {candidateLongTextFields.has(field.key) ? (
+              <textarea rows={3} {...commonProps} />
+            ) : (
+              <input
+                inputMode={field.key === "phone" ? "tel" : field.key === "yearsOfExperience" ? "decimal" : undefined}
+                type={candidateDateFields.has(field.key) ? "date" : field.key === "email" ? "email" : "text"}
+                {...commonProps}
+              />
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
 
 function formatRequirementDate(value) {
   if (!value) return "-";
@@ -264,13 +321,7 @@ export default function AtsPageClient({ data = {} }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const cvInputRef = useRef(null);
-  const [formState, setFormState] = useState({
-    name: "Asha Verma",
-    email: "asha.verma@talme.ai",
-    role: "Talent Specialist",
-    stage: "Screening",
-    source: "Direct ATS"
-  });
+  const [formState, setFormState] = useState(candidateFormSeed);
   const [cvFileName, setCvFileName] = useState("");
   const [jobOpenings, setJobOpenings] = useState(data.jobOpenings || []);
   const [requirementModalOpen, setRequirementModalOpen] = useState(false);
@@ -857,66 +908,20 @@ export default function AtsPageClient({ data = {} }) {
           onSubmit={(event) => {
             event.preventDefault();
             startTransition(async () => {
-              const created = await createCandidateAction({
-                ...formState,
-                status: "New",
-                tone: "gold"
-              });
+              const created = await createCandidateAction(buildCandidatePayload(formState));
               prepend(created);
               await reload();
               setModalOpen(false);
+              setFormState(candidateFormSeed);
               setCvFileName("");
               setSourceFilter("All");
             });
           }}
         >
-          <div className="form-grid">
-            <label>
-              <span>Name</span>
-              <input
-                value={formState.name}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Email</span>
-              <input
-                value={formState.email}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, email: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Role</span>
-              <input
-                value={formState.role}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, role: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Stage</span>
-              <input
-                value={formState.stage}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, stage: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Source</span>
-              <input
-                value={formState.source}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, source: event.target.value }))
-                }
-              />
-            </label>
-          </div>
+          <CandidateFormFields
+            state={formState}
+            onChange={(key, value) => setFormState((current) => ({ ...current, [key]: value }))}
+          />
           <input
             ref={cvInputRef}
             accept=".pdf,.doc,.docx,.txt"
@@ -1000,15 +1005,7 @@ export default function AtsPageClient({ data = {} }) {
             onSubmit={(event) => {
               event.preventDefault();
               startTransition(async () => {
-                const updated = await updateCandidateAction(editState.id, {
-                  name: editState.name,
-                  email: editState.email,
-                  role: editState.role,
-                  stage: editState.stage,
-                  source: editState.source,
-                  status: editState.label,
-                  tone: editState.tone
-                });
+                const updated = await updateCandidateAction(editState.id, buildCandidatePayload(editState));
                 replace(editState.id, updated);
                 await reload();
                 setEditModalOpen(false);
@@ -1016,53 +1013,10 @@ export default function AtsPageClient({ data = {} }) {
               });
             }}
           >
-            <div className="form-grid">
-              <label>
-                <span>Name</span>
-                <input
-                  value={editState.name}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, name: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Email</span>
-                <input
-                  value={editState.email ?? ""}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, email: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Role</span>
-                <input
-                  value={editState.role}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, role: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Stage</span>
-                <input
-                  value={editState.stage}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, stage: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Source</span>
-                <input
-                  value={editState.source}
-                  onChange={(event) =>
-                    setEditState((current) => ({ ...current, source: event.target.value }))
-                  }
-                />
-              </label>
-            </div>
+            <CandidateFormFields
+              state={editState}
+              onChange={(key, value) => setEditState((current) => ({ ...current, [key]: value }))}
+            />
             <div className="modal-actions">
               <button
                 className="ghost-button"

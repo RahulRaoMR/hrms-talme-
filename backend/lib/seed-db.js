@@ -22,7 +22,7 @@ const defaultAccessPassword = process.env.DEFAULT_ACCESS_PASSWORD || defaultAdmi
 const accessUsers = [
   ["Saidarshaan", "saidarshaan@talme.in", "Enterprise Admin"],
   ["Nandhini", "nandhini@talme.in", "Payroll + ATS"],
-  ["Amrutha", "accounts@talme.in", "Invoice"],
+  ["Amrutha", "accounts@talme.in", "Accounts"],
   ["Harshitha", "harshitha@talme.in", "ATS"],
   ["Himanshu", "himanshu@talme.in", "ATS"],
   ["Pooja", "hr@talme.in", "ATS"],

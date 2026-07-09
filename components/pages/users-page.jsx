@@ -22,7 +22,9 @@ const seedUsers = [
 ];
 
 const accessRoles = [
+  "Super Admin",
   "Enterprise Admin",
+  "Accounts",
   "Payroll + ATS",
   "ATS",
   "Invoice",

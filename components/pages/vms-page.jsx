@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
+import { apiUrl } from "@/lib/api-client";
 
 const savedSalesStorageKey = "talme-sale-invoices";
 const deletedSalesStorageKey = "talme-deleted-sale-invoices";
@@ -35,10 +36,79 @@ const initialRows = [
 
 const unitOptions = ["NONE", "BAGS (BAG)", "BOTTLES (BTL)", "BOX (BOX)", "BUNDLES (BDL)", "DOZENS (DZN)", "GRAMMES (GM)", "KILOGRAMS (KG)", "LITRE (LTR)", "MONTH (MTH)", "PIECES (PCS)"];
 
+const invoiceTaxOptions = [
+  "NONE",
+  "GST@0%",
+  "GST@3%",
+  "GST@5%",
+  "GST@12%",
+  "GST@18%",
+  "GST@28%",
+  "CGST+SGST@5%",
+  "CGST+SGST@12%",
+  "CGST+SGST@18%",
+  "CGST+SGST@28%",
+  "IGST@5%",
+  "IGST@12%",
+  "IGST@18%",
+  "IGST@28%"
+];
+
+const invoiceTdsOptions = [
+  "NONE (0%)",
+  "0.1%",
+  "0.75%",
+  "1%",
+  "2%",
+  "5%",
+  "10%",
+  "20%",
+  "30%"
+];
+
 const defaultBuyerTaxProfile = {
   gstin: "29AACY0840P1ZV",
   pan: "AAACY0840P",
   state: "Karnataka"
+};
+
+const gstStateCodeMap = {
+  "01": "Jammu and Kashmir",
+  "02": "Himachal Pradesh",
+  "03": "Punjab",
+  "04": "Chandigarh",
+  "05": "Uttarakhand",
+  "06": "Haryana",
+  "07": "Delhi",
+  "08": "Rajasthan",
+  "09": "Uttar Pradesh",
+  10: "Bihar",
+  11: "Sikkim",
+  12: "Arunachal Pradesh",
+  13: "Nagaland",
+  14: "Manipur",
+  15: "Mizoram",
+  16: "Tripura",
+  17: "Meghalaya",
+  18: "Assam",
+  19: "West Bengal",
+  20: "Jharkhand",
+  21: "Odisha",
+  22: "Chhattisgarh",
+  23: "Madhya Pradesh",
+  24: "Gujarat",
+  26: "Dadra and Nagar Haveli and Daman and Diu",
+  27: "Maharashtra",
+  29: "Karnataka",
+  30: "Goa",
+  31: "Lakshadweep",
+  32: "Kerala",
+  33: "Tamil Nadu",
+  34: "Puducherry",
+  35: "Andaman and Nicobar Islands",
+  36: "Telangana",
+  37: "Andhra Pradesh",
+  38: "Ladakh"
 };
 
 const transactions = [
@@ -206,10 +276,35 @@ function parseDisplayDate(value) {
   return `${year.padStart(4, "20")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
+function parseInvoiceDate(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const date = new Date(`${clean}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parts = clean.split(/[/-]/).map((part) => part.trim());
+  if (parts.length !== 3) return null;
+
+  const [day, month, year] = parts;
+  const date = new Date(`${year.padStart(4, "20")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatCurrency(value) {
   return `₹ ${toSafeNumber(value).toLocaleString("en-IN", {
     maximumFractionDigits: 2
   })}`;
+}
+
+function formatCompactAmount(value) {
+  const amount = Math.max(0, toSafeNumber(value));
+  if (amount >= 10000000) return `${Math.round(amount / 10000000)}Cr`;
+  if (amount >= 100000) return `${Math.round(amount / 100000)}L`;
+  if (amount >= 1000) return `${Math.round(amount / 1000)}k`;
+  return String(Math.round(amount));
 }
 
 function toSafeNumber(value) {
@@ -218,19 +313,33 @@ function toSafeNumber(value) {
 }
 
 function getTaxRate(tax) {
-  switch (String(tax || "").trim().toUpperCase()) {
-    case "GST@18%":
-    case "IGST@18%":
-      return 0.18;
-    case "GST@12%":
-      return 0.12;
-    default:
-      return 0;
-  }
+  const match = String(tax || "").trim().toUpperCase().match(/^(?:GST|CGST\+SGST|IGST)@(\d+(?:\.\d+)?)%$/);
+  return match ? Number(match[1]) / 100 : 0;
+}
+
+function isInvoiceTaxOption(tax) {
+  const normalized = String(tax || "").trim().toUpperCase();
+  return invoiceTaxOptions.some((option) => option.toUpperCase() === normalized);
 }
 
 function isIgstTax(tax) {
   return String(tax || "").trim().toUpperCase().startsWith("IGST");
+}
+
+function normalizeTdsOption(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized || normalized === "NONE" || normalized === "NONE (0%)") return "NONE (0%)";
+  const match = normalized.match(/^(\d+(?:\.\d+)?)%$/);
+  if (!match) return "NONE (0%)";
+
+  return invoiceTdsOptions.find((option) => option === `${match[1]}%`) || "NONE (0%)";
+}
+
+function getTdsRate(value) {
+  const option = normalizeTdsOption(value);
+  if (option === "NONE (0%)") return 0;
+
+  return Number(option.replace("%", "")) / 100;
 }
 
 function formatTaxPercent(rate, spaced = false) {
@@ -334,6 +443,77 @@ function removeAddressLabelLines(lines, labels) {
 
 function displayAddress(address) {
   return removeAddressLabelLines(normalizeAddressLines(address), ["Billing Address"]).join("\n");
+}
+
+function normalizeLookup(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeGstin(value) {
+  return String(value || "").replace(/\s/g, "").toUpperCase();
+}
+
+function getStateFromGstin(value) {
+  const code = normalizeGstin(value).slice(0, 2);
+  return gstStateCodeMap[code] || "";
+}
+
+function partyFromRecord(record) {
+  return {
+    id: record.id,
+    name: record.name || "",
+    gstin: record.gstin || "",
+    phone: record.phone || "",
+    gstType: record.gstType || (record.gstin ? "Registered Business" : "Unregistered/Consumer"),
+    state: record.state || getStateFromGstin(record.gstin) || "Karnataka",
+    email: record.email || "",
+    billing: record.billing || "",
+    shipping: record.shipping || ""
+  };
+}
+
+function buildInvoicePartyPayload(party) {
+  return {
+    name: String(party.name || "").trim(),
+    gstin: normalizeGstin(party.gstin) || undefined,
+    phone: String(party.phone || "").trim(),
+    gstType: party.gstType || "Unregistered/Consumer",
+    state: party.state || getStateFromGstin(party.gstin) || "",
+    email: String(party.email || "").trim(),
+    billing: String(party.billing || "").trim(),
+    shipping: String(party.shipping || "").trim()
+  };
+}
+
+function hasInvoicePartyDetails(party) {
+  const payload = buildInvoicePartyPayload(party);
+  return Boolean(payload.name && (payload.gstin || payload.phone || payload.billing || payload.shipping));
+}
+
+function mergeInvoiceParties(records, savedSales) {
+  const merged = new Map();
+
+  function add(record) {
+    const party = partyFromRecord(record || {});
+    if (!hasInvoicePartyDetails(party)) return;
+
+    const key = normalizeGstin(party.gstin) || `${normalizeLookup(party.name)}|${normalizeLookup(party.phone)}`;
+    if (!key || key === "|") return;
+
+    const populatedParty = Object.fromEntries(
+      Object.entries(party).filter(([, value]) => value !== undefined && value !== "")
+    );
+
+    merged.set(key, {
+      ...(merged.get(key) || {}),
+      ...populatedParty
+    });
+  }
+
+  records.forEach(add);
+  savedSales.forEach((sale) => add(sale.partyData));
+
+  return Array.from(merged.values());
 }
 
 function formatAddressHtml(address) {
@@ -465,9 +645,13 @@ export default function VmsPageClient() {
   const [activeSaleId, setActiveSaleId] = useState(null);
   const [activeActionMenuId, setActiveActionMenuId] = useState(null);
   const [activePrintMenuId, setActivePrintMenuId] = useState(null);
+  const [invoiceParties, setInvoiceParties] = useState([]);
   const [partyModalOpen, setPartyModalOpen] = useState(false);
   const [partyModalMode, setPartyModalMode] = useState("add");
   const [unitMenuRow, setUnitMenuRow] = useState(null);
+  const [activePartySuggestions, setActivePartySuggestions] = useState("");
+  const [activeAddressField, setActiveAddressField] = useState("");
+  const [salesChartRange, setSalesChartRange] = useState("day");
   const [party, setParty] = useState({
     name: "Siddha Space",
     gstin: "",
@@ -487,7 +671,7 @@ export default function VmsPageClient() {
     state: "Select",
     copies: "Original",
     tax: "GST@18%",
-    tds: "NONE",
+    tds: "NONE (0%)",
     received: false,
     receivedAmount: "",
     signatoryName: ""
@@ -497,6 +681,7 @@ export default function VmsPageClient() {
   const [showShippingAddress, setShowShippingAddress] = useState(false);
   const [attachedDocument, setAttachedDocument] = useState("");
   const [attachedImage, setAttachedImage] = useState("");
+  const [liveDate, setLiveDate] = useState(() => new Date());
 
   useEffect(() => {
     try {
@@ -529,6 +714,27 @@ export default function VmsPageClient() {
   }, [deletedTransactionIds, salesLoaded]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadInvoiceParties() {
+      try {
+        const response = await fetch(apiUrl("/api/invoice-parties"), { cache: "no-store" });
+        if (!response.ok) return;
+        const rows = await response.json();
+        if (!cancelled && Array.isArray(rows)) {
+          setInvoiceParties(rows);
+        }
+      } catch {}
+    }
+
+    loadInvoiceParties();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     function closeRowMenus() {
       setActiveActionMenuId(null);
       setActivePrintMenuId(null);
@@ -538,6 +744,40 @@ export default function VmsPageClient() {
     return () => window.removeEventListener("click", closeRowMenus);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setLiveDate(new Date()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const previousInvoiceTotalRef = useRef(0);
+
+  const partyDirectory = useMemo(() => mergeInvoiceParties(invoiceParties, savedSales), [invoiceParties, savedSales]);
+
+  const partySuggestions = useMemo(() => {
+    const partyQueryValue =
+      activePartySuggestions === "phone" ? party.phone :
+      activePartySuggestions === "gstin" ? party.gstin :
+      party.name;
+    const query = normalizeLookup(partyQueryValue);
+    if (query.length < 2) return [];
+
+    return partyDirectory
+      .filter((record) =>
+        [record.name, record.phone, record.gstin, record.billing, record.shipping]
+          .some((value) => normalizeLookup(value).includes(query))
+      )
+      .slice(0, 5);
+  }, [activePartySuggestions, party.name, party.phone, party.gstin, partyDirectory]);
+
+  const gstinSuggestions = useMemo(() => {
+    const query = normalizeGstin(party.gstin);
+    if (query.length < 2) return [];
+
+    return partyDirectory
+      .filter((record) => normalizeGstin(record.gstin).includes(query))
+      .slice(0, 5);
+  }, [party.gstin, partyDirectory]);
+
   const totals = useMemo(() => {
     const subtotal = rows.reduce((sum, row) => {
       return sum + getRowAmount(row);
@@ -546,12 +786,15 @@ export default function VmsPageClient() {
     const tax = hasRowTax
       ? getRowsTaxAmount(rows)
       : subtotal * getTaxRate(invoice.tax);
+    const tds = subtotal * getTdsRate(invoice.tds);
+    const grand = Math.max(subtotal + tax - tds, 0);
     return {
       subtotal,
       tax,
-      grand: subtotal + tax
+      tds,
+      grand
     };
-  }, [invoice.tax, rows]);
+  }, [invoice.tax, invoice.tds, rows]);
 
   const paymentSummary = useMemo(() => {
     const received = invoice.received ? toSafeNumber(invoice.receivedAmount) : 0;
@@ -563,9 +806,209 @@ export default function VmsPageClient() {
     };
   }, [invoice.received, invoice.receivedAmount, totals.grand]);
 
+  useEffect(() => {
+    const previousTotal = previousInvoiceTotalRef.current;
+
+    if (invoice.received) {
+      const receivedAmount = toSafeNumber(invoice.receivedAmount);
+      const shouldSyncReceived =
+        !String(invoice.receivedAmount || "").trim() ||
+        Math.abs(receivedAmount - previousTotal) < 0.01 ||
+        receivedAmount > totals.grand;
+
+      if (shouldSyncReceived) {
+        setInvoice((current) => ({ ...current, receivedAmount: String(Number(totals.grand.toFixed(2))) }));
+      }
+    }
+
+    previousInvoiceTotalRef.current = totals.grand;
+  }, [invoice.received, invoice.receivedAmount, totals.grand]);
+
+  function findExistingParty(payload) {
+    const gstin = normalizeGstin(payload.gstin);
+    if (party.id) {
+      const byId = invoiceParties.find((record) => record.id === party.id);
+      if (byId) return byId;
+    }
+
+    if (gstin) {
+      const byGstin = invoiceParties.find((record) => normalizeGstin(record.gstin) === gstin);
+      if (byGstin) return byGstin;
+    }
+
+    return invoiceParties.find((record) =>
+      normalizeLookup(record.name) === normalizeLookup(payload.name) &&
+      normalizeLookup(record.phone) === normalizeLookup(payload.phone)
+    );
+  }
+
+  async function persistInvoiceParty({ silent = false, resetAfterSave = false } = {}) {
+    if (!hasInvoicePartyDetails(party)) return null;
+
+    const payload = buildInvoicePartyPayload(party);
+    const existing = findExistingParty(payload);
+    const path = existing ? `/api/invoice-parties/${existing.id}` : "/api/invoice-parties";
+
+    try {
+      const response = await fetch(apiUrl(path), {
+        method: existing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Unable to save party.");
+      }
+
+      const savedParty = await response.json();
+      setInvoiceParties((current) => {
+        const exists = current.some((record) => record.id === savedParty.id);
+        return exists
+          ? current.map((record) => (record.id === savedParty.id ? savedParty : record))
+          : [savedParty, ...current];
+      });
+
+      if (resetAfterSave) {
+        setParty({
+          name: "",
+          gstin: "",
+          phone: "",
+          gstType: "Unregistered/Consumer",
+          state: "Karnataka",
+          email: "",
+          billing: "",
+          shipping: ""
+        });
+        setShowShippingAddress(false);
+      } else {
+        setParty((current) => ({ ...current, id: savedParty.id, gstin: savedParty.gstin || current.gstin }));
+      }
+
+      if (!silent) {
+        setMessage(`Party ${savedParty.name} saved to backend.`);
+      }
+
+      return savedParty;
+    } catch (error) {
+      if (!silent) {
+        setMessage(error.message || "Unable to save party.");
+      }
+      return null;
+    }
+  }
+
+  async function persistInvoiceSummary({ silent = true } = {}) {
+    const invoiceNo = String(invoice.invoiceNo || "").trim();
+    if (!invoiceNo) return null;
+
+    const payload = {
+      vendor: party.name || "Unnamed Customer",
+      invoiceNo,
+      attendance: formatDateForList(invoice.invoiceDate) || "-",
+      amount: formatCurrency(totals.grand),
+      tds: normalizeTdsOption(invoice.tds),
+      status: paymentSummary.status,
+      tone: paymentSummary.status === "Paid" ? "green" : paymentSummary.status === "Part Paid" ? "gold" : "red"
+    };
+
+    try {
+      const listResponse = await fetch(apiUrl("/api/invoices"), { cache: "no-store" });
+      const invoiceRows = listResponse.ok ? await listResponse.json().catch(() => []) : [];
+      const existing = Array.isArray(invoiceRows)
+        ? invoiceRows.find((row) => String(row.invoiceNo || "").trim() === invoiceNo)
+        : null;
+
+      const response = await fetch(apiUrl(existing ? `/api/invoices/${existing.id}` : "/api/invoices"), {
+        method: existing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Unable to save invoice summary.");
+      }
+
+      return response.json().catch(() => null);
+    } catch (error) {
+      if (!silent) {
+        setMessage(error.message || "Unable to save invoice summary.");
+      }
+      return null;
+    }
+  }
+
+  function applyInvoiceParty(record) {
+    const nextParty = partyFromRecord(record);
+    setParty(nextParty);
+    setShowShippingAddress(Boolean(nextParty.shipping));
+    setActivePartySuggestions("");
+    setActiveAddressField("");
+    if (nextParty.state && invoice.state === "Select") {
+      setInvoice((current) => ({ ...current, state: nextParty.state }));
+    }
+  }
+
+  function updatePartyField(field, value) {
+    const nextValue = field === "gstin" ? normalizeGstin(value) : value;
+
+    if (field === "gstin") {
+      const matchingParty = partyDirectory.find((record) => normalizeGstin(record.gstin) === nextValue);
+      if (matchingParty) {
+        applyInvoiceParty({ ...matchingParty, gstin: nextValue });
+        return;
+      }
+    }
+
+    setParty((current) => {
+      const nextParty = { ...current, [field]: nextValue };
+      if (field === "gstin") {
+        const state = getStateFromGstin(nextValue);
+        if (state) {
+          nextParty.state = state;
+          nextParty.gstType = "Registered Business";
+        }
+      }
+
+      return nextParty;
+    });
+  }
+
+  function getAddressSuggestions(field) {
+    const query = normalizeLookup(party[field]);
+    const suggestions = [];
+    const seen = new Set();
+
+    function add(address, label, source) {
+      const cleanAddress = displayAddress(address);
+      const key = normalizeLookup(cleanAddress);
+      if (!cleanAddress || seen.has(key)) return;
+      if (query && !key.includes(query) && !normalizeLookup(label).includes(query)) return;
+      seen.add(key);
+      suggestions.push({ address: cleanAddress, label, source });
+    }
+
+    if (field === "shipping") {
+      add(party.billing, "Use billing address", party.name || "Current party");
+    }
+
+    partyDirectory.forEach((record) => {
+      add(record.billing, record.name || "Saved billing address", "Billing");
+      add(record.shipping, record.name || "Saved shipping address", "Shipping");
+    });
+
+    return suggestions.slice(0, 5);
+  }
+
+  function applyAddressSuggestion(field, address) {
+    setParty((current) => ({ ...current, [field]: address }));
+    setActiveAddressField("");
+  }
+
   function updateRow(id, key, value) {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
-    if (key === "tax" && (getTaxRate(value) > 0 || value === "NONE")) {
+    if (key === "tax" && isInvoiceTaxOption(value)) {
       setInvoice((current) => ({ ...current, tax: value }));
     }
   }
@@ -574,8 +1017,7 @@ export default function VmsPageClient() {
     setInvoice((current) => ({ ...current, tax: value }));
     setRows((current) =>
       current.map((row) => {
-        const rowTaxRate = getTaxRate(row.tax);
-        const shouldSyncRowTax = rowTaxRate > 0 || row.tax === "Select" || row.tax === "NONE";
+        const shouldSyncRowTax = isInvoiceTaxOption(row.tax) || row.tax === "Select";
         return shouldSyncRowTax ? { ...row, tax: value === "NONE" ? "NONE" : value } : row;
       })
     );
@@ -626,7 +1068,7 @@ export default function VmsPageClient() {
       state: "Select",
       copies: "Original",
       tax: "GST@18%",
-      tds: "NONE",
+      tds: "NONE (0%)",
       received: false,
       receivedAmount: "",
       signatoryName: ""
@@ -646,7 +1088,8 @@ export default function VmsPageClient() {
     setInvoice({
       received: false,
       receivedAmount: "",
-      ...transaction.invoiceData
+      ...transaction.invoiceData,
+      tds: normalizeTdsOption(transaction.invoiceData.tds)
     });
     setRows(transaction.rowsData);
     setAttachedDocument(transaction.attachedDocument || "");
@@ -687,7 +1130,7 @@ export default function VmsPageClient() {
       state: isYokogawa ? "Karnataka" : "Select",
       copies: "Original",
       tax: "GST@18%",
-      tds: "NONE",
+      tds: "NONE (0%)",
       received: false,
       receivedAmount: "",
       signatoryName: ""
@@ -907,7 +1350,7 @@ export default function VmsPageClient() {
       state: "",
       copies: "Original",
       tax: "GST@18%",
-      tds: "NONE",
+      tds: "NONE (0%)",
       received: transaction.status === "Paid",
       receivedAmount: transaction.status === "Paid" ? String(extractAmount(transaction.amount)) : ""
     };
@@ -938,7 +1381,8 @@ export default function VmsPageClient() {
     const tax = hasTaxableRow(snapshotRows)
       ? getRowsTaxAmount(snapshotRows)
       : subtotal * (transaction.invoiceData ? getTaxRate(snapshotInvoice.tax) : 0);
-    const grand = subtotal + tax || extractAmount(transaction.amount);
+    const tds = subtotal * getTdsRate(snapshotInvoice.tds);
+    const grand = Math.max(subtotal + tax - tds, 0) || extractAmount(transaction.amount);
 
     return {
       invoice: snapshotInvoice,
@@ -947,6 +1391,7 @@ export default function VmsPageClient() {
       totals: {
         subtotal,
         tax,
+        tds,
         grand
       }
     };
@@ -1341,6 +1786,7 @@ export default function VmsPageClient() {
       balance: formatCurrency(0),
       invoiceData: {
         ...(transaction.invoiceData || getTransactionSnapshot(transaction).invoice),
+        tds: normalizeTdsOption(transaction.invoiceData?.tds),
         received: true,
         receivedAmount: String(extractAmount(transaction.amount))
       }
@@ -1350,7 +1796,10 @@ export default function VmsPageClient() {
     setMessage(`Payment received for invoice ${transaction.invoiceNo}.`);
   }
 
-  function saveInvoice() {
+  async function saveInvoice() {
+    await persistInvoiceParty({ silent: true });
+    await persistInvoiceSummary({ silent: true });
+
     const saleRecord = {
       id: activeSaleId || `sale-${Date.now()}`,
       date: formatDateForList(invoice.invoiceDate),
@@ -1362,7 +1811,10 @@ export default function VmsPageClient() {
       balance: formatCurrency(paymentSummary.balance),
       status: paymentSummary.status,
       tone: paymentSummary.status === "Paid" ? "green" : paymentSummary.status === "Part Paid" ? "gold" : "red",
-      invoiceData: invoice,
+      invoiceData: {
+        ...invoice,
+        tds: normalizeTdsOption(invoice.tds)
+      },
       partyData: party,
       rowsData: rows,
       attachedDocument,
@@ -1531,16 +1983,139 @@ export default function VmsPageClient() {
   }, [deletedTransactionIds, savedSales, transactionSearch]);
 
   const salesSummary = useMemo(() => {
+    const datedTransactions = visibleTransactions
+      .map((transaction) => ({ transaction, date: parseInvoiceDate(transaction.date) }))
+      .filter((item) => item.date);
+    const chartDate = liveDate;
+    const chartYear = chartDate.getFullYear();
+    const chartMonth = chartDate.getMonth();
+    const monthShort = chartDate.toLocaleDateString("en-IN", { month: "short" });
+    let chartBuckets = [];
+    let previousPeriodTotal = 0;
+    let comparisonLabel = "last month";
+    let periodLabel = chartDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+    if (salesChartRange === "month") {
+      chartBuckets = Array.from({ length: 12 }, (_, index) => ({
+        label: new Date(chartYear, index, 1).toLocaleDateString("en-IN", { month: "short" }),
+        axisLabel: new Date(chartYear, index, 1).toLocaleDateString("en-IN", { month: "short" }),
+        total: 0
+      }));
+      comparisonLabel = "last year";
+      periodLabel = String(chartYear);
+
+      datedTransactions.forEach(({ transaction, date }) => {
+        const amount = extractAmount(transaction.amount);
+        if (date.getFullYear() === chartYear) {
+          chartBuckets[date.getMonth()].total += amount;
+        }
+        if (date.getFullYear() === chartYear - 1) {
+          previousPeriodTotal += amount;
+        }
+      });
+    } else if (salesChartRange === "year") {
+      const startYear = chartYear - 4;
+      chartBuckets = Array.from({ length: 5 }, (_, index) => {
+        const year = startYear + index;
+        return {
+          label: String(year),
+          axisLabel: String(year),
+          year,
+          total: 0
+        };
+      });
+      comparisonLabel = "previous year";
+      periodLabel = `${startYear} - ${chartYear}`;
+
+      datedTransactions.forEach(({ transaction, date }) => {
+        const amount = extractAmount(transaction.amount);
+        const bucket = chartBuckets.find((item) => item.year === date.getFullYear());
+        if (bucket) {
+          bucket.total += amount;
+        }
+        if (date.getFullYear() === chartYear - 1) {
+          previousPeriodTotal += amount;
+        }
+      });
+    } else {
+      const previousMonth = chartMonth === 0 ? 11 : chartMonth - 1;
+      const previousMonthYear = chartMonth === 0 ? chartYear - 1 : chartYear;
+      const daysInMonth = new Date(chartYear, chartMonth + 1, 0).getDate();
+      chartBuckets = Array.from({ length: daysInMonth }, (_, index) => ({
+        label: String(index + 1),
+        axisLabel: `${index + 1} ${monthShort}`,
+        day: index + 1,
+        total: 0
+      }));
+
+      datedTransactions.forEach(({ transaction, date }) => {
+        const amount = extractAmount(transaction.amount);
+        if (date.getFullYear() === chartYear && date.getMonth() === chartMonth) {
+          chartBuckets[date.getDate() - 1].total += amount;
+        }
+        if (date.getFullYear() === previousMonthYear && date.getMonth() === previousMonth) {
+          previousPeriodTotal += amount;
+        }
+      });
+    }
+
     const total = visibleTransactions.reduce((sum, transaction) => sum + extractAmount(transaction.amount), 0);
-    const received = visibleTransactions
-      .filter((transaction) => transaction.status === "Paid")
-      .reduce((sum, transaction) => sum + extractAmount(transaction.amount), 0);
+    const payableTransactions = visibleTransactions.filter((transaction) => /purchase/i.test(transaction.transaction || ""));
+    const saleTransactions = visibleTransactions.filter((transaction) => !/purchase/i.test(transaction.transaction || ""));
+    const payable = payableTransactions.reduce((sum, transaction) => {
+      const balance = extractAmount(transaction.balance);
+      return sum + (balance || extractAmount(transaction.amount));
+    }, 0);
+    const receivable = saleTransactions.reduce((sum, transaction) => sum + extractAmount(transaction.balance), 0);
+    const received = saleTransactions.reduce((sum, transaction) => {
+      const amount = extractAmount(transaction.amount);
+      const balance = extractAmount(transaction.balance);
+      return sum + Math.max(amount - balance, 0);
+    }, 0);
+    const chartTotal = chartBuckets.reduce((sum, item) => sum + item.total, 0);
+    const growthPercent = previousPeriodTotal > 0
+      ? Math.round(((chartTotal - previousPeriodTotal) / previousPeriodTotal) * 100)
+      : null;
+
     return {
       total,
+      chartTotal,
       received,
-      balance: total - received
+      balance: receivable,
+      receivable,
+      payable,
+      receivableParties: new Set(saleTransactions.filter((transaction) => extractAmount(transaction.balance) > 0).map((transaction) => transaction.party)).size,
+      payableParties: new Set(payableTransactions.map((transaction) => transaction.party)).size,
+      receivedParties: new Set(saleTransactions.filter((transaction) => extractAmount(transaction.amount) > extractAmount(transaction.balance)).map((transaction) => transaction.party)).size,
+      monthLabel: chartDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+      liveDateLabel: chartDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+      periodLabel,
+      comparisonLabel,
+      chartBuckets,
+      maxChartTotal: Math.max(...chartBuckets.map((item) => item.total), 1),
+      growthPercent
     };
-  }, [visibleTransactions]);
+  }, [liveDate, salesChartRange, visibleTransactions]);
+
+  const chartWidth = 720;
+  const chartHeight = 236;
+  const chartPadding = { top: 24, right: 20, bottom: 34, left: 54 };
+  const chartInnerWidth = chartWidth - chartPadding.left - chartPadding.right;
+  const chartInnerHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+  const chartPoints = salesSummary.chartBuckets.map((item, index) => {
+    const x = chartPadding.left + (salesSummary.chartBuckets.length > 1 ? (index / (salesSummary.chartBuckets.length - 1)) * chartInnerWidth : 0);
+    const y = chartPadding.top + chartInnerHeight - (item.total / salesSummary.maxChartTotal) * chartInnerHeight;
+    return { ...item, x, y };
+  });
+  const chartPath = chartPoints.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
+  const chartAreaPath = chartPoints.length
+    ? `${chartPoints.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ")} ${chartPadding.left + chartInnerWidth},${chartPadding.top + chartInnerHeight} ${chartPadding.left},${chartPadding.top + chartInnerHeight}`
+    : "";
+  const yAxisTicks = [1, 0.75, 0.5, 0.25, 0].map((ratio) => ({
+    value: salesSummary.maxChartTotal * ratio,
+    y: chartPadding.top + chartInnerHeight - ratio * chartInnerHeight
+  }));
+  const xAxisTicks = chartPoints.filter((point, index) => salesChartRange !== "day" || index === 0 || index % 3 === 0 || index === chartPoints.length - 1);
 
   return (
     <SuiteShell
@@ -1590,10 +2165,101 @@ export default function VmsPageClient() {
                 <button>All Firms</button>
                 <button>All Users</button>
               </div>
-              <div className="invoice-total-card">
-                <span>Total Sales Amount</span>
-                <strong>{formatCurrency(salesSummary.total)}</strong>
-                <small>Received: {formatCurrency(salesSummary.received)} &nbsp; Balance: {formatCurrency(salesSummary.balance)}</small>
+              <div className="invoice-finance-dashboard">
+                <div className="invoice-kpi-grid">
+                  <article className="invoice-kpi-card">
+                    <div>
+                      <span>Total Receivable</span>
+                      <strong>{formatCurrency(salesSummary.receivable)}</strong>
+                      <small>From {salesSummary.receivableParties} Parties</small>
+                    </div>
+                    <b className="invoice-kpi-icon teal">v</b>
+                  </article>
+                  <article className="invoice-kpi-card">
+                    <div>
+                      <span>Total Payable</span>
+                      <strong>{formatCurrency(salesSummary.payable)}</strong>
+                      <small>From {salesSummary.payableParties} Parties</small>
+                    </div>
+                    <b className="invoice-kpi-icon red">^</b>
+                  </article>
+                  <article className="invoice-kpi-card">
+                    <div>
+                      <span>Total Received</span>
+                      <strong>{formatCurrency(salesSummary.received)}</strong>
+                      <small>From {salesSummary.receivedParties} Parties</small>
+                    </div>
+                    <b className="invoice-kpi-icon blue">OK</b>
+                  </article>
+                </div>
+
+                <section className="invoice-sales-chart">
+                  <div className="invoice-chart-head">
+                    <div>
+                      <span>Total Sale</span>
+                      <strong>{formatCurrency(salesSummary.chartTotal)}</strong>
+                      {salesSummary.growthPercent !== null ? (
+                        <small className={salesSummary.growthPercent >= 0 ? "positive" : "negative"}>
+                          {Math.abs(salesSummary.growthPercent)}% {salesSummary.growthPercent >= 0 ? "more" : "less"} than {salesSummary.comparisonLabel}
+                        </small>
+                      ) : (
+                        <small className="positive">Live invoice total</small>
+                      )}
+                    </div>
+                    <div className="invoice-chart-controls">
+                      <div className="invoice-chart-range" aria-label="Sales graph range">
+                        {[
+                          ["day", "Day"],
+                          ["month", "Month"],
+                          ["year", "Year"]
+                        ].map(([value, label]) => (
+                          <button
+                            className={salesChartRange === value ? "active" : ""}
+                            key={value}
+                            onClick={() => setSalesChartRange(value)}
+                            type="button"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <button className="invoice-live-date" type="button">{salesSummary.liveDateLabel}</button>
+                    </div>
+                  </div>
+                  <svg className="invoice-line-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`Sales chart for ${salesSummary.periodLabel}`}>
+                    <defs>
+                      <linearGradient id="invoiceChartFill" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stopColor="#3d7fbd" stopOpacity="0.26" />
+                        <stop offset="100%" stopColor="#3d7fbd" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {yAxisTicks.map((tick) => (
+                      <g key={tick.y}>
+                        <line x1={chartPadding.left} x2={chartPadding.left + chartInnerWidth} y1={tick.y} y2={tick.y} />
+                        <text x={chartPadding.left - 12} y={tick.y + 4} textAnchor="end">{formatCompactAmount(tick.value)}</text>
+                      </g>
+                    ))}
+                    {xAxisTicks.map((tick) => (
+                      <text key={`${tick.axisLabel}-${tick.x}`} x={tick.x} y={chartHeight - 9} textAnchor="middle">{tick.axisLabel}</text>
+                    ))}
+                    <line className="axis" x1={chartPadding.left} x2={chartPadding.left + chartInnerWidth} y1={chartPadding.top + chartInnerHeight} y2={chartPadding.top + chartInnerHeight} />
+                    {chartAreaPath ? <polygon points={chartAreaPath} fill="url(#invoiceChartFill)" /> : null}
+                    {chartPath ? <polyline className="sales-line" points={chartPath} /> : null}
+                  </svg>
+                </section>
+
+                <div className="invoice-report-strip">
+                  <div>
+                    <span>Most Used Reports</span>
+                    <button type="button">View All</button>
+                  </div>
+                  {["Sale Report", "All Transactions", "Daybook Report", "Party Statement"].map((report) => (
+                    <button key={report} type="button">
+                      {report}
+                      <b>&gt;</b>
+                    </button>
+                  ))}
+                </div>
               </div>
               {message ? <p className="session-note invoice-list-message">{message}</p> : null}
               <table className="data-table invoice-transaction-table">
@@ -1737,9 +2403,12 @@ export default function VmsPageClient() {
                       <input
                         aria-label="Customer"
                         value={party.name || ""}
-                        onChange={(event) =>
-                          setParty((current) => ({ ...current, name: event.target.value }))
-                        }
+                        onBlur={() => {
+                          window.setTimeout(() => setActivePartySuggestions(""), 120);
+                          persistInvoiceParty({ silent: true });
+                        }}
+                        onChange={(event) => updatePartyField("name", event.target.value)}
+                        onFocus={() => setActivePartySuggestions("name")}
                         placeholder="Search by Name/Phone *"
                       />
                       <button
@@ -1753,16 +2422,79 @@ export default function VmsPageClient() {
                         Add Party
                       </button>
                     </div>
+                    {activePartySuggestions === "name" && partySuggestions.length ? (
+                      <div className="invoice-suggestion-list">
+                        {partySuggestions.map((suggestion) => (
+                          <button
+                            key={`${suggestion.id || suggestion.name}-${suggestion.gstin || suggestion.phone}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => applyInvoiceParty(suggestion)}
+                            type="button"
+                          >
+                            <strong>{suggestion.name}</strong>
+                            <span>{suggestion.gstin || suggestion.phone || suggestion.billing}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     <small className="invoice-balance">BAL: {paymentSummary.balance.toLocaleString("en-IN")}</small>
                   </label>
                   <div className="invoice-address-pair">
-                    <label>
+                    <label className="invoice-address-field">
                       <span>Billing Address</span>
-                      <textarea aria-label="Billing Address" value={party.billing} onChange={(event) => setParty((current) => ({ ...current, billing: event.target.value }))} />
+                      <textarea
+                        aria-label="Billing Address"
+                        value={party.billing}
+                        onBlur={() => {
+                          window.setTimeout(() => setActiveAddressField(""), 120);
+                          persistInvoiceParty({ silent: true });
+                        }}
+                        onChange={(event) => updatePartyField("billing", event.target.value)}
+                        onFocus={() => setActiveAddressField("billing")}
+                      />
+                      {activeAddressField === "billing" && getAddressSuggestions("billing").length ? (
+                        <div className="invoice-suggestion-list invoice-address-suggestions">
+                          {getAddressSuggestions("billing").map((suggestion) => (
+                            <button
+                              key={`${suggestion.source}-${suggestion.address}`}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => applyAddressSuggestion("billing", suggestion.address)}
+                              type="button"
+                            >
+                              <strong>{suggestion.label}</strong>
+                              <span>{suggestion.address}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </label>
-                    <label>
+                    <label className="invoice-address-field">
                       <span>Shipping Address</span>
-                      <textarea aria-label="Shipping Address" value={party.shipping} onChange={(event) => setParty((current) => ({ ...current, shipping: event.target.value }))} />
+                      <textarea
+                        aria-label="Shipping Address"
+                        value={party.shipping}
+                        onBlur={() => {
+                          window.setTimeout(() => setActiveAddressField(""), 120);
+                          persistInvoiceParty({ silent: true });
+                        }}
+                        onChange={(event) => updatePartyField("shipping", event.target.value)}
+                        onFocus={() => setActiveAddressField("shipping")}
+                      />
+                      {activeAddressField === "shipping" && getAddressSuggestions("shipping").length ? (
+                        <div className="invoice-suggestion-list invoice-address-suggestions">
+                          {getAddressSuggestions("shipping").map((suggestion) => (
+                            <button
+                              key={`${suggestion.source}-${suggestion.address}`}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => applyAddressSuggestion("shipping", suggestion.address)}
+                              type="button"
+                            >
+                              <strong>{suggestion.label}</strong>
+                              <span>{suggestion.address}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </label>
                   </div>
                   <div className="invoice-address-actions">
@@ -1877,7 +2609,14 @@ export default function VmsPageClient() {
                             ) : null}
                           </td>
                           <td><input value={row.price} onChange={(event) => updateRow(row.id, "price", event.target.value)} /></td>
-                          <td><select value={row.tax} onChange={(event) => updateRow(row.id, "tax", event.target.value)}><option>Select</option><option>GST@18%</option><option>GST@12%</option><option>IGST@18%</option><option>NONE</option></select></td>
+                          <td>
+                            <select value={row.tax} onChange={(event) => updateRow(row.id, "tax", event.target.value)}>
+                              <option>Select</option>
+                              {invoiceTaxOptions.map((taxOption) => (
+                                <option key={taxOption}>{taxOption}</option>
+                              ))}
+                            </select>
+                          </td>
                           <td>{taxAmount.toLocaleString("en-IN")}</td>
                           <td>{(amount + taxAmount).toLocaleString("en-IN")}</td>
                         </tr>
@@ -1942,8 +2681,27 @@ export default function VmsPageClient() {
                   {attachedDocument ? <span className="invoice-file-name">{attachedDocument}</span> : null}
                 </div>
                 <div className="invoice-tax-box">
-                  <label><span>Tax</span><select value={invoice.tax} onChange={(event) => updateInvoiceTax(event.target.value)}><option>GST@18%</option><option>GST@12%</option><option>IGST@18%</option><option>NONE</option></select><strong>{totals.tax.toLocaleString("en-IN")}</strong></label>
-                  <label><span>TDS</span><select value={invoice.tds} onChange={(event) => setInvoice((current) => ({ ...current, tds: event.target.value }))}><option>NONE</option><option>1%</option><option>2%</option></select><strong>0</strong></label>
+                  <label>
+                    <span>Tax</span>
+                    <select value={invoice.tax} onChange={(event) => updateInvoiceTax(event.target.value)}>
+                      {invoiceTaxOptions.map((taxOption) => (
+                        <option key={taxOption}>{taxOption}</option>
+                      ))}
+                    </select>
+                    <strong>{totals.tax.toLocaleString("en-IN")}</strong>
+                  </label>
+                  <label>
+                    <span>TDS</span>
+                    <select
+                      value={normalizeTdsOption(invoice.tds)}
+                      onChange={(event) => setInvoice((current) => ({ ...current, tds: event.target.value }))}
+                    >
+                      {invoiceTdsOptions.map((tdsOption) => (
+                        <option key={tdsOption}>{tdsOption}</option>
+                      ))}
+                    </select>
+                    <strong>{totals.tds.toLocaleString("en-IN")}</strong>
+                  </label>
                   <div className="invoice-total-line"><span>Total</span><strong>{totals.grand.toLocaleString("en-IN")}</strong></div>
                   <label className="invoice-received-row">
                     <span>
@@ -2007,9 +2765,84 @@ export default function VmsPageClient() {
       >
         <div className={`party-modal ${partyModalMode === "change" ? "party-modal-change" : ""}`}>
           <div className="party-top-grid">
-            <label><span>Party Name *</span><input value={party.name} onChange={(event) => setParty((current) => ({ ...current, name: event.target.value }))} /></label>
-            <label><span>GSTIN</span><input value={party.gstin} onChange={(event) => setParty((current) => ({ ...current, gstin: event.target.value }))} /></label>
-            <label><span>Phone Number</span><input value={party.phone} onChange={(event) => setParty((current) => ({ ...current, phone: event.target.value }))} /></label>
+            <label className="invoice-suggestion-field">
+              <span>Party Name *</span>
+              <input
+                value={party.name}
+                onBlur={() => window.setTimeout(() => setActivePartySuggestions(""), 120)}
+                onChange={(event) => updatePartyField("name", event.target.value)}
+                onFocus={() => setActivePartySuggestions("name")}
+              />
+              {activePartySuggestions === "name" && partySuggestions.length ? (
+                <div className="invoice-suggestion-list">
+                  {partySuggestions.map((suggestion) => (
+                    <button
+                      key={`${suggestion.id || suggestion.name}-${suggestion.gstin || suggestion.phone}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyInvoiceParty(suggestion)}
+                      type="button"
+                    >
+                      <strong>{suggestion.name}</strong>
+                      <span>{suggestion.gstin || suggestion.phone || suggestion.billing}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+            <label className="invoice-suggestion-field">
+              <span>GSTIN</span>
+              <input
+                list="invoice-gstin-options"
+                value={party.gstin}
+                onBlur={() => window.setTimeout(() => setActivePartySuggestions(""), 120)}
+                onChange={(event) => updatePartyField("gstin", event.target.value)}
+                onFocus={() => setActivePartySuggestions("gstin")}
+              />
+              <datalist id="invoice-gstin-options">
+                {partyDirectory.filter((record) => record.gstin).map((record) => (
+                  <option key={record.gstin} value={record.gstin}>{record.name}</option>
+                ))}
+              </datalist>
+              {activePartySuggestions === "gstin" && gstinSuggestions.length ? (
+                <div className="invoice-suggestion-list">
+                  {gstinSuggestions.map((suggestion) => (
+                    <button
+                      key={`${suggestion.id || suggestion.name}-${suggestion.gstin}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyInvoiceParty(suggestion)}
+                      type="button"
+                    >
+                      <strong>{suggestion.gstin}</strong>
+                      <span>{suggestion.name} - {suggestion.billing || suggestion.state}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+            <label className="invoice-suggestion-field">
+              <span>Phone Number</span>
+              <input
+                value={party.phone}
+                onBlur={() => window.setTimeout(() => setActivePartySuggestions(""), 120)}
+                onChange={(event) => updatePartyField("phone", event.target.value)}
+                onFocus={() => setActivePartySuggestions("phone")}
+              />
+              {activePartySuggestions === "phone" && partySuggestions.length ? (
+                <div className="invoice-suggestion-list">
+                  {partySuggestions.map((suggestion) => (
+                    <button
+                      key={`${suggestion.id || suggestion.name}-${suggestion.phone || suggestion.gstin}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyInvoiceParty(suggestion)}
+                      type="button"
+                    >
+                      <strong>{suggestion.phone || suggestion.name}</strong>
+                      <span>{suggestion.name} - {suggestion.billing || suggestion.gstin}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
           </div>
           <div className="party-tabs">
             <button className="active" type="button">{partyModalMode === "change" ? "Address" : "GST & Address"}</button>
@@ -2022,18 +2855,58 @@ export default function VmsPageClient() {
               <label><span>State</span><select value={party.state} onChange={(event) => setParty((current) => ({ ...current, state: event.target.value }))}>{indiaStatesAndUts.map((state) => <option key={state}>{state}</option>)}</select></label>
               <label><span>Email ID</span><input value={party.email} onChange={(event) => setParty((current) => ({ ...current, email: event.target.value }))} /></label>
             </div>
-            <label><span>Billing Address</span><textarea value={party.billing} onChange={(event) => setParty((current) => ({ ...current, billing: event.target.value }))} /></label>
+            <label className="invoice-address-field">
+              <span>Billing Address</span>
+              <textarea
+                value={party.billing}
+                onBlur={() => window.setTimeout(() => setActiveAddressField(""), 120)}
+                onChange={(event) => updatePartyField("billing", event.target.value)}
+                onFocus={() => setActiveAddressField("billing")}
+              />
+              {activeAddressField === "billing" && getAddressSuggestions("billing").length ? (
+                <div className="invoice-suggestion-list invoice-address-suggestions">
+                  {getAddressSuggestions("billing").map((suggestion) => (
+                    <button
+                      key={`${suggestion.source}-${suggestion.address}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyAddressSuggestion("billing", suggestion.address)}
+                      type="button"
+                    >
+                      <strong>{suggestion.label}</strong>
+                      <span>{suggestion.address}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
             <div className="party-stack">
               <span>Shipping Address</span>
               {showShippingAddress ? (
-                <textarea
-                  aria-label="New Shipping Address"
-                  placeholder="Shipping Address"
-                  value={party.shipping}
-                  onChange={(event) =>
-                    setParty((current) => ({ ...current, shipping: event.target.value }))
-                  }
-                />
+                <label className="invoice-address-field invoice-address-field-plain">
+                  <textarea
+                    aria-label="New Shipping Address"
+                    placeholder="Shipping Address"
+                    value={party.shipping}
+                    onBlur={() => window.setTimeout(() => setActiveAddressField(""), 120)}
+                    onChange={(event) => updatePartyField("shipping", event.target.value)}
+                    onFocus={() => setActiveAddressField("shipping")}
+                  />
+                  {activeAddressField === "shipping" && getAddressSuggestions("shipping").length ? (
+                    <div className="invoice-suggestion-list invoice-address-suggestions">
+                      {getAddressSuggestions("shipping").map((suggestion) => (
+                        <button
+                          key={`${suggestion.source}-${suggestion.address}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyAddressSuggestion("shipping", suggestion.address)}
+                          type="button"
+                        >
+                          <strong>{suggestion.label}</strong>
+                          <span>{suggestion.address}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </label>
               ) : (
                 <button
                   className="ghost-button"
@@ -2047,8 +2920,17 @@ export default function VmsPageClient() {
           </div>
           <div className="modal-actions">
             <button className="ghost-button" onClick={() => setPartyModalOpen(false)} type="button">Cancel</button>
-            {partyModalMode === "add" ? <button className="ghost-button" onClick={() => setMessage("Party saved. Add another party when ready.")} type="button">Save &amp; New</button> : null}
-            <button className="primary-button" onClick={() => setPartyModalOpen(false)} type="button">{partyModalMode === "change" ? "Update" : "Save"}</button>
+            {partyModalMode === "add" ? <button className="ghost-button" onClick={() => persistInvoiceParty({ resetAfterSave: true })} type="button">Save &amp; New</button> : null}
+            <button
+              className="primary-button"
+              onClick={async () => {
+                await persistInvoiceParty();
+                setPartyModalOpen(false);
+              }}
+              type="button"
+            >
+              {partyModalMode === "change" ? "Update" : "Save"}
+            </button>
           </div>
         </div>
       </Modal>

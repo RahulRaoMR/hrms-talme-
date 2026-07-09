@@ -7,7 +7,7 @@ import { saveSuiteSession } from "@/lib/auth-session";
 
 const roleOptions = {
   admin: {
-    label: "Enterprise Admin",
+    label: "Super Admin",
     identifierLabel: "Corporate Email",
     identifier: "saidarshaan@talme.in",
     password: "",
@@ -21,7 +21,7 @@ const roleOptions = {
     destination: "/payroll"
   },
   invoice: {
-    label: "Invoice",
+    label: "Accounts",
     identifierLabel: "Corporate Email",
     identifier: "accounts@talme.in",
     password: "",
@@ -68,15 +68,19 @@ const employeeSessionKey = "talme-employee-app-employee-id";
 async function fetchWithLocalFallback(path, options) {
   const endpointUrl = apiUrl(path);
 
-  try {
-    return await fetch(endpointUrl, options);
-  } catch (error) {
-    if (endpointUrl === path) {
-      throw error;
-    }
-
+  if (endpointUrl === path) {
     return fetch(path, options);
   }
+
+  try {
+    const response = await fetch(endpointUrl, options);
+
+    if (response.status < 500 && ![404, 405].includes(response.status)) {
+      return response;
+    }
+  } catch {}
+
+  return fetch(path, options);
 }
 
 export default function LoginPageClient() {
@@ -310,9 +314,9 @@ export default function LoginPageClient() {
                     });
                   }}
                 >
-                  <option value="admin">Enterprise Admin</option>
+                  <option value="admin">Super Admin</option>
                   <option value="payrollAts">Payroll + ATS</option>
-                  <option value="invoice">Invoice</option>
+                  <option value="invoice">Accounts</option>
                   <option value="ats">ATS</option>
                   <option value="hr">HR</option>
                   <option value="employeeHrms">Employee Attendance</option>

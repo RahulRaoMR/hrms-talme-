@@ -155,9 +155,6 @@ export default function SuiteShell({
             </button>
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
-            <p className="session-note">
-              Frontend API: <strong>{process.env.NEXT_PUBLIC_API_URL || "local"}</strong>
-            </p>
           </div>
           <div className="topbar-actions">
             <div className="search-pill">Global Search</div>

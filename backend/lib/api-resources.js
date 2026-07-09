@@ -315,6 +315,7 @@ const resourceConfigs = {
         invoiceNo: requiredString(payload, "invoiceNo", "Invoice number"),
         attendance: requiredString(payload, "attendance", "Attendance"),
         amount: requiredString(payload, "amount", "Amount"),
+        tds: optionalString(payload, "tds"),
         status: optionalString(payload, "status") || "Queued",
         tone: optionalString(payload, "tone") || "gold"
       };
@@ -325,6 +326,7 @@ const resourceConfigs = {
         invoiceNo: optionalString(payload, "invoiceNo"),
         attendance: optionalString(payload, "attendance"),
         amount: optionalString(payload, "amount"),
+        tds: optionalString(payload, "tds"),
         status: optionalString(payload, "status"),
         tone: optionalString(payload, "tone")
       };
@@ -333,6 +335,41 @@ const resourceConfigs = {
       create: (record) => `Created invoice ${record.invoiceNo}`,
       update: (record) => `Updated invoice ${record.invoiceNo}`,
       delete: (record, id) => `Deleted invoice ${record?.invoiceNo || id}`
+    }
+  },
+  "invoice-parties": {
+    model: "invoiceParty",
+    entity: "Invoice party",
+    orderBy: { updatedAt: "desc" },
+    async createData(payload) {
+      return {
+        name: requiredString(payload, "name", "Party name"),
+        gstin: optionalString(payload, "gstin")?.toUpperCase() || undefined,
+        phone: optionalString(payload, "phone"),
+        gstType: optionalString(payload, "gstType"),
+        state: optionalString(payload, "state"),
+        email: optionalString(payload, "email"),
+        billing: optionalString(payload, "billing"),
+        shipping: optionalString(payload, "shipping")
+      };
+    },
+    async updateData(payload) {
+      const gstin = optionalString(payload, "gstin");
+      return {
+        name: optionalString(payload, "name"),
+        gstin: gstin ? gstin.toUpperCase() : undefined,
+        phone: optionalString(payload, "phone"),
+        gstType: optionalString(payload, "gstType"),
+        state: optionalString(payload, "state"),
+        email: optionalString(payload, "email"),
+        billing: optionalString(payload, "billing"),
+        shipping: optionalString(payload, "shipping")
+      };
+    },
+    audit: {
+      create: (record) => `Created invoice party ${record.name}`,
+      update: (record) => `Updated invoice party ${record.name}`,
+      delete: (record, id) => `Deleted invoice party ${record?.name || id}`
     }
   },
   users: {

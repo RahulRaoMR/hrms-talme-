@@ -22,6 +22,7 @@ function getUniqueFieldLabel(error) {
 
   if (target === "employeeId") return "Employee ID";
   if (target === "email") return "Email";
+  if (target === "gstin") return "GSTIN";
   if (target === "invoiceNo") return "Invoice number";
   if (target === "jobId") return "Job ID";
   if (target === "recruiterId") return "Recruiter ID";

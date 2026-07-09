@@ -1,12 +1,18 @@
 export const rolePermissions = {
   "Enterprise Admin": ["*"],
+  Accounts: [
+    "/invoices"
+  ],
   "Payroll + ATS": [
     "/payroll",
     "/ats",
     "/candidates",
     "/recruitment",
     "/hrms",
-    "/employees"
+    "/employees",
+    "/shifts",
+    "/leaves",
+    "/documents"
   ],
   ATS: [
     "/ats",
@@ -161,8 +167,20 @@ export const rolePermissions = {
   ]
 };
 
+const roleAliases = {
+  Admin: "Enterprise Admin",
+  Administrator: "Enterprise Admin",
+  "Super Admin": "Enterprise Admin",
+  Invoice: "Accounts",
+  Account: "Accounts",
+  Accounts: "Accounts",
+  Finance: "Accounts"
+};
+
 export function resolveRole(role) {
-  return rolePermissions[role] ? role : null;
+  const directRole = String(role || "").trim();
+  const aliasedRole = roleAliases[directRole] || directRole;
+  return rolePermissions[aliasedRole] ? aliasedRole : null;
 }
 
 export function canAccess(role, href) {

@@ -6,7 +6,13 @@ import { ensureSeedData } from "@/lib/seed-db";
 
 const credentialRoles = {
   admin: "Enterprise Admin",
+  superAdmin: "Enterprise Admin",
+  administrator: "Enterprise Admin",
   hr: "HR",
+  payrollAts: "Payroll + ATS",
+  ats: "ATS",
+  invoice: "Accounts",
+  accounts: "Accounts",
   employeeHrms: "Employee HRMS",
   payroll: "Payroll",
   employee: "Employee"
@@ -55,7 +61,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
 
         if (!user || !user.active) return null;
-        if (expectedRole && user.role !== expectedRole) return null;
+        if (expectedRole && canonicalRole(user.role) !== canonicalRole(expectedRole)) return null;
 
         const matches = await bcrypt.compare(password, user.passwordHash);
         if (!matches) return null;
@@ -64,7 +70,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           name: employee?.name || user.name,
           email: user.email,
-          role: user.role,
+          role: canonicalRole(user.role),
           employeeId: employee?.employeeId || null
         };
       }
@@ -94,3 +100,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   secret: process.env.AUTH_SECRET || "talme-dev-secret"
 });
+
+function canonicalRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+
+  if (["admin", "administrator", "super admin", "enterprise admin"].includes(normalized)) {
+    return "Enterprise Admin";
+  }
+
+  if (["account", "accounts", "invoice", "finance"].includes(normalized)) {
+    return "Accounts";
+  }
+
+  return role || "";
+}

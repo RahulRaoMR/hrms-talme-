@@ -1,13 +1,12 @@
-import "./lib/load-env.js";
-import crypto, { randomBytes } from "node:crypto";
+import dotenv from "dotenv";
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
-import { Prisma, PrismaClient } from "@prisma/client";
-import pool from "./config/db.js";
+import { PrismaClient } from "@prisma/client";
 import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
-import { isEmailConfigured } from "./services/emailService.js";
+import { buildPayslipRowsFromQuery, createPayslipPdf } from "../lib/payslip-pdf.js";
 import {
   exportAtsToSharePoint,
   getAtsSharePointSyncStatus,
@@ -15,6 +14,8 @@ import {
   maybeImportAtsFromSharePoint,
   queueAtsSharePointExport
 } from "./lib/ats-sharepoint-sync.js";
+
+dotenv.config({ override: true, quiet: true });
 
 const databaseUrl =
   process.env.DATABASE_URL ||
@@ -47,7 +48,8 @@ const resourceMap = {
   recruiters: { model: "recruiter", orderBy: { recruiterId: "asc" }, fields: ["recruiterId", "name", "email", "phoneNumber", "currentStatus", "joinedDate", "lwd", "designation"] },
   "harmonized-roles": { model: "harmonizedRole", orderBy: { position: "asc" }, fields: ["position", "harmonizedRole"] },
   vendors: { model: "vendor", orderBy: { createdAt: "desc" }, fields: ["vendor", "category", "sites", "rating", "status", "tone"] },
-  invoices: { model: "invoice", orderBy: { createdAt: "desc" }, fields: ["vendor", "invoiceNo", "attendance", "amount", "status", "tone"] },
+  invoices: { model: "invoice", orderBy: { createdAt: "desc" }, fields: ["vendor", "invoiceNo", "attendance", "amount", "tds", "status", "tone"] },
+  "invoice-parties": { model: "invoiceParty", orderBy: { updatedAt: "desc" }, fields: ["name", "gstin", "phone", "gstType", "state", "email", "billing", "shipping"] },
   users: { model: "user", orderBy: { createdAt: "desc" }, fields: ["name", "email", "role", "active"] },
   employees: { model: "employee", orderBy: { createdAt: "desc" }, fields: ["employeeId", "email", "name", "department", "location", "manager", "grade", "joiningDate", "salaryBand", "salaryNetPay", "bankStatus", "status", "tone", "employeeDetails"] },
   "leave-requests": { model: "leaveRequest", orderBy: { createdAt: "desc" }, fields: ["employee", "leaveType", "dates", "balance", "reason", "approver", "status", "tone"] },
@@ -77,12 +79,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static("public/uploads"));
 
 app.get("/", asyncHandler(async (_req, res) => {
-  const result = await pool.query("SELECT NOW()");
-
   res.json({
     message: "Talme HRMS Backend Running",
-    database: "connected",
-    time: result.rows[0]
+    database: databaseStatus,
+    time: new Date().toISOString()
   });
 }));
 
@@ -179,7 +179,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     throw loginError;
   }
 
-  if (!user || !user.active || (expectedRole && user.role !== expectedRole)) {
+  if (!user || !user.active || (expectedRole && canonicalLoginRole(user.role) !== canonicalLoginRole(expectedRole))) {
     return res.status(401).json({ error: "Invalid email, role, or password." });
   }
 
@@ -193,7 +193,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     id: user.id,
     name: employee?.name || user.name,
     email: user.email,
-    role: user.role,
+    role: canonicalLoginRole(user.role),
     employeeId: employee?.employeeId || null
   };
 
@@ -462,12 +462,30 @@ app.delete("/api/users/:id", asyncHandler(async (req, res) => {
   res.json({ id: req.params.id });
 }));
 
-app.post("/api/employees", asyncHandler(async (req, res) => {
-  const data = pick(req.body, resourceMap.employees.fields, resourceMap.employees);
-  const row = await prisma.employee.create({ data });
-  const onboarding = await onboardEmployee(row);
-  res.status(201).json({ ...row, onboarding });
-}));
+app.get("/api/pdf/payslip", (req, res) => {
+  const params = new URLSearchParams();
+
+  Object.entries(req.query || {}).forEach(([key, value]) => {
+    params.set(key, Array.isArray(value) ? String(value[0] || "") : String(value || ""));
+  });
+
+  const pdf = createPayslipPdf(buildPayslipRowsFromQuery(params));
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", 'inline; filename="payslip.pdf"');
+  res.send(pdf);
+});
+
+app.post("/api/pdf/salary-slips", (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const month = String(req.body?.month || "current-month");
+  const fileMonth = month.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
+  const pdf = createPayslipPdf(rows.length ? rows : [{ employee: "No salary rows", month }]);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="salary-slips-${fileMonth}.pdf"`);
+  res.send(pdf);
+});
 
 app.all("/api/pdf/:kind", (req, res) => {
   res.setHeader("Content-Type", "application/json");
@@ -487,7 +505,7 @@ app.get("/api/uploads", asyncHandler(async (req, res) => {
 
 app.post("/api/uploads", asyncHandler(async (req, res) => {
   const payload = await buildUploadPayload(req);
-  const row = await prisma.uploadedAsset.create({ data: pick(payload, resourceMap.uploads.fields, resourceMap.uploads) });
+  const row = await prisma.uploadedAsset.create({ data: pick(payload, resourceMap.uploads.fields) });
 
   res.status(201).json(row);
 }));
@@ -505,8 +523,9 @@ app.post("/api/:resource", asyncHandler(async (req, res) => {
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const data = coerceResourceFields(req.params.resource, pick(req.body, config.fields));
   const row = await prisma[config.model].create({ data });
+  const onboarding = req.params.resource === "employees" ? await onboardEmployee(row) : null;
   queueAtsResourceExport(req.params.resource);
-  res.status(201).json(row);
+  res.status(201).json(onboarding ? { ...row, onboarding } : row);
 }));
 
 app.get("/api/:resource/:id", asyncHandler(async (req, res) => {
@@ -585,60 +604,6 @@ function queueAtsResourceExport(resource) {
   if (isAtsSharePointResource(resource)) {
     queueAtsSharePointExport(prisma, resource);
   }
-}
-
-function getModelFieldMap(modelName) {
-  const model = Prisma.dmmf.datamodel.models.find((item) => item.name.toLowerCase() === modelName.toLowerCase());
-  return new Map(model?.fields.map((field) => [field.name, field]) || []);
-}
-
-function coerceFieldValue(value, field) {
-  if (!field) return value;
-
-  if (value === "" && !field.isRequired) {
-    return null;
-  }
-
-  if (field.type === "Int") {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  if (field.type === "Float") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  if (field.type === "Boolean") {
-    if (typeof value === "boolean") return value;
-    return ["true", "1", "yes", "on"].includes(String(value).toLowerCase());
-  }
-
-  if (field.type === "Json" && typeof value === "string") {
-    return JSON.parse(value);
-  }
-
-  if (field.type === "DateTime") {
-    return value instanceof Date ? value : new Date(value);
-  }
-
-  return value;
-}
-
-function formatStorageDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function formatPunchTime(date) {
-  return new Intl.DateTimeFormat("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true
-  }).format(date).toLowerCase();
 }
 
 async function buildUploadPayload(req) {
@@ -837,12 +802,26 @@ function formatFileSize(size = 0) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function pick(payload, fields, config) {
-  const fieldMap = config ? getModelFieldMap(config.model) : new Map();
+function formatStorageDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
+  return `${year}-${month}-${day}`;
+}
+
+function formatPunchTime(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  }).format(date).toLowerCase();
+}
+
+function pick(payload, fields) {
   return fields.reduce((data, field) => {
     if (payload?.[field] !== undefined) {
-      data[field] = coerceFieldValue(payload[field], fieldMap.get(field));
+      data[field] = payload[field];
     }
     return data;
   }, {});
@@ -873,13 +852,33 @@ function asyncHandler(handler) {
 function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
+    superAdmin: "Enterprise Admin",
+    administrator: "Enterprise Admin",
     hr: "HR",
+    payrollAts: "Payroll + ATS",
+    ats: "ATS",
+    invoice: "Accounts",
+    accounts: "Accounts",
     employeeHrms: "Employee HRMS",
     payroll: "Payroll",
     employee: "Employee"
   };
 
   return roles[role] || role || "";
+}
+
+function canonicalLoginRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+
+  if (["admin", "administrator", "super admin", "enterprise admin"].includes(normalized)) {
+    return "Enterprise Admin";
+  }
+
+  if (["account", "accounts", "invoice", "finance"].includes(normalized)) {
+    return "Accounts";
+  }
+
+  return role || "";
 }
 
 function isDatabaseUnavailableError(error) {
@@ -910,6 +909,10 @@ function hasEmailConfiguration() {
   if (process.env.SMTP_HOST) return hasEmailCredentials();
 
   return hasEmailCredentials();
+}
+
+function isEmailConfigured() {
+  return hasEmailConfiguration();
 }
 
 function shouldUseResendEmail() {
@@ -1007,135 +1010,6 @@ async function sendEmail(to, subject, html, options = {}) {
   ]);
 }
 
-function legacyEscapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function employeeEmailDetail(label, value) {
-  return `
-    <tr>
-      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">${legacyEscapeHtml(label)}</td>
-      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 700;">${legacyEscapeHtml(value || "-")}</td>
-    </tr>
-  `;
-}
-
-function buildWelcomeEmployeeEmail(employee, password) {
-  return `
-    <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 640px; margin: 0 auto; padding: 24px;">
-      <div style="border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden;">
-        <div style="background: linear-gradient(135deg, #0f766e, #1d4ed8); color: #ffffff; padding: 24px;">
-          <p style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Talme HRMS</p>
-          <h2 style="margin: 0; font-size: 28px;">Welcome to Talme</h2>
-        </div>
-        <div style="padding: 24px;">
-          <p>Hi ${legacyEscapeHtml(employee?.name || "Team Member")},</p>
-          <p>Your employee account has been created successfully.</p>
-          <table style="width: 100%; border-collapse: collapse; margin: 18px 0; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-            <tbody>
-              ${employeeEmailDetail("Employee ID", employee?.employeeId)}
-              ${employeeEmailDetail("Employee Name", employee?.name)}
-              ${employeeEmailDetail("Department", employee?.department)}
-              ${employeeEmailDetail("Manager", employee?.manager)}
-            </tbody>
-          </table>
-          <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 18px 0;">
-            <p style="margin: 0 0 8px; font-weight: 700;">Employee portal login</p>
-            <p style="margin: 0;">Employee ID: <strong>${legacyEscapeHtml(employee?.employeeId || "-")}</strong></p>
-            <p style="margin: 4px 0 0;">Temporary password: <strong>${legacyEscapeHtml(password || "-")}</strong></p>
-          </div>
-          <p>You can now log in and start using the platform for HRMS, payroll, attendance, and leave workflows.</p>
-          <p>Please keep this password private.</p>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function legacyGenerateEmployeePassword() {
-  return `Talme@${crypto.randomBytes(4).toString("hex")}`;
-}
-
-function legacyGetEmployeeLoginEmail(employee) {
-  return String(employee?.email || employee?.employeeId || "").trim().toLowerCase();
-}
-
-function getEmployeeRecipientEmail(employee) {
-  const email = String(employee?.email || "").trim().toLowerCase();
-  return email.includes("@") ? email : "";
-}
-
-async function createEmployeeAccount(employee, password) {
-  const loginEmail = legacyGetEmployeeLoginEmail(employee);
-
-  if (!loginEmail) {
-    return { created: false, reason: "Missing employee email or employee ID." };
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.upsert({
-    where: { email: loginEmail },
-    update: {
-      name: employee.name,
-      role: "Employee",
-      active: true,
-      passwordHash
-    },
-    create: {
-      name: employee.name,
-      email: loginEmail,
-      role: "Employee",
-      active: true,
-      passwordHash
-    }
-  });
-
-  return { created: true };
-}
-
-async function legacyOnboardEmployee(employee) {
-  const password = legacyGenerateEmployeePassword();
-  const account = await createEmployeeAccount(employee, password);
-
-  if (!account.created) {
-    return { accountCreated: false, emailSent: false, reason: account.reason };
-  }
-
-  const recipient = getEmployeeRecipientEmail(employee);
-
-  if (!recipient) {
-    return { accountCreated: true, emailSent: false, reason: "Missing employee email." };
-  }
-
-  if (!hasEmailConfiguration()) {
-    return { accountCreated: true, emailSent: false, reason: "Email service is not configured." };
-  }
-
-  try {
-    const info = await sendEmail(recipient, "Welcome to Talme", buildWelcomeEmployeeEmail(employee, password), {
-      text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully. Employee ID: ${employee?.employeeId || "-"}. Temporary password: ${password}.`
-    });
-
-    return {
-      accountCreated: true,
-      emailSent: true,
-      reason: info?.messageId || info?.response || "Email delivered."
-    };
-  } catch (error) {
-    console.error("Employee welcome email failed:", error);
-    return {
-      accountCreated: true,
-      emailSent: false,
-      reason: error?.message || "Email delivery failed."
-    };
-  }
-}
-
 function safeUser(user) {
   const { passwordHash, ...safe } = user;
   return safe;
@@ -1176,11 +1050,11 @@ function detailRow(label, value) {
 }
 
 function generateEmployeePassword() {
-  return `Talme@${randomBytes(4).toString("hex")}`;
+  return `Talme@${crypto.randomBytes(4).toString("hex")}`;
 }
 
 function getEmployeeLoginEmail(employee) {
-  return String(employee?.email || "").trim().toLowerCase();
+  return String(employee?.email || employee?.employeeId || "").trim().toLowerCase();
 }
 
 function getFrontendBaseUrl() {
@@ -1237,7 +1111,7 @@ async function createEmployeePortalAccount(employee, password) {
   const loginEmail = getEmployeeLoginEmail(employee);
 
   if (!loginEmail) {
-    return { created: false, reason: "Missing employee email." };
+    return { created: false, reason: "Missing employee email or employee ID." };
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -1265,7 +1139,7 @@ async function onboardEmployee(employee) {
   const loginEmail = getEmployeeLoginEmail(employee);
 
   if (!loginEmail) {
-    return { accountCreated: false, emailSent: false, reason: "Missing employee email." };
+    return { accountCreated: false, emailSent: false, reason: "Missing employee email or employee ID." };
   }
 
   const password = generateEmployeePassword();
@@ -1275,13 +1149,19 @@ async function onboardEmployee(employee) {
     return { accountCreated: false, emailSent: false, reason: account.reason };
   }
 
+  const recipient = String(employee?.email || "").trim().toLowerCase();
+
+  if (!recipient.includes("@")) {
+    return { accountCreated: true, emailSent: false, reason: "Missing employee email." };
+  }
+
   if (!isEmailConfigured()) {
     return { accountCreated: true, emailSent: false, reason: "Email service is not configured." };
   }
 
   try {
     const loginUrl = getEmployeeAppLoginUrl();
-    const info = await sendEmail(loginEmail, "Welcome to Talme", buildWelcomeEmail(employee, password), {
+    const info = await sendEmail(recipient, "Welcome to Talme", buildWelcomeEmail(employee, password), {
       text: `Hi ${employee?.name || "Team Member"}, your employee account has been created successfully. Login page: ${loginUrl}. Employee ID: ${employee?.employeeId || "-"}. Temporary password: ${password}.`
     });
 
@@ -1422,7 +1302,7 @@ function getFallbackLoginUser(identifier, password, expectedRole) {
       id: "fallback-amrutha",
       name: "Amrutha",
       email: "accounts@talme.in",
-      role: "Invoice",
+      role: "Accounts",
       password: defaultAccessPassword,
       employeeId: null
     },
@@ -1463,7 +1343,7 @@ function getFallbackLoginUser(identifier, password, expectedRole) {
     (entry) =>
       entry.email === normalizedIdentifier &&
       entry.password === password &&
-      (!expectedRole || entry.role === expectedRole)
+      (!expectedRole || canonicalLoginRole(entry.role) === canonicalLoginRole(expectedRole))
   );
 
   if (!user) return null;

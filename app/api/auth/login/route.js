@@ -72,7 +72,7 @@ async function getPersistentLoginUser(identifier, password, expectedRole) {
     where: { email: loginEmail }
   });
 
-  if (!user || !user.active || (expectedRole && user.role !== expectedRole)) {
+  if (!user || !user.active || (expectedRole && canonicalLoginRole(user.role) !== canonicalLoginRole(expectedRole))) {
     return null;
   }
 
@@ -86,7 +86,7 @@ async function getPersistentLoginUser(identifier, password, expectedRole) {
     id: user.id,
     name: employee?.name || user.name,
     email: user.email,
-    role: user.role,
+    role: canonicalLoginRole(user.role),
     employeeId: employee?.employeeId || null
   };
 }
@@ -94,7 +94,13 @@ async function getPersistentLoginUser(identifier, password, expectedRole) {
 function normalizeLoginRole(role) {
   const roles = {
     admin: "Enterprise Admin",
+    superAdmin: "Enterprise Admin",
+    administrator: "Enterprise Admin",
     hr: "HR",
+    payrollAts: "Payroll + ATS",
+    ats: "ATS",
+    invoice: "Accounts",
+    accounts: "Accounts",
     employeeHrms: "Employee HRMS",
     payroll: "Payroll",
     employee: "Employee"
@@ -155,7 +161,7 @@ async function getLocalLoginUser(identifier, password, expectedRole) {
       id: "local-amrutha",
       name: "Amrutha",
       email: "accounts@talme.in",
-      role: "Invoice",
+      role: "Accounts",
       password: defaultAccessPassword,
       employeeId: null
     },
@@ -196,13 +202,27 @@ async function getLocalLoginUser(identifier, password, expectedRole) {
     (entry) =>
       entry.email === identifier &&
       entry.password === password &&
-      (!expectedRole || entry.role === expectedRole)
+      (!expectedRole || canonicalLoginRole(entry.role) === canonicalLoginRole(expectedRole))
   );
 
   if (!user) return null;
 
   const { password: _password, ...safe } = user;
   return safe;
+}
+
+function canonicalLoginRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+
+  if (["admin", "administrator", "super admin", "enterprise admin"].includes(normalized)) {
+    return "Enterprise Admin";
+  }
+
+  if (["account", "accounts", "invoice", "finance"].includes(normalized)) {
+    return "Accounts";
+  }
+
+  return role || "";
 }
 
 function createSessionToken(user) {
