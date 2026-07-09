@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getLocalLoginAccount, hasLocalPasswordOverride } from "@/lib/password-reset-store";
-import { hasPersistentDatabase, prisma } from "@/lib/prisma-store";
+import { hasPersistentDatabase, isDatabaseUnavailableError, prisma } from "@/lib/prisma-store";
 
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
@@ -105,14 +105,6 @@ function normalizeLoginRole(role) {
 
 function isEmployeeIdLoginRole(role) {
   return ["Employee", "Employee HRMS"].includes(role);
-}
-
-function isEmployeeIdLoginRole(role) {
-  return ["Employee", "Employee HRMS"].includes(role);
-}
-
-function isDatabaseUnavailableError(error) {
-  return ["P1000", "P1001", "P1003", "P1017", "P2021", "P2022"].includes(error?.code);
 }
 
 async function getLocalLoginUser(identifier, password, expectedRole) {

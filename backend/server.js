@@ -3,11 +3,11 @@ import crypto, { randomBytes } from "node:crypto";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
-import { PrismaPg } from "@prisma/adapter-pg";
+import nodemailer from "nodemailer";
 import { Prisma, PrismaClient } from "@prisma/client";
 import pool from "./config/db.js";
 import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
-import { isEmailConfigured, sendEmail } from "./services/emailService.js";
+import { isEmailConfigured } from "./services/emailService.js";
 import {
   exportAtsToSharePoint,
   getAtsSharePointSyncStatus,
@@ -462,9 +462,6 @@ app.delete("/api/users/:id", asyncHandler(async (req, res) => {
   res.json({ id: req.params.id });
 }));
 
-app.get("/api/pdf/payslip", (req, res) => {
-  const params = new URLSearchParams();
-
 app.post("/api/employees", asyncHandler(async (req, res) => {
   const data = pick(req.body, resourceMap.employees.fields, resourceMap.employees);
   const row = await prisma.employee.create({ data });
@@ -590,124 +587,35 @@ function queueAtsResourceExport(resource) {
   }
 }
 
-async function buildUploadPayload(req) {
-  const contentType = String(req.headers["content-type"] || "");
-
-  if (contentType.includes("multipart/form-data")) {
-    const { fields, file } = await parseMultipartUpload(req, contentType);
-
-    if (!file) {
-      const error = new Error("File is required.");
-      error.status = 400;
-      throw error;
-    }
-
-    const savedFile = await saveUploadedFile({
-      fileName: file.fileName || "upload",
-      bytes: file.bytes,
-      mimeType: file.mimeType
-    });
-
-    return normalizeUploadPayload({
-      ...fields,
-      fileName: file.fileName,
-      fileUrl: savedFile.fileUrl,
-      mimeType: file.mimeType,
-      sizeLabel: formatFileSize(file.bytes.length)
-    });
-  }
-
-  return normalizeUploadPayload(req.body || {});
+function getModelFieldMap(modelName) {
+  const model = Prisma.dmmf.datamodel.models.find((item) => item.name.toLowerCase() === modelName.toLowerCase());
+  return new Map(model?.fields.map((field) => [field.name, field]) || []);
 }
 
-async function parseMultipartUpload(req, contentType) {
-  const boundary = getMultipartBoundary(contentType);
+function coerceFieldValue(value, field) {
+  if (!field) return value;
 
-  if (!boundary) {
-    const error = new Error("Multipart boundary is missing.");
-    error.status = 400;
-    throw error;
-  }
-
-  const body = await readRequestBody(req);
-  const parts = splitBuffer(body, Buffer.from(`--${boundary}`));
-  const fields = {};
-  let file = null;
-
-  for (const part of parts) {
-    const parsedPart = parseMultipartPart(part);
-
-    if (!parsedPart?.name) {
-      continue;
-    }
-
-    if (parsedPart.fileName !== undefined) {
-      file = {
-        fileName: parsedPart.fileName || "upload",
-        mimeType: parsedPart.mimeType || "application/octet-stream",
-        bytes: parsedPart.content
-      };
-      continue;
-    }
-
-    fields[parsedPart.name] = parsedPart.content.toString("utf8");
-  }
-
-  return { fields, file };
-}
-
-function getMultipartBoundary(contentType) {
-  const match = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
-  return match?.[1] || match?.[2] || "";
-}
-
-function readRequestBody(req) {
-  const chunks = [];
-  let totalBytes = 0;
-  const maxBytes = 25 * 1024 * 1024;
-
-  return new Promise((resolve, reject) => {
-    req.on("data", (chunk) => {
-      totalBytes += chunk.length;
-
-      if (totalBytes > maxBytes) {
-        const error = new Error("Upload exceeds the 25 MB limit.");
-        error.status = 413;
-        reject(error);
-        req.destroy(error);
-        return;
-      }
-
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
-  });
-}
-
-function parseMultipartPart(part) {
-  let chunk = part;
-
-  if (!chunk.length) {
+  if (value === "" && !field.isRequired) {
     return null;
   }
 
-  if (chunk.subarray(0, 2).toString() === "\r\n") {
-    chunk = chunk.subarray(2);
+  if (field.type === "Int") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  if (chunk.subarray(0, 2).toString() === "--") {
-    return null;
+  if (field.type === "Float") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  if (chunk.subarray(-2).toString() === "\r\n") {
-    chunk = chunk.subarray(0, -2);
+  if (field.type === "Boolean") {
+    if (typeof value === "boolean") return value;
+    return ["true", "1", "yes", "on"].includes(String(value).toLowerCase());
   }
 
-  const headerEnd = chunk.indexOf(Buffer.from("\r\n\r\n"));
-
-  if (headerEnd === -1) {
-    return null;
+  if (field.type === "Json" && typeof value === "string") {
+    return JSON.parse(value);
   }
 
   if (field.type === "DateTime") {
@@ -932,69 +840,9 @@ function formatFileSize(size = 0) {
 function pick(payload, fields, config) {
   const fieldMap = config ? getModelFieldMap(config.model) : new Map();
 
-    if (separator !== -1) {
-      headers[line.slice(0, separator).trim().toLowerCase()] = line.slice(separator + 1).trim();
-    }
-
-    return headers;
-  }, {});
-}
-
-function parseContentDisposition(value) {
-  const disposition = {};
-  const matches = value.matchAll(/;\s*([^=]+)="([^"]*)"/g);
-
-  for (const match of matches) {
-    disposition[match[1].trim().toLowerCase()] = match[2];
-  }
-
-  return disposition;
-}
-
-function splitBuffer(buffer, separator) {
-  const parts = [];
-  let start = 0;
-  let index = buffer.indexOf(separator, start);
-
-  while (index !== -1) {
-    parts.push(buffer.subarray(start, index));
-    start = index + separator.length;
-    index = buffer.indexOf(separator, start);
-  }
-
-  parts.push(buffer.subarray(start));
-  return parts;
-}
-
-function normalizeUploadPayload(payload = {}) {
-  return {
-    module: stringOrDefault(payload.module, "Employee"),
-    owner: stringOrDefault(payload.owner, "Unassigned"),
-    label: stringOrDefault(payload.label, "Document"),
-    fileName: stringOrDefault(payload.fileName, "document"),
-    fileUrl: String(payload.fileUrl || ""),
-    mimeType: stringOrDefault(payload.mimeType, "document"),
-    sizeLabel: stringOrDefault(payload.sizeLabel, "-"),
-    status: stringOrDefault(payload.status, "Uploaded")
-  };
-}
-
-function stringOrDefault(value, fallback) {
-  const normalized = String(value || "").trim();
-  return normalized || fallback;
-}
-
-function formatFileSize(size = 0) {
-  if (!size) return "-";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function pick(payload, fields) {
   return fields.reduce((data, field) => {
     if (payload?.[field] !== undefined) {
-      data[field] = payload[field];
+      data[field] = coerceFieldValue(payload[field], fieldMap.get(field));
     }
     return data;
   }, {});
@@ -1035,7 +883,14 @@ function normalizeLoginRole(role) {
 }
 
 function isDatabaseUnavailableError(error) {
-  return ["P1000", "P1001", "P1003", "P1017", "P2021", "P2022"].includes(error?.code);
+  const code = error?.code || error?.errorCode;
+  const message = String(error?.message || "");
+
+  return (
+    ["P1000", "P1001", "P1003", "P1017"].includes(code) ||
+    error?.name === "PrismaClientInitializationError" ||
+    /can't reach database server|connection (?:refused|closed|terminated|timed out)/i.test(message)
+  );
 }
 
 function parseBoolean(value, defaultValue = false) {
@@ -1152,7 +1007,7 @@ async function sendEmail(to, subject, html, options = {}) {
   ]);
 }
 
-function escapeHtml(value) {
+function legacyEscapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -1164,8 +1019,8 @@ function escapeHtml(value) {
 function employeeEmailDetail(label, value) {
   return `
     <tr>
-      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">${escapeHtml(label)}</td>
-      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 700;">${escapeHtml(value || "-")}</td>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">${legacyEscapeHtml(label)}</td>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 700;">${legacyEscapeHtml(value || "-")}</td>
     </tr>
   `;
 }
@@ -1179,7 +1034,7 @@ function buildWelcomeEmployeeEmail(employee, password) {
           <h2 style="margin: 0; font-size: 28px;">Welcome to Talme</h2>
         </div>
         <div style="padding: 24px;">
-          <p>Hi ${escapeHtml(employee?.name || "Team Member")},</p>
+          <p>Hi ${legacyEscapeHtml(employee?.name || "Team Member")},</p>
           <p>Your employee account has been created successfully.</p>
           <table style="width: 100%; border-collapse: collapse; margin: 18px 0; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
             <tbody>
@@ -1191,8 +1046,8 @@ function buildWelcomeEmployeeEmail(employee, password) {
           </table>
           <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 18px 0;">
             <p style="margin: 0 0 8px; font-weight: 700;">Employee portal login</p>
-            <p style="margin: 0;">Employee ID: <strong>${escapeHtml(employee?.employeeId || "-")}</strong></p>
-            <p style="margin: 4px 0 0;">Temporary password: <strong>${escapeHtml(password || "-")}</strong></p>
+            <p style="margin: 0;">Employee ID: <strong>${legacyEscapeHtml(employee?.employeeId || "-")}</strong></p>
+            <p style="margin: 4px 0 0;">Temporary password: <strong>${legacyEscapeHtml(password || "-")}</strong></p>
           </div>
           <p>You can now log in and start using the platform for HRMS, payroll, attendance, and leave workflows.</p>
           <p>Please keep this password private.</p>
@@ -1202,11 +1057,11 @@ function buildWelcomeEmployeeEmail(employee, password) {
   `;
 }
 
-function generateEmployeePassword() {
+function legacyGenerateEmployeePassword() {
   return `Talme@${crypto.randomBytes(4).toString("hex")}`;
 }
 
-function getEmployeeLoginEmail(employee) {
+function legacyGetEmployeeLoginEmail(employee) {
   return String(employee?.email || employee?.employeeId || "").trim().toLowerCase();
 }
 
@@ -1216,7 +1071,7 @@ function getEmployeeRecipientEmail(employee) {
 }
 
 async function createEmployeeAccount(employee, password) {
-  const loginEmail = getEmployeeLoginEmail(employee);
+  const loginEmail = legacyGetEmployeeLoginEmail(employee);
 
   if (!loginEmail) {
     return { created: false, reason: "Missing employee email or employee ID." };
@@ -1243,8 +1098,8 @@ async function createEmployeeAccount(employee, password) {
   return { created: true };
 }
 
-async function onboardEmployee(employee) {
-  const password = generateEmployeePassword();
+async function legacyOnboardEmployee(employee) {
+  const password = legacyGenerateEmployeePassword();
   const account = await createEmployeeAccount(employee, password);
 
   if (!account.created) {
