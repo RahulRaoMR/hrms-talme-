@@ -10,15 +10,23 @@ const employeeSessionKey = "talme-employee-app-employee-id";
 async function fetchWithLocalFallback(path, options) {
   const endpointUrl = apiUrl(path);
 
-  try {
-    return await fetch(endpointUrl, options);
-  } catch (error) {
-    if (endpointUrl === path) {
-      throw error;
-    }
-
+  if (endpointUrl === path) {
     return fetch(path, options);
   }
+
+  try {
+    const response = await fetch(endpointUrl, options);
+
+    if (response.status < 500 && ![404, 405].includes(response.status)) {
+      return response;
+    }
+  } catch (error) {
+    // The deployed/static frontend can be configured with a backend API URL,
+    // but the Next.js route beside this page is the safest fallback for the
+    // packaged employee app and local previews.
+  }
+
+  return fetch(path, options);
 }
 
 export default function EmployeeAppLogin() {

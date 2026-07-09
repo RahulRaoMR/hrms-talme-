@@ -1,0 +1,15 @@
+{
+  "appId": "in.talme.hrms.employee",
+  "appName": "Talme HRMS",
+  "webDir": "public",
+  "server": {
+    "url": "https://hrms-talme.vercel.app/employee-app/login",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}
