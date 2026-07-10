@@ -7,6 +7,8 @@ const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
 const defaultHrPassword = process.env.DEFAULT_HR_PASSWORD || "hr123";
 const defaultAccessPassword = process.env.DEFAULT_ACCESS_PASSWORD || defaultAdminPassword;
+const reviewEmployeeId = process.env.PLAY_REVIEW_EMPLOYEE_ID || "TALME-REVIEW";
+const reviewEmployeePassword = process.env.PLAY_REVIEW_EMPLOYEE_PASSWORD || defaultAccessPassword;
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
@@ -26,6 +28,15 @@ export async function POST(request) {
       { error: "Employee login requires Employee ID, not email." },
       { status: 400 }
     );
+  }
+
+  const reviewEmployee = getPlayReviewEmployee(identifier, password, expectedRole);
+
+  if (reviewEmployee) {
+    return Response.json({
+      token: createSessionToken(reviewEmployee),
+      user: reviewEmployee
+    });
   }
 
   const persistentUser = await getPersistentLoginUser(identifier, password, expectedRole)
@@ -50,6 +61,24 @@ export async function POST(request) {
     token: createSessionToken(user),
     user
   });
+}
+
+function getPlayReviewEmployee(identifier, password, expectedRole) {
+  if (!isEmployeeIdLoginRole(expectedRole)) {
+    return null;
+  }
+
+  if (identifier.toLowerCase() !== reviewEmployeeId.toLowerCase() || password !== reviewEmployeePassword) {
+    return null;
+  }
+
+  return {
+    id: "play-review-employee",
+    name: "Play Review Employee",
+    email: "hr@talme.in",
+    role: "Employee",
+    employeeId: reviewEmployeeId
+  };
 }
 
 async function getPersistentLoginUser(identifier, password, expectedRole) {
