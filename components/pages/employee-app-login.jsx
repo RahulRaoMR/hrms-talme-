@@ -154,6 +154,14 @@ export default function EmployeeAppLogin() {
 
         {error ? <p className="employee-login-error">{error}</p> : null}
 
+        <p className="employee-login-policy">
+          By continuing, you agree to the{" "}
+          <a href="/privacy-policy" target="_blank" rel="noreferrer">
+            Privacy Policy
+          </a>
+          .
+        </p>
+
       </section>
     </main>
   );

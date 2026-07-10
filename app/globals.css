@@ -4707,6 +4707,23 @@ body.light-mode .pooja-outline-button {
   color: #be1f3b;
 }
 
+.employee-login-policy {
+  margin: 14px 26px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.employee-login-policy a {
+  color: var(--gold-2);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.employee-login-policy a:hover {
+  text-decoration: underline;
+}
+
 .employee-login-hint {
   display: grid;
   grid-template-columns: 1fr auto;
