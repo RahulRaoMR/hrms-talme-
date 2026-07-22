@@ -16,7 +16,6 @@ export const rolePermissions = {
     "/dashboard",
     "/hrms",
     "/ats",
-    "/invoices",
     "/shifts",
     "/leaves",
     "/daily-updates",
