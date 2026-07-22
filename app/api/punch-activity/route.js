@@ -1,5 +1,5 @@
-import { createResource, getResource } from "@/lib/local-api-store";
-import { hasPersistentDatabase, prisma } from "@/lib/prisma-store";
+import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
+import { createPersistentAuditLog, hasPersistentDatabase, prisma } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
 function formatStorageDate(date) {
@@ -16,6 +16,19 @@ function formatPunchTime(date) {
     minute: "2-digit",
     hour12: true
   }).format(date).toLowerCase();
+}
+
+async function writePunchAudit(request, row) {
+  const payload = {
+    actor: request.headers.get("x-talme-actor") || row.employeeId || "system",
+    action: row.type,
+    entity: "Punch Activity",
+    entityId: row.employeeId || "",
+    detail: `${row.type} by ${row.employeeName || row.employeeId} at ${row.time || row.timestamp}`
+  };
+
+  const persistentLog = await createPersistentAuditLog(payload);
+  if (!persistentLog) createActivityLog(payload);
 }
 
 function normalizeFilterParams(request) {
@@ -39,6 +52,10 @@ function filterPunchRows(rows, filters) {
 
     return true;
   });
+}
+
+function sortPunchRows(rows = []) {
+  return [...rows].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
 }
 
 export async function GET(request) {
@@ -103,6 +120,18 @@ export async function POST(request) {
   };
 
   if (hasPersistentDatabase) {
+    const latestSameDayPunch = await prisma.punchActivity.findFirst({
+      where: {
+        employeeId: { equals: data.employeeId, mode: "insensitive" },
+        workDate: data.workDate
+      },
+      orderBy: { timestamp: "desc" }
+    });
+
+    if (latestSameDayPunch?.type === data.type) {
+      return Response.json(latestSameDayPunch);
+    }
+
     const existing = await prisma.punchActivity.findFirst({
       where: {
         employeeId: { equals: data.employeeId, mode: "insensitive" },
@@ -123,6 +152,7 @@ export async function POST(request) {
       }
     });
 
+    await writePunchAudit(request, row);
     return Response.json(row, { status: 201 });
   }
 
@@ -137,7 +167,20 @@ export async function POST(request) {
     return proxiedResponse;
   }
 
+  const latestLocalPunch = sortPunchRows(
+    filterPunchRows(getResource("punch-activity") || [], {
+      employeeId: data.employeeId.toLowerCase(),
+      workDate: data.workDate,
+      month: ""
+    })
+  )[0];
+
+  if (latestLocalPunch?.type === data.type) {
+    return Response.json(latestLocalPunch);
+  }
+
   const row = createResource("punch-activity", data);
 
+  await writePunchAudit(request, row);
   return Response.json(row, { status: 201 });
 }

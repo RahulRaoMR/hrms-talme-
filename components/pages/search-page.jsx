@@ -5,12 +5,83 @@ import SuiteShell from "@/components/suite-shell";
 import { apiUrl } from "@/lib/api-client";
 
 const sections = [
-  ["employees", "Employees", (item) => `${item.employeeId} - ${item.name}`],
-  ["candidates", "Candidates", (item) => `${item.name} - ${item.role}`],
-  ["vendors", "Vendors", (item) => `${item.vendor} - ${item.category}`],
-  ["invoices", "Invoices", (item) => `${item.invoiceNo} - ${item.amount}`],
-  ["documents", "Documents", (item) => `${item.owner} - ${item.docType}`],
-  ["approvals", "Approvals", (item) => `${item.title} - ${item.owner}`]
+  {
+    key: "employees",
+    label: "Employees",
+    primary: (item) => item.name || item.employeeId || "Employee",
+    badge: (item) => item.employeeId || item.status || "Employee",
+    details: [
+      ["Email", "email"],
+      ["Department", "department"],
+      ["Location", "location"],
+      ["Manager", "manager"],
+      ["Grade", "grade"],
+      ["Salary", "salaryBand"],
+      ["Bank", "bankStatus"]
+    ]
+  },
+  {
+    key: "candidates",
+    label: "Candidates",
+    primary: (item) => item.name || item.role || "Candidate",
+    badge: (item) => item.status || item.stage || "Candidate",
+    details: [
+      ["Role", "role"],
+      ["Stage", "stage"],
+      ["Source", "source"],
+      ["Client", "client"],
+      ["Location", "location"],
+      ["Notice", "noticePeriod"],
+      ["Email", "email"],
+      ["Phone", "phone"]
+    ]
+  },
+  {
+    key: "vendors",
+    label: "Vendors",
+    primary: (item) => item.vendor || item.name || "Vendor",
+    badge: (item) => item.status || "Vendor",
+    details: [
+      ["Category", "category"],
+      ["Sites", "sites"],
+      ["Rating", "rating"]
+    ]
+  },
+  {
+    key: "invoices",
+    label: "Invoices",
+    primary: (item) => item.invoiceNo || item.vendor || "Invoice",
+    badge: (item) => item.status || "Invoice",
+    details: [
+      ["Vendor", "vendor"],
+      ["Amount", "amount"],
+      ["TDS", "tds"],
+      ["Attendance", "attendance"]
+    ]
+  },
+  {
+    key: "documents",
+    label: "Documents",
+    primary: (item) => item.docType || item.owner || "Document",
+    badge: (item) => item.status || "Document",
+    details: [
+      ["Owner", "owner"],
+      ["Module", "module"],
+      ["Expiry", "expiry"]
+    ]
+  },
+  {
+    key: "approvals",
+    label: "Approvals",
+    primary: (item) => item.title || item.owner || "Approval",
+    badge: (item) => item.status || "Approval",
+    details: [
+      ["Owner", "owner"],
+      ["Module", "module"],
+      ["Amount", "amount"],
+      ["Level", "level"]
+    ]
+  }
 ];
 
 const emptyResults = {
@@ -75,30 +146,35 @@ export default function SearchPageClient() {
       </section>
 
       <section className="page-section panel-grid">
-        {sections.map(([key, label, render]) => (
+        {sections.map((section) => (
           (() => {
-            const matches = results[key] || [];
+            const matches = results[section.key] || [];
 
             return (
-          <article className="panel" key={key}>
+          <article className="panel" key={section.key}>
             <div className="panel-head">
               <div>
-                <p className="eyebrow">{label}</p>
-                <h3>{matches.length} matches</h3>
+                <p className="eyebrow">{section.label}</p>
+                <h3>{matches.length} {query.trim() ? "matches" : "records"}</h3>
               </div>
             </div>
-            <div className="doc-stack">
+            <div className="search-result-stack">
               {matches.length ? (
                 matches.map((item) => (
-                  <div className="doc-line" key={item.id}>
-                    <span>{render(item)}</span>
-                    <strong>Found</strong>
+                  <div className="search-result-card" key={item.id || `${section.key}-${section.primary(item)}`}>
+                    <div>
+                      <strong>{section.primary(item)}</strong>
+                      <small>{formatDetails(item, section.details)}</small>
+                    </div>
+                    <span>{section.badge(item)}</span>
                   </div>
                 ))
               ) : (
-                <div className="doc-line">
-                  <span>No results yet</span>
-                  <strong>Search</strong>
+                <div className="search-result-card">
+                  <div>
+                    <strong>No records available</strong>
+                    <small>{query.trim() ? "Try another keyword." : "Add records in this module to see them here."}</small>
+                  </div>
                 </div>
               )}
             </div>
@@ -109,4 +185,21 @@ export default function SearchPageClient() {
       </section>
     </SuiteShell>
   );
+}
+
+function formatDetails(item, fields) {
+  const details = fields
+    .map(([label, field]) => {
+      const value = displayValue(item[field]);
+      return value ? `${label}: ${value}` : "";
+    })
+    .filter(Boolean);
+
+  return details.length ? details.join(" | ") : "Details not added";
+}
+
+function displayValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return String(value);
+  return String(value).trim();
 }

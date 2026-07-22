@@ -8,6 +8,10 @@ import { PrismaClient } from "@prisma/client";
 import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
 import { buildPayslipRowsFromQuery, createPayslipPdf } from "../lib/payslip-pdf.js";
 import {
+  buildAuditDetail,
+  getAuditEntity
+} from "../lib/audit-format.js";
+import {
   exportAtsToSharePoint,
   getAtsSharePointSyncStatus,
   isAtsSharePointResource,
@@ -118,6 +122,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
       return res.status(401).json({ error: "Invalid email, role, or password." });
     }
 
+    await writeAuditLog(req, "LOGIN", "Auth", fallbackUser.id, `Logged in as ${fallbackUser.role}`);
     return res.json({
       token: createSessionToken(fallbackUser),
       user: fallbackUser
@@ -150,6 +155,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
       const fallbackUser = getFallbackLoginUser(identifier, password, expectedRole);
 
       if (fallbackUser) {
+        await writeAuditLog(req, "LOGIN", "Auth", fallbackUser.id, `Logged in as ${fallbackUser.role}`);
         return res.json({
           token: createSessionToken(fallbackUser),
           user: fallbackUser
@@ -164,6 +170,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
         const fallbackUser = getFallbackLoginUser(identifier, password, expectedRole);
 
         if (fallbackUser) {
+          await writeAuditLog(req, "LOGIN", "Auth", fallbackUser.id, `Logged in as ${fallbackUser.role}`);
           return res.json({
             token: createSessionToken(fallbackUser),
             user: fallbackUser
@@ -197,6 +204,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     employeeId: employee?.employeeId || null
   };
 
+  await writeAuditLog(req, "LOGIN", "Auth", sessionUser.id, `Logged in as ${sessionUser.role}${sessionUser.employeeId ? ` (${sessionUser.employeeId})` : ""}`);
   res.json({
     token: createSessionToken(sessionUser),
     user: sessionUser
@@ -309,6 +317,19 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
     workDate: String(req.body?.workDate || "").trim() || formatStorageDate(timestamp),
     geoCoordinates: req.body?.geoCoordinates || undefined
   };
+
+  const latestSameDayPunch = await prisma.punchActivity.findFirst({
+    where: {
+      employeeId: { equals: data.employeeId, mode: "insensitive" },
+      workDate: data.workDate
+    },
+    orderBy: { timestamp: "desc" }
+  });
+
+  if (latestSameDayPunch?.type === data.type) {
+    return res.json(latestSameDayPunch);
+  }
+
   const existing = await prisma.punchActivity.findFirst({
     where: {
       employeeId: { equals: data.employeeId, mode: "insensitive" },
@@ -325,6 +346,7 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
     data
   });
 
+  await writeAuditLog(req, type, "Punch Activity", employeeId, `${type} by ${data.employeeName || employeeId} at ${data.time}`);
   res.status(201).json(row);
 }));
 
@@ -362,22 +384,55 @@ app.get("/api/reports", asyncHandler(async (_req, res) => {
   });
 }));
 
-app.get("/api/search", asyncHandler(async (req, res) => {
-  const q = String(req.query.q || "").trim();
-  if (!q) {
-    res.json({ employees: [], candidates: [], vendors: [], invoices: [], documents: [], approvals: [] });
-    return;
+app.get("/api/activity", asyncHandler(async (_req, res) => {
+  const rows = await prisma.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 500
+  });
+
+  res.json(rows);
+}));
+
+app.post("/api/activity", asyncHandler(async (req, res) => {
+  const data = {
+    actor: String(req.body?.actor || getExpressAuditActor(req)),
+    action: String(req.body?.action || "INFO"),
+    entity: String(req.body?.entity || "Suite"),
+    entityId: req.body?.entityId ? String(req.body.entityId) : null,
+    detail: String(req.body?.detail || "Activity recorded")
+  };
+
+  if (req.body?.createdAt) {
+    data.createdAt = new Date(req.body.createdAt);
   }
 
-  const contains = { contains: q, mode: "insensitive" };
-  const [employees, candidates, vendors, invoices, documents, approvals] = await Promise.all([
-    prisma.employee.findMany({ where: { OR: [{ name: contains }, { employeeId: contains }, { department: contains }] }, take: 8 }),
-    prisma.candidate.findMany({ where: { OR: [{ name: contains }, { role: contains }, { source: contains }] }, take: 8 }),
-    prisma.vendor.findMany({ where: { OR: [{ vendor: contains }, { category: contains }] }, take: 8 }),
-    prisma.invoice.findMany({ where: { OR: [{ vendor: contains }, { invoiceNo: contains }, { amount: contains }] }, take: 8 }),
-    prisma.documentRecord.findMany({ where: { OR: [{ owner: contains }, { docType: contains }, { module: contains }] }, take: 8 }),
-    prisma.approvalItem.findMany({ where: { OR: [{ title: contains }, { owner: contains }, { module: contains }] }, take: 8 })
-  ]);
+  const row = await prisma.auditLog.create({
+    data
+  });
+
+  res.status(201).json(row);
+}));
+
+app.get("/api/search", asyncHandler(async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  const contains = q ? { contains: q, mode: "insensitive" } : null;
+  const [employees, candidates, vendors, invoices, documents, approvals] = contains
+    ? await Promise.all([
+        prisma.employee.findMany({ where: { OR: [{ name: contains }, { employeeId: contains }, { department: contains }] } }),
+        prisma.candidate.findMany({ where: { OR: [{ name: contains }, { role: contains }, { source: contains }] } }),
+        prisma.vendor.findMany({ where: { OR: [{ vendor: contains }, { category: contains }] } }),
+        prisma.invoice.findMany({ where: { OR: [{ vendor: contains }, { invoiceNo: contains }, { amount: contains }] } }),
+        prisma.documentRecord.findMany({ where: { OR: [{ owner: contains }, { docType: contains }, { module: contains }] } }),
+        prisma.approvalItem.findMany({ where: { OR: [{ title: contains }, { owner: contains }, { module: contains }] } })
+      ])
+    : await Promise.all([
+        prisma.employee.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.candidate.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.vendor.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.documentRecord.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.approvalItem.findMany({ orderBy: { createdAt: "desc" } })
+      ]);
 
   res.json({ employees, candidates, vendors, invoices, documents, approvals });
 }));
@@ -401,12 +456,14 @@ app.post("/api/notifications/:id/send", asyncHandler(async (req, res) => {
     where: { id: req.params.id },
     data: { status: "Sent", providerResult: "Marked sent by Express backend", providerError: null }
   });
+  await writeAuditLog(req, "SEND", "Notification", notification.id, `Sent notification ${notification.subject}`);
   res.json(notification);
 }));
 
-app.post("/api/payroll/release", (_req, res) => {
+app.post("/api/payroll/release", asyncHandler(async (req, res) => {
+  await writeAuditLog(req, "RELEASE", "Payroll", "payroll-release", "Released payroll");
   res.json({ released: true, message: "Payroll release accepted." });
-});
+}));
 
 app.get("/api/users", asyncHandler(async (_req, res) => {
   const users = await prisma.user.findMany({
@@ -433,6 +490,7 @@ app.post("/api/users", asyncHandler(async (req, res) => {
     }
   });
 
+  await writeAuditLog(req, "CREATE", "User", user.id, `Created user ${user.email}`);
   res.status(201).json(safeUser(user));
 }));
 
@@ -454,11 +512,14 @@ app.patch("/api/users/:id", asyncHandler(async (req, res) => {
     data
   });
 
+  await writeAuditLog(req, "UPDATE", "User", user.id, `Updated user ${user.email}`);
   res.json(safeUser(user));
 }));
 
 app.delete("/api/users/:id", asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   await prisma.user.delete({ where: { id: req.params.id } });
+  await writeAuditLog(req, "DELETE", "User", req.params.id, `Deleted user ${user?.email || req.params.id}`);
   res.json({ id: req.params.id });
 }));
 
@@ -507,6 +568,7 @@ app.post("/api/uploads", asyncHandler(async (req, res) => {
   const payload = await buildUploadPayload(req);
   const row = await prisma.uploadedAsset.create({ data: pick(payload, resourceMap.uploads.fields) });
 
+  await writeAuditLog(req, "UPLOAD", getAuditEntity("uploads"), row.id, buildAuditDetail("UPLOAD", "uploads", row, row.id));
   res.status(201).json(row);
 }));
 
@@ -525,6 +587,7 @@ app.post("/api/:resource", asyncHandler(async (req, res) => {
   const row = await prisma[config.model].create({ data });
   const onboarding = req.params.resource === "employees" ? await onboardEmployee(row) : null;
   queueAtsResourceExport(req.params.resource);
+  await writeAuditLog(req, "CREATE", getAuditEntity(req.params.resource), row.id, buildAuditDetail("CREATE", req.params.resource, row, row.id));
   res.status(201).json(onboarding ? { ...row, onboarding } : row);
 }));
 
@@ -548,6 +611,7 @@ app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
   });
   queueAtsResourceExport(req.params.resource);
   const leaveNotification = await sendLeaveStatusNotification(req.params.resource, previousRow, row);
+  await writeAuditLog(req, "UPDATE", getAuditEntity(req.params.resource), row.id, buildAuditDetail("UPDATE", req.params.resource, row, row.id));
   res.json(leaveNotification ? { ...row, leaveNotification } : row);
 }));
 
@@ -558,11 +622,13 @@ app.delete("/api/:resource/:id", asyncHandler(async (req, res) => {
     ? await prisma.uploadedAsset.findUnique({ where: { id: req.params.id } })
     : null;
 
+  const existing = row || await prisma[config.model].findUnique({ where: { id: req.params.id } });
   await prisma[config.model].delete({ where: { id: req.params.id } });
   if (row?.fileUrl) {
     await deleteUploadedFile(row.fileUrl);
   }
   queueAtsResourceExport(req.params.resource);
+  await writeAuditLog(req, "DELETE", getAuditEntity(req.params.resource), req.params.id, buildAuditDetail("DELETE", req.params.resource, existing, req.params.id));
   res.json({ id: req.params.id });
 }));
 
@@ -847,6 +913,26 @@ function coerceResourceFields(resource, data) {
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function getExpressAuditActor(req) {
+  return String(req.headers["x-talme-actor"] || req.headers["x-user-email"] || "system");
+}
+
+async function writeAuditLog(req, action, entity, entityId, detail) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actor: getExpressAuditActor(req),
+        action,
+        entity,
+        entityId: entityId ? String(entityId) : null,
+        detail
+      }
+    });
+  } catch (error) {
+    console.error("Unable to write audit log.", error);
+  }
 }
 
 function normalizeLoginRole(role) {

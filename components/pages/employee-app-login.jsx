@@ -89,7 +89,8 @@ export default function EmployeeAppLogin() {
       const loginEmployeeId = payload?.user?.employeeId || employeeId;
       const destination = `/employee-app?employeeId=${encodeURIComponent(loginEmployeeId)}`;
 
-      window.localStorage.setItem(employeeSessionKey, loginEmployeeId);
+      window.sessionStorage.setItem(employeeSessionKey, loginEmployeeId);
+      window.localStorage.removeItem(employeeSessionKey);
       saveSuiteSession({
         token: payload.token,
         user: payload.user,

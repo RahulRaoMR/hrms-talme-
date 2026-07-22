@@ -426,6 +426,55 @@ function buildActivityFromSession(session, employeeId, employeeName, todayKey) {
   ];
 }
 
+function createEmptyWorkSession() {
+  return {
+    startAt: null,
+    endAt: null,
+    breakStartedAt: null,
+    breakSeconds: 0
+  };
+}
+
+function buildWorkSessionFromActivity(records = [], todayKey) {
+  const sorted = sortActivity(records).filter((entry) => String(entry.workDate || "") === todayKey);
+  const firstPunchIn = sorted.find((entry) => entry.type === "Punch In");
+
+  if (!firstPunchIn?.timestamp) {
+    return null;
+  }
+
+  let breakSeconds = 0;
+  let openBreakStartedAt = null;
+
+  sorted.forEach((entry, index) => {
+    if (entry.type !== "Punch Out") {
+      return;
+    }
+
+    const nextPunchIn = sorted.slice(index + 1).find((item) => item.type === "Punch In");
+
+    if (nextPunchIn?.timestamp) {
+      const breakStart = new Date(entry.timestamp);
+      const breakEnd = new Date(nextPunchIn.timestamp);
+
+      if (!Number.isNaN(breakStart.getTime()) && !Number.isNaN(breakEnd.getTime())) {
+        breakSeconds += Math.max(0, Math.floor((breakEnd.getTime() - breakStart.getTime()) / 1000));
+      }
+
+      return;
+    }
+
+    openBreakStartedAt = entry.timestamp;
+  });
+
+  return {
+    startAt: firstPunchIn.timestamp,
+    endAt: null,
+    breakStartedAt: openBreakStartedAt,
+    breakSeconds
+  };
+}
+
 function formatClockParts(totalSeconds) {
   const safeSeconds = Math.max(0, totalSeconds);
   const hours = Math.floor(safeSeconds / 3600);
@@ -750,13 +799,46 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const t = (key) => translate(language, key);
 
   useEffect(() => {
-    const storedEmployeeId = window.localStorage.getItem(employeeSessionStorageKey);
+    const storedEmployeeId = window.sessionStorage.getItem(employeeSessionStorageKey);
     const nextEmployeeId = sessionEmployeeId || storedEmployeeId || "";
 
     if (nextEmployeeId) {
       setActiveSessionEmployeeId(nextEmployeeId);
     }
   }, [sessionEmployeeId]);
+
+  useEffect(() => {
+    if (!activeSessionEmployeeId) return undefined;
+
+    function recordActivity(action, detail, entityId = activeSessionEmployeeId) {
+      fetch("/api/activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-talme-actor": activeSessionEmployeeId },
+        keepalive: true,
+        body: JSON.stringify({
+          actor: activeSessionEmployeeId,
+          action,
+          entity: "Employee App",
+          entityId,
+          detail
+        })
+      }).catch(() => {});
+    }
+
+    recordActivity("VIEW", `Viewed Employee App ${activeTab}`);
+
+    function recordClick(event) {
+      const target = event.target?.closest?.("a,button");
+
+      if (!target) return;
+
+      const label = (target.innerText || target.getAttribute("aria-label") || target.title || "").trim();
+      recordActivity("CLICK", `Clicked ${label || "control"} in Employee App ${activeTab}`);
+    }
+
+    document.addEventListener("click", recordClick, true);
+    return () => document.removeEventListener("click", recordClick, true);
+  }, [activeSessionEmployeeId, activeTab]);
 
   useEffect(() => {
     setCurrentTime(new Date());
@@ -853,14 +935,13 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       String(entry.workDate || "") === todayKey
     );
     const initialActivity = mergeActivityRecords([...initialDatabaseActivity, ...localActivity, ...sessionBackfillActivity]);
+    const initialWorkSession =
+      buildWorkSessionFromActivity(initialActivity, todayKey) ||
+      parsedSession ||
+      createEmptyWorkSession();
 
     setActivity(initialActivity);
-    setWorkSession(storedSession ? JSON.parse(storedSession) : {
-      startAt: null,
-      endAt: null,
-      breakStartedAt: null,
-      breakSeconds: 0
-    });
+    setWorkSession(initialWorkSession);
 
     sessionBackfillActivity.forEach((entry) => {
       if (!initialDatabaseActivity.some((item) => getActivityEntryKey(item) === getActivityEntryKey(entry))) {
@@ -879,7 +960,10 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
         const rows = await response.json();
 
         if (!cancelled) {
-          setActivity(mergeActivityRecords([...(Array.isArray(rows) ? rows : []), ...localActivity, ...sessionBackfillActivity]));
+          const refreshedActivity = mergeActivityRecords([...(Array.isArray(rows) ? rows : []), ...localActivity, ...sessionBackfillActivity]);
+
+          setActivity(refreshedActivity);
+          setWorkSession(buildWorkSessionFromActivity(refreshedActivity, todayKey) || createEmptyWorkSession());
         }
       } catch {
         // Local punch activity remains available when the API is offline.
@@ -959,7 +1043,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
 
   async function persistPunchActivity(entry) {
     try {
-      await fetch(punchActivityApiPath, {
+      const response = await fetch(punchActivityApiPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -972,9 +1056,15 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
           geoCoordinates: employee.location || employee.employeeDetails?.punchInBranch || employee.employeeDetails?.masterBranch || undefined
         })
       });
+
+      if (response.ok) {
+        return await response.json().catch(() => entry);
+      }
     } catch (error) {
       console.error("Unable to persist punch activity.", error);
     }
+
+    return entry;
   }
 
   function addActivity(type) {
@@ -988,8 +1078,20 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       workDate: formatStorageDate(punchTime)
     };
 
-    setActivity((current) => mergeActivityRecords([entry, ...current]));
-    persistPunchActivity(entry);
+    persistPunchActivity(entry).then((savedEntry) => {
+      setActivity((current) => {
+        const latestEntry = sortActivity(current).at(-1);
+
+        if (
+          latestEntry?.type === savedEntry.type &&
+          String(latestEntry.workDate || "") === String(savedEntry.workDate || "")
+        ) {
+          return current;
+        }
+
+        return mergeActivityRecords([savedEntry, ...current]);
+      });
+    });
   }
 
   function togglePunch() {
@@ -1476,6 +1578,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                 className="logout"
                 onClick={() => {
                   clearSuiteSession();
+                  window.sessionStorage.removeItem(employeeSessionStorageKey);
                   window.localStorage.removeItem(employeeSessionStorageKey);
                   router.replace("/employee-app/login");
                   router.refresh();

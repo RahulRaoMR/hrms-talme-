@@ -36,12 +36,6 @@ export const navItems = [
     index: "06"
   },
   {
-    href: "/payroll",
-    label: "Payroll",
-    meta: "Tax and salary payment",
-    index: "07"
-  },
-  {
     href: "/recruitment",
     label: "Recruitment",
     meta: "Job openings and hiring",
@@ -52,18 +46,6 @@ export const navItems = [
     label: "Approvals",
     meta: "Inbox and sign-offs",
     index: "09"
-  },
-  {
-    href: "/reports",
-    label: "Reports",
-    meta: "Analytics and AI",
-    index: "10"
-  },
-  {
-    href: "/dynamic-reports",
-    label: "Dynamic Reports",
-    meta: "Custom analytics",
-    index: "11"
   },
   {
     href: "/documents",
@@ -84,7 +66,7 @@ export const navItems = [
     index: "14"
   },
   {
-    href: "/employee-app",
+    href: "/employee-app/login",
     label: "Employee App",
     meta: "Mobile self service",
     index: "16"
@@ -100,12 +82,6 @@ export const navItems = [
     label: "Search",
     meta: "Global lookup",
     index: "18"
-  },
-  {
-    href: "/exports",
-    label: "Exports",
-    meta: "CSV and PDF center",
-    index: "19"
   },
   {
     href: "/notifications",

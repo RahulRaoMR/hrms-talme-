@@ -391,63 +391,61 @@ export async function getNotifications() {
 
 export async function getGlobalSearchResults(query) {
   const q = query.trim();
-  if (!q) {
-    return {
-      employees: [],
-      candidates: [],
-      vendors: [],
-      invoices: [],
-      documents: [],
-      approvals: []
-    };
-  }
 
   try {
     await ensureSeedData();
 
-    const contains = { contains: q };
+    const contains = q ? { contains: q } : null;
 
-    const [employees, candidates, vendors, invoices, documents, approvals] = await Promise.all([
-      prisma.employee.findMany({
-        where: {
-          OR: [{ name: contains }, { employeeId: contains }, { department: contains }, { location: contains }]
-        },
-        take: 8
-      }),
-      prisma.candidate.findMany({
-        where: { OR: [{ name: contains }, { role: contains }, { source: contains }] },
-        take: 8
-      }),
-      prisma.vendor.findMany({
-        where: { OR: [{ vendor: contains }, { category: contains }] },
-        take: 8
-      }),
-      prisma.invoice.findMany({
-        where: { OR: [{ vendor: contains }, { invoiceNo: contains }, { amount: contains }] },
-        take: 8
-      }),
-      prisma.documentRecord.findMany({
-        where: { OR: [{ owner: contains }, { docType: contains }, { module: contains }] },
-        take: 8
-      }),
-      prisma.approvalItem.findMany({
-        where: { OR: [{ title: contains }, { owner: contains }, { module: contains }] },
-        take: 8
-      })
-    ]);
+    const [employees, candidates, vendors, invoices, documents, approvals] = contains
+      ? await Promise.all([
+          prisma.employee.findMany({
+            where: {
+              OR: [{ name: contains }, { employeeId: contains }, { department: contains }, { location: contains }]
+            },
+          }),
+          prisma.candidate.findMany({
+            where: { OR: [{ name: contains }, { role: contains }, { source: contains }] },
+          }),
+          prisma.vendor.findMany({
+            where: { OR: [{ vendor: contains }, { category: contains }] },
+          }),
+          prisma.invoice.findMany({
+            where: { OR: [{ vendor: contains }, { invoiceNo: contains }, { amount: contains }] },
+          }),
+          prisma.documentRecord.findMany({
+            where: { OR: [{ owner: contains }, { docType: contains }, { module: contains }] },
+          }),
+          prisma.approvalItem.findMany({
+            where: { OR: [{ title: contains }, { owner: contains }, { module: contains }] },
+          })
+        ])
+      : await Promise.all([
+          prisma.employee.findMany({ orderBy: { createdAt: "desc" } }),
+          prisma.candidate.findMany({ orderBy: { createdAt: "desc" } }),
+          prisma.vendor.findMany({ orderBy: { createdAt: "desc" } }),
+          prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
+          prisma.documentRecord.findMany({ orderBy: { createdAt: "desc" } }),
+          prisma.approvalItem.findMany({ orderBy: { createdAt: "desc" } })
+        ]);
 
     return { employees, candidates, vendors, invoices, documents, approvals };
   } catch (error) {
     console.error("Falling back to demo search", error);
     return {
-      employees: filterItems(withIds(employeeMasterSeed, "employee"), q, ["name", "employeeId", "department", "location"]).slice(0, 8),
-      candidates: filterItems(withIds(demoSeed.candidates, "candidate"), q, ["name", "role", "source"]).slice(0, 8),
-      vendors: filterItems(withIds(demoSeed.vendors, "vendor"), q, ["vendor", "category"]).slice(0, 8),
-      invoices: filterItems(withIds(demoSeed.invoices, "invoice"), q, ["vendor", "invoiceNo", "amount"]).slice(0, 8),
-      documents: filterItems(withIds(documentSeed, "document"), q, ["owner", "docType", "module"]).slice(0, 8),
-      approvals: filterItems(withIds(approvalSeed, "approval"), q, ["title", "owner", "module"]).slice(0, 8)
+      employees: getSearchItems(withIds(employeeMasterSeed, "employee"), q, ["name", "employeeId", "department", "location"]),
+      candidates: getSearchItems(withIds(demoSeed.candidates, "candidate"), q, ["name", "role", "source"]),
+      vendors: getSearchItems(withIds(demoSeed.vendors, "vendor"), q, ["vendor", "category"]),
+      invoices: getSearchItems(withIds(demoSeed.invoices, "invoice"), q, ["vendor", "invoiceNo", "amount"]),
+      documents: getSearchItems(withIds(documentSeed, "document"), q, ["owner", "docType", "module"]),
+      approvals: getSearchItems(withIds(approvalSeed, "approval"), q, ["title", "owner", "module"])
     };
   }
+}
+
+function getSearchItems(items, query, fields) {
+  if (!query) return items;
+  return filterItems(items, query, fields);
 }
 
 export async function getCandidates({ query = "", source = "All", page = 1 }) {

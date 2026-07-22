@@ -22,6 +22,8 @@ export default function SuiteShell({
   const [navOpen, setNavOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [accessRequests, setAccessRequests] = useState([]);
+  const [accessMessage, setAccessMessage] = useState("");
   const role = resolveRole(session?.user?.role || "") || "Enterprise Admin";
   const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
 
@@ -64,6 +66,132 @@ export default function SuiteShell({
     setNavOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!sessionChecked || !session) return undefined;
+
+    async function loadAccessRequests() {
+      try {
+        const response = await fetch("/api/approvals", { cache: "no-store" });
+        const payload = await response.json();
+        setAccessRequests(Array.isArray(payload) ? payload.filter(isAccessRequest) : []);
+      } catch {
+        setAccessRequests([]);
+      }
+    }
+
+    loadAccessRequests();
+    window.addEventListener("focus", loadAccessRequests);
+    const timer = window.setInterval(loadAccessRequests, 15000);
+
+    return () => {
+      window.removeEventListener("focus", loadAccessRequests);
+      window.clearInterval(timer);
+    };
+  }, [session, sessionChecked]);
+
+  useEffect(() => {
+    if (!sessionChecked || !session) return undefined;
+
+    function getActor() {
+      const currentSession = getSuiteSession();
+      return (
+        currentSession?.user?.email ||
+        currentSession?.user?.employeeId ||
+        currentSession?.user?.name ||
+        "system"
+      );
+    }
+
+    function recordActivity(action, entity, detail, entityId = "") {
+      fetch("/api/activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          actor: getActor(),
+          action,
+          entity,
+          entityId,
+          detail
+        })
+      }).catch(() => {});
+    }
+
+    if (!window.__talmeAuditFetchPatched) {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, init = {}) => {
+        const url = typeof input === "string" ? input : input?.url || "";
+        const method = String(init?.method || input?.method || "GET").toUpperCase();
+        const pathname = getFetchPathname(url);
+        const isApiMutation =
+          pathname.startsWith("/api/") &&
+          !pathname.startsWith("/api/activity") &&
+          ["POST", "PATCH", "DELETE"].includes(method);
+
+        if (isApiMutation) {
+          const headers = new Headers(init?.headers || input?.headers || {});
+          headers.set("x-talme-actor", getActor());
+          return originalFetch(input, { ...init, headers }).then((response) => {
+            if (response.ok) {
+              recordActivity(
+                getMutationAction(method),
+                getMutationEntity(pathname),
+                `${method} ${pathname}`,
+                pathname
+              );
+            }
+
+            return response;
+          });
+        }
+
+        return originalFetch(input, init);
+      };
+      window.__talmeAuditFetchPatched = true;
+    }
+
+    recordActivity("VIEW", "Page", `Viewed ${pathname}`, pathname);
+
+    function recordClick(event) {
+      const target = event.target?.closest?.("a,button");
+
+      if (!target) return;
+
+      const label = (target.innerText || target.getAttribute("aria-label") || target.title || "").trim();
+      const href = target.getAttribute("href") || "";
+      const detail = href
+        ? `Clicked ${label || href} on ${pathname} -> ${href}`
+        : `Clicked ${label || target.type || "control"} on ${pathname}`;
+
+      recordActivity("CLICK", "Portal", detail, href || pathname);
+    }
+
+    document.addEventListener("click", recordClick, true);
+    return () => document.removeEventListener("click", recordClick, true);
+  }, [pathname, session, sessionChecked]);
+
+  function getFetchPathname(url) {
+    try {
+      return new URL(url, window.location.origin).pathname;
+    } catch {
+      return String(url || "");
+    }
+  }
+
+  function getMutationAction(method) {
+    if (method === "POST") return "CREATE";
+    if (method === "PATCH") return "UPDATE";
+    if (method === "DELETE") return "DELETE";
+    return method;
+  }
+
+  function getMutationEntity(pathname) {
+    const resource = pathname.split("/").filter(Boolean)[1] || "API";
+    return resource
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
   function toggleTheme() {
     setLightMode((current) => {
       const nextLightMode = !current;
@@ -78,6 +206,81 @@ export default function SuiteShell({
   function handleLogout() {
     clearSuiteSession();
     window.location.replace("/login");
+  }
+
+  function getCurrentActor() {
+    return (
+      session?.user?.email ||
+      session?.user?.employeeId ||
+      session?.user?.name ||
+      "User"
+    );
+  }
+
+  function getAccessRequestFor(item, statuses = []) {
+    const actorValues = [
+      session?.user?.email,
+      session?.user?.employeeId,
+      session?.user?.name
+    ].filter(Boolean).map((value) => String(value).toLowerCase());
+    const acceptedStatuses = statuses.map((status) => String(status).toLowerCase());
+
+    return accessRequests.find((request) => {
+      const status = String(request.status || "").toLowerCase();
+      const owner = String(request.owner || "").toLowerCase();
+      const requestPath = String(request.amount || "").trim();
+      const requestTitle = String(request.title || "").toLowerCase();
+      const matchesStatus = !acceptedStatuses.length || acceptedStatuses.includes(status);
+      const matchesUser = actorValues.some((value) => owner.includes(value));
+      const matchesModule = requestPath === item.href || requestTitle.includes(item.label.toLowerCase());
+
+      return matchesStatus && matchesUser && matchesModule;
+    });
+  }
+
+  function hasApprovedAccess(item) {
+    return Boolean(getAccessRequestFor(item, ["Approved"]));
+  }
+
+  function hasPendingAccess(item) {
+    return Boolean(getAccessRequestFor(item, ["Pending", "Requested", "Review"]));
+  }
+
+  async function requestAccess(item) {
+    if (hasPendingAccess(item)) {
+      setAccessMessage(`Access request for ${item.label} is already pending.`);
+      return;
+    }
+
+    setAccessMessage(`Requesting access to ${item.label}...`);
+
+    try {
+      const actor = getCurrentActor();
+      const response = await fetch("/api/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-talme-actor": actor },
+        body: JSON.stringify({
+          module: "Access Request",
+          title: `Access to ${item.label}`,
+          owner: `${actor} (${role})`,
+          amount: item.href,
+          level: "Admin",
+          status: "Pending",
+          tone: "gold"
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to request access.");
+      }
+
+      setAccessRequests((current) => [payload, ...current]);
+      setAccessMessage(`Access request sent for ${item.label}.`);
+    } catch (error) {
+      setAccessMessage(error?.message || "Unable to request access.");
+    }
   }
 
   if (!sessionChecked || !session) {
@@ -111,17 +314,21 @@ export default function SuiteShell({
             </button>
           </div>
           {navItems.map((item, index) => {
-            const allowed = canAccess(role, item.href);
+            const baseAllowed = canAccess(role, item.href);
+            const approvedAccess = !baseAllowed && hasApprovedAccess(item);
+            const allowed = baseAllowed || approvedAccess;
+            const pendingAccess = !allowed && hasPendingAccess(item);
             return (
             <a
               key={item.href}
-              className={`nav-link ${pathname === item.href ? "active" : ""} ${allowed ? "" : "blocked"}`}
+              className={`nav-link ${pathname === item.href ? "active" : ""} ${allowed ? "" : "request-access"}`}
               href={item.href}
               aria-disabled={!allowed}
-              title={allowed ? item.label : "Access blocked"}
+              title={allowed ? item.label : "Request access"}
               onClick={(event) => {
                 if (!allowed) {
                   event.preventDefault();
+                  requestAccess(item);
                 }
               }}
             >
@@ -130,13 +337,15 @@ export default function SuiteShell({
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <strong>{item.label}</strong>
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
-                  {!allowed && <span className="nav-lock">Blocked</span>}
+                  {approvedAccess && <span className="nav-access-approved">Approved</span>}
+                  {!allowed && <span className="nav-lock">{pendingAccess ? "Requested" : "Request Access"}</span>}
                 </div>
                 <small>{item.meta}</small>
               </div>
             </a>
           );
           })}
+          {accessMessage ? <p className="nav-access-message">{accessMessage}</p> : null}
         </div>
       </aside>
 
@@ -195,4 +404,8 @@ export default function SuiteShell({
       </main>
     </div>
   );
+}
+
+function isAccessRequest(item) {
+  return String(item?.module || "").toLowerCase() === "access request";
 }

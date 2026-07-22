@@ -4,6 +4,7 @@ import { getLocalSuiteData, getResource } from "@/lib/local-api-store";
 import { getPayslipRecords } from "@/lib/payslip-store";
 import { getPersistentHrmsData } from "@/lib/prisma-store";
 import { fetchServerApiJson } from "@/lib/server-api";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ export default async function EmployeeAppPage({ searchParams }) {
   let data;
   const params = await searchParams;
   const requestedEmployeeId = typeof params?.employeeId === "string" ? params.employeeId : "";
+
+  if (!requestedEmployeeId.trim()) {
+    redirect("/employee-app/login");
+  }
 
   try {
     const suiteData =

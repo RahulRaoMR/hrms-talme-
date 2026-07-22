@@ -70,6 +70,25 @@ export default function ApprovalsPageClient({ approvals: initialApprovals }) {
                 <td><StatusBadge tone={approval.tone}>{approval.status}</StatusBadge></td>
                 <td>
                   <div className="row-actions">
+                    {approval.status !== "Approved" ? (
+                      <button
+                        className="mini-button"
+                        disabled={isPending}
+                        onClick={() =>
+                          startTransition(async () => {
+                            const updated = await updateApprovalItemAction(approval.id, {
+                              ...approval,
+                              status: "Approved",
+                              tone: "teal"
+                            });
+                            setApprovals((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+                          })
+                        }
+                        type="button"
+                      >
+                        Approve
+                      </button>
+                    ) : null}
                     <button className="mini-button" onClick={() => setEditState(approval)} type="button">
                       Edit
                     </button>
@@ -92,36 +111,6 @@ export default function ApprovalsPageClient({ approvals: initialApprovals }) {
             ))}
           </tbody>
         </table>
-      </section>
-
-      <section className="page-section panel-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Approval Chain</p>
-              <h3>Enterprise sign-off rules</h3>
-            </div>
-          </div>
-          <div className="flow-grid">
-            <div className="flow-card"><strong>Manager</strong><small>Employee and leave validation</small></div>
-            <div className="flow-card"><strong>Operations</strong><small>Attendance and manpower verification</small></div>
-            <div className="flow-card"><strong>Finance</strong><small>Tax, invoice, and payment release</small></div>
-            <div className="flow-card"><strong>Admin</strong><small>Policy override and final control</small></div>
-          </div>
-        </article>
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Risk Guardrails</p>
-              <h3>Before approval</h3>
-            </div>
-          </div>
-          <div className="doc-stack">
-            <div className="doc-line"><span>Missing attendance lock</span><strong>Block payroll</strong></div>
-            <div className="doc-line"><span>Vendor KYC expired</span><strong>Hold invoice</strong></div>
-            <div className="doc-line"><span>Bank details pending</span><strong>Hold salary</strong></div>
-          </div>
-        </article>
       </section>
 
       <EntityModal

@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createResource, getResource } from "@/lib/local-api-store";
-import { createPersistentResource, hasPersistentDatabase, listPersistentResource } from "@/lib/prisma-store";
+import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
+import { createPersistentAuditLog, createPersistentResource, hasPersistentDatabase, listPersistentResource } from "@/lib/prisma-store";
 import { getConfiguredApiBase } from "@/lib/server-api";
+import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
 function shouldUseLocalMutationFallback() {
   return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
@@ -66,6 +67,7 @@ export async function POST(request) {
     }
 
     if (persistentRow) {
+      await writeAuditEntry(request, persistentRow);
       return Response.json(persistentRow, { status: 201 });
     }
   }
@@ -80,7 +82,21 @@ export async function POST(request) {
     return Response.json({ error: "Upload resource is not available." }, { status: 404 });
   }
 
+  await writeAuditEntry(request, row);
   return Response.json(row, { status: 201 });
+}
+
+async function writeAuditEntry(request, row) {
+  const payload = {
+    actor: getAuditActorFromRequest(request),
+    action: "UPLOAD",
+    entity: getAuditEntity("uploads"),
+    entityId: row?.id || "",
+    detail: buildAuditDetail("UPLOAD", "uploads", row, row?.id)
+  };
+
+  const persistentLog = await createPersistentAuditLog(payload);
+  if (!persistentLog) createActivityLog(payload);
 }
 
 async function proxyUploadRequest(request, pathName) {

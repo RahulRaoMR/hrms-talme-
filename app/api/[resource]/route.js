@@ -1,7 +1,13 @@
-import { createResource, getResource } from "@/lib/local-api-store";
-import { createPersistentResource, hasPersistentDatabase, listPersistentResource } from "@/lib/prisma-store";
+import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
+import {
+  createPersistentAuditLog,
+  createPersistentResource,
+  hasPersistentDatabase,
+  listPersistentResource
+} from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import { onboardEmployee } from "@/lib/employee-onboarding";
+import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
 function shouldUseLocalMutationFallback() {
   return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
@@ -53,6 +59,19 @@ async function attachEmployeeOnboarding(resource, row) {
   return { ...row, onboarding };
 }
 
+async function writeAuditEntry(request, action, resource, row) {
+  const payload = {
+    actor: getAuditActorFromRequest(request),
+    action,
+    entity: getAuditEntity(resource),
+    entityId: row?.id || "",
+    detail: buildAuditDetail(action, resource, row, row?.id)
+  };
+
+  const persistentLog = await createPersistentAuditLog(payload);
+  if (!persistentLog) createActivityLog(payload);
+}
+
 export async function GET(request, context) {
   const { resource } = await context.params;
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}${new URL(request.url).search}`);
@@ -96,6 +115,7 @@ export async function POST(request, context) {
     }
 
     if (persistentRow) {
+      await writeAuditEntry(request, "CREATE", resource, persistentRow);
       return Response.json(await attachEmployeeOnboarding(resource, persistentRow), { status: 201 });
     }
   }
@@ -111,5 +131,6 @@ export async function POST(request, context) {
     return Response.json({ error: "Unknown API resource." }, { status: 404 });
   }
 
+  await writeAuditEntry(request, "CREATE", resource, row);
   return Response.json(await attachEmployeeOnboarding(resource, row), { status: 201 });
 }

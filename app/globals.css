@@ -1472,14 +1472,23 @@ textarea {
   border-color: rgba(214, 176, 106, 0.22);
 }
 
-.nav-link.blocked {
-  cursor: not-allowed;
+.nav-link.blocked,
+.nav-link.request-access {
   opacity: 0.62;
 }
 
-.nav-link.blocked:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: transparent;
+.nav-link.request-access {
+  cursor: pointer;
+}
+
+.nav-link.blocked {
+  cursor: not-allowed;
+}
+
+.nav-link.blocked:hover,
+.nav-link.request-access:hover {
+  background: rgba(214, 176, 106, 0.11);
+  border-color: rgba(214, 176, 106, 0.22);
 }
 
 .nav-badge {
@@ -1496,10 +1505,27 @@ textarea {
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  color: var(--muted);
+  color: var(--gold);
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.nav-access-approved {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.nav-access-message {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
 .workspace-topbar,
@@ -2252,6 +2278,26 @@ button.flow-card {
 
 .timesheet-submission-card {
   gap: 10px;
+}
+
+.timesheet-review-card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.timesheet-review-card.active,
+.timesheet-review-card:hover {
+  border-color: rgba(211, 165, 86, 0.55);
+}
+
+.timesheet-detail-panel {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 
 .daily-updates-shell {
@@ -3616,6 +3662,119 @@ body:not(.light-mode) .performance-avatar.small {
 
 .doc-line strong {
   color: var(--text);
+}
+
+.search-result-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.search-result-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.search-result-card div {
+  min-width: 0;
+}
+
+.search-result-card strong,
+.search-result-card small {
+  display: block;
+}
+
+.search-result-card strong {
+  color: var(--text);
+}
+
+.search-result-card small {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.search-result-card span {
+  flex: 0 0 auto;
+  max-width: 160px;
+  color: var(--text);
+  font-weight: 800;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.audit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.audit-summary-card {
+  padding: 18px;
+  border-radius: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.audit-summary-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.audit-summary-card strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 2rem;
+}
+
+.audit-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(212, 161, 79, 0.14);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.audit-action-delete {
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.audit-action-update,
+.audit-action-click,
+.audit-action-view {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.audit-action-login,
+.audit-action-create,
+.audit-action-upload {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+@media (max-width: 900px) {
+  .audit-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .audit-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .pagination-row {

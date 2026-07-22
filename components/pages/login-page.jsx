@@ -34,29 +34,8 @@ const roleOptions = {
     password: "",
     destination: "/ats"
   },
-  hr: {
-    label: "HR",
-    identifierLabel: "Corporate Email",
-    identifier: "hr@talme.ai",
-    password: "",
-    destination: "/dashboard"
-  },
   employeeHrms: {
     label: "Employee Attendance",
-    identifierLabel: "Employee ID",
-    identifier: "",
-    password: "",
-    destination: "/employee-app"
-  },
-  payroll: {
-    label: "Payroll",
-    identifierLabel: "Corporate Email",
-    identifier: "",
-    password: "",
-    destination: "/payroll"
-  },
-  employee: {
-    label: "Employee",
     identifierLabel: "Employee ID",
     identifier: "",
     password: "",
@@ -282,7 +261,8 @@ export default function LoginPageClient() {
                   : selectedCredentials.destination;
 
                 if (loginEmployeeId) {
-                  window.localStorage.setItem(employeeSessionKey, loginEmployeeId);
+                  window.sessionStorage.setItem(employeeSessionKey, loginEmployeeId);
+                  window.localStorage.removeItem(employeeSessionKey);
                 }
 
                 saveSuiteSession({
@@ -318,10 +298,7 @@ export default function LoginPageClient() {
                   <option value="payrollAts">Payroll + ATS</option>
                   <option value="invoice">Accounts</option>
                   <option value="ats">ATS</option>
-                  <option value="hr">HR</option>
                   <option value="employeeHrms">Employee Attendance</option>
-                  <option value="payroll">Payroll</option>
-                  <option value="employee">Employee</option>
                 </select>
               </label>
               <label>

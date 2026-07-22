@@ -28,18 +28,19 @@ export async function GET(request) {
 
   const query = new URL(request.url).searchParams.get("q")?.trim().toLowerCase() || "";
 
-  if (!query) {
-    return Response.json(emptyResults);
-  }
-
   return Response.json(
     Object.fromEntries(
       Object.entries(searchFields).map(([resource, fields]) => [
         resource,
-        filterItems(getResource(resource) || [], query, fields).slice(0, 8)
+        getSearchItems(getResource(resource) || [], query, fields)
       ])
     )
   );
+}
+
+function getSearchItems(items, query, fields) {
+  if (!query) return items;
+  return filterItems(items, query, fields);
 }
 
 function filterItems(items, query, fields) {

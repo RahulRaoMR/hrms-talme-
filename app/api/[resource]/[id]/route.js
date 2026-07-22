@@ -1,5 +1,6 @@
-import { deleteResource, getResource, updateResource } from "@/lib/local-api-store";
+import { createActivityLog, deleteResource, getResource, updateResource } from "@/lib/local-api-store";
 import {
+  createPersistentAuditLog,
   deletePersistentResource,
   getPersistentResource,
   hasPersistentDatabase,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import { sendLeaveStatusNotification } from "@/lib/leave-notifications";
+import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
 function shouldUseLocalMutationFallback() {
   return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
@@ -29,6 +31,19 @@ async function attachLeaveNotification(resource, previousRow, nextRow) {
 
   const leaveNotification = await sendLeaveStatusNotification(previousRow, nextRow);
   return { ...nextRow, leaveNotification };
+}
+
+async function writeAuditEntry(request, action, resource, row, id) {
+  const payload = {
+    actor: getAuditActorFromRequest(request),
+    action,
+    entity: getAuditEntity(resource),
+    entityId: row?.id || id || "",
+    detail: buildAuditDetail(action, resource, row, id)
+  };
+
+  const persistentLog = await createPersistentAuditLog(payload);
+  if (!persistentLog) createActivityLog(payload);
 }
 
 export async function GET(request, context) {
@@ -72,6 +87,7 @@ export async function PATCH(request, context) {
     const persistentRow = await updatePersistentResource(resource, id, payload);
 
     if (persistentRow) {
+      await writeAuditEntry(request, "UPDATE", resource, persistentRow, id);
       return Response.json(await attachLeaveNotification(resource, previousRow, persistentRow));
     }
   }
@@ -88,6 +104,7 @@ export async function PATCH(request, context) {
     return Response.json({ error: "Record not found." }, { status: 404 });
   }
 
+  await writeAuditEntry(request, "UPDATE", resource, row, id);
   return Response.json(await attachLeaveNotification(resource, previousRow, row));
 }
 
@@ -102,6 +119,7 @@ export async function DELETE(request, context) {
   const persistentRow = await deletePersistentResource(resource, id);
 
   if (persistentRow) {
+    await writeAuditEntry(request, "DELETE", resource, persistentRow, id);
     return Response.json(persistentRow);
   }
 
@@ -109,9 +127,12 @@ export async function DELETE(request, context) {
     return missingPersistentStoreResponse();
   }
 
+  const existing = getResource(resource)?.find((item) => String(item.id) === String(id));
+
   if (!deleteResource(resource, id)) {
     return Response.json({ error: "Record not found." }, { status: 404 });
   }
 
+  await writeAuditEntry(request, "DELETE", resource, existing, id);
   return Response.json({ id });
 }

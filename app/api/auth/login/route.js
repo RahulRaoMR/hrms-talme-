@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import { createActivityLog } from "@/lib/local-api-store";
 import { getLocalLoginAccount, hasLocalPasswordOverride } from "@/lib/password-reset-store";
-import { hasPersistentDatabase, isDatabaseUnavailableError, prisma } from "@/lib/prisma-store";
+import { createPersistentAuditLog, hasPersistentDatabase, isDatabaseUnavailableError, prisma } from "@/lib/prisma-store";
 
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
@@ -33,6 +34,7 @@ export async function POST(request) {
   const reviewEmployee = getPlayReviewEmployee(identifier, password, expectedRole);
 
   if (reviewEmployee) {
+    await writeLoginAudit(reviewEmployee);
     return Response.json({
       token: createSessionToken(reviewEmployee),
       user: reviewEmployee
@@ -57,10 +59,24 @@ export async function POST(request) {
     );
   }
 
+  await writeLoginAudit(user);
+
   return Response.json({
     token: createSessionToken(user),
     user
   });
+}
+
+async function writeLoginAudit(user) {
+  const payload = {
+    actor: user.email || user.employeeId || user.name || "system",
+    action: "LOGIN",
+    entity: "Auth",
+    entityId: user.id || user.employeeId || "",
+    detail: `Logged in as ${user.role || "User"}${user.employeeId ? ` (${user.employeeId})` : ""}`
+  };
+  const persistentLog = await createPersistentAuditLog(payload);
+  if (!persistentLog) createActivityLog(payload);
 }
 
 function getPlayReviewEmployee(identifier, password, expectedRole) {
