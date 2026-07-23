@@ -163,7 +163,7 @@ const candidateFields = [
 ];
 const candidateSearchKeys = candidateFields.map((field) => field.key);
 const candidateRequiredFields = new Set(["name", "role", "stage", "source"]);
-const candidateDateFields = new Set(candidateFields.filter((field) => /date/i.test(field.label)).map((field) => field.key));
+const candidateDateFields = new Set(candidateFields.filter((field) => /date/i.test(field.key)).map((field) => field.key));
 const candidateLongTextFields = new Set(["screeningNotes", "tech1Remarks", "tech2Remarks", "tech3Remarks"]);
 const candidateFormSeed = {
   ...Object.fromEntries(candidateFields.map((field) => [field.key, ""])),
