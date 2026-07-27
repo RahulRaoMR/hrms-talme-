@@ -1003,9 +1003,12 @@ function isEmailConfigured() {
 
 function shouldUseResendEmail() {
   const provider = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  const service = process.env.EMAIL_SERVICE?.trim().toLowerCase();
 
   if (provider === "resend") return Boolean(process.env.RESEND_API_KEY);
   if (provider === "smtp" || provider === "gmail") return false;
+  if (service === "resend") return Boolean(process.env.RESEND_API_KEY);
+  if (service === "smtp" || service === "gmail") return false;
 
   return Boolean(process.env.RESEND_API_KEY);
 }
@@ -1054,34 +1057,55 @@ function getEmailTransporter() {
 }
 
 async function sendEmail(to, subject, html, options = {}) {
-  if (shouldUseResendEmail()) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), emailTimeoutMs);
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        from: options.from || getEmailFromAddress("resend"),
-        to,
-        subject,
-        html,
-        text: options.text
-      })
-    }).finally(() => clearTimeout(timeout));
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(data?.message || data?.error || "Email API request failed.");
-    }
-
-    return data;
+  if (!isEmailConfigured()) {
+    throw new Error("Email service is not configured. Set RESEND_API_KEY, EMAIL_USER and EMAIL_PASS, or SMTP credentials.");
   }
 
+  if (shouldUseResendEmail() || !hasEmailCredentials()) {
+    return sendEmailWithResend(to, subject, html, options);
+  }
+
+  try {
+    return await sendEmailWithSmtp(to, subject, html, options);
+  } catch (error) {
+    if (!process.env.RESEND_API_KEY) {
+      throw error;
+    }
+
+    console.warn("SMTP email failed. Retrying with Resend.", error);
+    return sendEmailWithResend(to, subject, html, options);
+  }
+}
+
+async function sendEmailWithResend(to, subject, html, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), emailTimeoutMs);
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    signal: controller.signal,
+    body: JSON.stringify({
+      from: options.from || getEmailFromAddress("resend"),
+      to,
+      subject,
+      html,
+      text: options.text
+    })
+  }).finally(() => clearTimeout(timeout));
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || "Email API request failed.");
+  }
+
+  return data;
+}
+
+function sendEmailWithSmtp(to, subject, html, options = {}) {
   return Promise.race([
     getEmailTransporter().sendMail({
       from: options.from || getEmailFromAddress("smtp"),
