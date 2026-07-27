@@ -98,6 +98,10 @@ app.get("/api/test", (_req, res) => {
   res.json({ message: "API working" });
 });
 
+app.get("/api/test-email", (_req, res) => {
+  res.json(getEmailDiagnostics());
+});
+
 app.post("/api/auth/login", asyncHandler(async (req, res) => {
   const identifier = String(req.body?.email || "").trim();
   const password = String(req.body?.password || "").trim();
@@ -990,8 +994,12 @@ function hasEmailCredentials() {
   return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
 }
 
+function hasResendConfiguration() {
+  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM?.trim());
+}
+
 function hasEmailConfiguration() {
-  if (process.env.RESEND_API_KEY) return true;
+  if (hasResendConfiguration()) return true;
   if (process.env.SMTP_HOST) return hasEmailCredentials();
 
   return hasEmailCredentials();
@@ -1005,12 +1013,12 @@ function shouldUseResendEmail() {
   const provider = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
   const service = process.env.EMAIL_SERVICE?.trim().toLowerCase();
 
-  if (provider === "resend") return Boolean(process.env.RESEND_API_KEY);
+  if (provider === "resend") return hasResendConfiguration();
   if (provider === "smtp" || provider === "gmail") return false;
-  if (service === "resend") return Boolean(process.env.RESEND_API_KEY);
+  if (service === "resend") return hasResendConfiguration();
   if (service === "smtp" || service === "gmail") return false;
 
-  return Boolean(process.env.RESEND_API_KEY);
+  return hasResendConfiguration();
 }
 
 function getEmailFromAddress(provider = "smtp") {
@@ -1056,6 +1064,62 @@ function getEmailTransporter() {
   return emailTransporter;
 }
 
+function getEmailDiagnostics() {
+  const provider = getEmailDiagnosticProvider();
+  const missing = [];
+
+  if (provider === "resend") {
+    if (!cleanEnvValue(process.env.RESEND_API_KEY)) missing.push("RESEND_API_KEY");
+    if (!cleanEnvValue(process.env.EMAIL_FROM)) missing.push("EMAIL_FROM");
+  } else {
+    if (provider === "smtp" && !cleanEnvValue(process.env.SMTP_HOST)) missing.push("SMTP_HOST");
+    if (!cleanEnvValue(process.env.EMAIL_USER)) missing.push("EMAIL_USER");
+    if (!cleanEnvValue(process.env.EMAIL_PASS)) missing.push("EMAIL_PASS");
+  }
+
+  const diagnostics = {
+    configured: missing.length === 0,
+    provider,
+    from: getEmailDiagnosticFromAddress(provider)
+  };
+
+  if (missing.length) {
+    diagnostics.missing = missing;
+  }
+
+  return diagnostics;
+}
+
+function getEmailDiagnosticProvider() {
+  const provider = cleanEnvValue(process.env.EMAIL_PROVIDER).toLowerCase();
+  const service = cleanEnvValue(process.env.EMAIL_SERVICE).toLowerCase();
+  const hasSmtpCredentials = cleanEnvValue(process.env.EMAIL_USER) && cleanEnvValue(process.env.EMAIL_PASS);
+  const hasResendConfig = cleanEnvValue(process.env.RESEND_API_KEY) || cleanEnvValue(process.env.EMAIL_FROM);
+
+  if (provider === "resend" || service === "resend") return "resend";
+  if (provider === "smtp") return "smtp";
+  if (provider === "gmail" || service === "gmail") return hasSmtpCredentials || !hasResendConfig ? "gmail" : "resend";
+  if (service === "smtp") return hasSmtpCredentials || !hasResendConfig ? "smtp" : "resend";
+  if (cleanEnvValue(process.env.SMTP_HOST)) return "smtp";
+  if (hasResendConfig) return "resend";
+
+  return "gmail";
+}
+
+function getEmailDiagnosticFromAddress(provider) {
+  const configuredFrom = cleanEnvValue(process.env.EMAIL_FROM);
+  const emailUser = cleanEnvValue(process.env.EMAIL_USER);
+
+  if (configuredFrom) return configuredFrom;
+  if (provider !== "resend" && emailUser) return `"Talme HRMS" <${emailUser}>`;
+
+  return "";
+}
+
+function cleanEnvValue(value) {
+  return String(value || "").trim().replace(/^"|"$/g, "");
+}
+
 async function sendEmail(to, subject, html, options = {}) {
   if (!isEmailConfigured()) {
     throw new Error("Email service is not configured. Set RESEND_API_KEY, EMAIL_USER and EMAIL_PASS, or SMTP credentials.");
@@ -1068,7 +1132,7 @@ async function sendEmail(to, subject, html, options = {}) {
   try {
     return await sendEmailWithSmtp(to, subject, html, options);
   } catch (error) {
-    if (!process.env.RESEND_API_KEY) {
+    if (!hasResendConfiguration()) {
       throw error;
     }
 

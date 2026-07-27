@@ -57,12 +57,16 @@ function hasResendKey() {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
+function hasResendConfiguration() {
+  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM?.trim());
+}
+
 function shouldUseResend() {
   const provider = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
   const service = process.env.EMAIL_SERVICE?.trim().toLowerCase();
 
   if (provider === "resend") {
-    return hasResendKey();
+    return hasResendConfiguration();
   }
 
   if (provider === "smtp" || provider === "gmail") {
@@ -70,14 +74,14 @@ function shouldUseResend() {
   }
 
   if (service === "resend") {
-    return hasResendKey();
+    return hasResendConfiguration();
   }
 
   if (service === "smtp" || service === "gmail") {
     return false;
   }
 
-  return hasResendKey() && (Boolean(process.env.EMAIL_FROM?.trim()) || !hasSmtpCredentials());
+  return hasResendConfiguration() && (Boolean(process.env.EMAIL_FROM?.trim()) || !hasSmtpCredentials());
 }
 
 function getDefaultFrom(provider = "smtp") {
@@ -101,7 +105,7 @@ function normalizeResendAttachments(attachments = []) {
 }
 
 export function isEmailConfigured() {
-  if (hasResendKey()) {
+  if (hasResendConfiguration()) {
     return true;
   }
 
@@ -180,7 +184,7 @@ export async function sendEmail(to, subject, html, options = {}) {
   try {
     return await sendWithSmtp(to, subject, html, options);
   } catch (error) {
-    if (!hasResendKey()) {
+    if (!hasResendConfiguration()) {
       throw error;
     }
 
