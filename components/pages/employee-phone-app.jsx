@@ -1245,12 +1245,6 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   return (
     <div className="phone-app-shell">
       <div className="phone-device">
-        <div className="phone-status">
-          <strong>10:40</strong>
-          <span>Vo WiFi</span>
-          <span>29%</span>
-        </div>
-
         {activeTab === "home" && (
           <>
             <section className="phone-screen home-screen">

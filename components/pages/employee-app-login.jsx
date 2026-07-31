@@ -108,11 +108,6 @@ export default function EmployeeAppLogin() {
   return (
     <main className="employee-login-shell">
       <section className="employee-login-phone">
-        <div className="phone-status">
-          <strong>10:40</strong>
-          <span>Vo WiFi</span>
-          <span>29%</span>
-        </div>
         <button
           className="employee-login-back"
           onClick={goToHrms}
