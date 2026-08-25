@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   createDocumentRecordAction,
   deleteDocumentRecordAction,
@@ -24,6 +24,7 @@ const documentSeed = {
 export default function DocumentsPageClient({ data }) {
   const [documents, setDocuments] = useState(data.documents);
   const [assets, setAssets] = useState(data.assets);
+  const [previewAsset, setPreviewAsset] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editState, setEditState] = useState(null);
   const [formState, setFormState] = useState(documentSeed);
@@ -202,21 +203,37 @@ export default function DocumentsPageClient({ data }) {
             </tr>
           </thead>
           <tbody>
-            {assets.map((asset) => (
-              <tr key={asset.id}>
-                <td>{asset.module}</td>
-                <td>{asset.owner}</td>
-                <td>{asset.fileName}</td>
-                <td>{asset.mimeType}</td>
-                <td>{asset.sizeLabel}</td>
-                <td>{asset.status}</td>
-                <td>
-                  <a className="mini-button" href={asset.fileUrl} target="_blank" rel="noreferrer">
-                    Open
-                  </a>
-                </td>
-              </tr>
-            ))}
+            {assets.map((asset) => {
+              const canPreview = isImageAsset(asset);
+
+              return (
+                <tr key={asset.id}>
+                  <td>{asset.module}</td>
+                  <td>{asset.owner}</td>
+                  <td>
+                    {canPreview ? (
+                      <button className="document-preview-button" onClick={() => setPreviewAsset(asset)} type="button">
+                        {asset.fileName}
+                      </button>
+                    ) : asset.fileName}
+                  </td>
+                  <td>{asset.mimeType}</td>
+                  <td>{asset.sizeLabel}</td>
+                  <td>{asset.status}</td>
+                  <td>
+                    {canPreview ? (
+                      <button className="mini-button" onClick={() => setPreviewAsset(asset)} type="button">
+                        Preview
+                      </button>
+                    ) : (
+                      <a className="mini-button" href={resolveAssetUrl(asset.fileUrl)} target="_blank" rel="noreferrer">
+                        Open
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>
@@ -252,7 +269,53 @@ export default function DocumentsPageClient({ data }) {
           })
         }
       />
+      <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
     </SuiteShell>
+  );
+}
+
+function isImageAsset(asset) {
+  return (
+    String(asset?.mimeType || "").toLowerCase().startsWith("image/") ||
+    /\.(avif|gif|jpe?g|png|webp)$/i.test(String(asset?.fileName || asset?.fileUrl || ""))
+  );
+}
+
+function resolveAssetUrl(value) {
+  const url = String(value || "").trim();
+
+  return url.startsWith("/uploads/") ? apiUrl(url) : url;
+}
+
+function AssetPreviewModal({ asset, onClose }) {
+  const [failed, setFailed] = useState(false);
+  const assetUrl = resolveAssetUrl(asset?.fileUrl);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [assetUrl]);
+
+  if (!asset) return null;
+
+  return (
+    <div className="image-preview-shell" role="presentation" onClick={onClose}>
+      <div className="image-preview-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <div className="image-preview-head">
+          <div>
+            <p className="eyebrow">{asset.label || asset.module || "Document"}</p>
+            <h3>{asset.fileName}</h3>
+          </div>
+          <button className="ghost-button" onClick={onClose} type="button">
+            Close
+          </button>
+        </div>
+        {assetUrl && !failed ? (
+          <img alt={asset.fileName} src={assetUrl} onError={() => setFailed(true)} />
+        ) : (
+          <p className="empty-state">Image preview is not available for this file.</p>
+        )}
+      </div>
+    </div>
   );
 }
 

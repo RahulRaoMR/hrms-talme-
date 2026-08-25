@@ -150,11 +150,180 @@ const employeeDetailSections = [
   }
 ];
 
+const legalDocumentKeys = new Set(["aadharCard", "drivingLicence", "panCard", "passportSizePhoto"]);
+const imageFilePattern = /\.(avif|gif|jpe?g|png|webp)$/i;
+
 function createEmployeeFormState(employeeCode = employeeCreateSeed.employeeCode) {
   return {
     ...employeeCreateSeed,
     employeeCode,
     legalDocuments: { ...employeeCreateSeed.legalDocuments }
+  };
+}
+
+function normalizeEmployeeDetails(details) {
+  return details && typeof details === "object" && !Array.isArray(details) ? details : {};
+}
+
+function splitPhoneValue(value, fallbackCountry = "+91") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\+\d{1,4})\s*(.*)$/);
+
+  return {
+    country: match?.[1] || fallbackCountry,
+    number: match ? match[2] : raw
+  };
+}
+
+function getDocumentName(value) {
+  if (!value) return "";
+  if (typeof value === "object") return value.name || value.fileName || value.url || value.fileUrl || "";
+  return String(value);
+}
+
+function resolveUploadUrl(value) {
+  const url = String(value || "").trim();
+
+  return url.startsWith("/uploads/") ? apiUrl(url) : url;
+}
+
+function normalizeDocumentToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .split("/")
+    .pop();
+}
+
+function findUploadedAssetForDocument(value, assets = [], employee = null, label = "") {
+  const documentName = normalizeDocumentToken(getDocumentName(value));
+  const ownerTokens = [
+    employee?.name,
+    employee?.employeeId,
+    employee?.email
+  ].map((item) => String(item || "").trim().toLowerCase()).filter(Boolean);
+  const labelToken = String(label || "").trim().toLowerCase();
+
+  if (!documentName) return null;
+
+  return assets.find((asset) => {
+    const assetName = normalizeDocumentToken(asset?.fileName || asset?.fileUrl);
+    const assetUrlName = normalizeDocumentToken(asset?.fileUrl);
+    const assetOwner = String(asset?.owner || "").trim().toLowerCase();
+    const assetLabel = String(asset?.label || "").trim().toLowerCase();
+    const nameMatches = assetName === documentName || assetUrlName === documentName;
+    const ownerMatches = !ownerTokens.length || !assetOwner || ownerTokens.includes(assetOwner);
+    const labelMatches = !labelToken || !assetLabel || assetLabel.includes(labelToken) || labelToken.includes(assetLabel);
+
+    return nameMatches && ownerMatches && labelMatches;
+  }) || assets.find((asset) => {
+    const assetName = normalizeDocumentToken(asset?.fileName || asset?.fileUrl);
+    const assetUrlName = normalizeDocumentToken(asset?.fileUrl);
+
+    return assetName === documentName || assetUrlName === documentName;
+  }) || null;
+}
+
+function getDocumentPreviewSrc(value, assets = [], employee = null, label = "") {
+  if (!value) return "";
+  if (typeof value === "object") return resolveUploadUrl(value.url || value.fileUrl || value.previewUrl || "");
+
+  const raw = String(value).trim();
+
+  if (/^(data:image\/|blob:|https?:\/\/)/i.test(raw)) {
+    return raw;
+  }
+
+  if (/^\/uploads\//i.test(raw)) {
+    return resolveUploadUrl(raw);
+  }
+
+  const asset = findUploadedAssetForDocument(raw, assets, employee, label);
+
+  if (asset?.fileUrl) return resolveUploadUrl(asset.fileUrl);
+
+  return imageFilePattern.test(raw) ? resolveUploadUrl(`/uploads/${encodeURIComponent(raw)}`) : "";
+}
+
+function isSavedDocumentValue(value) {
+  const name = getDocumentName(value);
+
+  return Boolean(name && name !== "-");
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getEditableBankName(employee, details) {
+  if (details.bankName) return details.bankName;
+
+  return /^(bank added|pending)$/i.test(employee?.bankStatus || "") ? "" : employee?.bankStatus || "";
+}
+
+function createEmployeeEditFormState(employee) {
+  const details = normalizeEmployeeDetails(employee?.employeeDetails);
+  const mobile = splitPhoneValue(details.mobileNumber);
+  const emergency = splitPhoneValue(details.emergencyNumber);
+  const reference = splitPhoneValue(details.referenceNumber);
+  const salaryParts = extractSalaryNumber(employee?.salaryBand);
+
+  return {
+    ...createEmployeeFormState(employee?.employeeId || employeeCreateSeed.employeeCode),
+    id: employee?.id,
+    status: employee?.status || "Active",
+    tone: employee?.tone || "gold",
+    originalEmployee: employee,
+    employeeCode: details.employeeCode || employee?.employeeId || "",
+    employeeName: details.employeeName || employee?.name || "",
+    displayName: details.displayName || employee?.name || "",
+    mobileCountry: mobile.country,
+    mobileNumber: mobile.number,
+    email: details.email || employee?.email || "",
+    gender: details.gender || employeeCreateSeed.gender,
+    punchInBranch: details.punchInBranch || employee?.location || "",
+    masterBranch: details.masterBranch || employee?.location || "",
+    department: details.department || employee?.department || "",
+    designation: details.designation || employee?.grade || "",
+    employeeType: details.employeeType || "",
+    doorLockPermission: details.doorLockPermission || employeeCreateSeed.doorLockPermission,
+    salaryType: details.salaryType || (String(employee?.salaryBand || "").toLowerCase().includes("hour") ? "Hourly" : "Monthly"),
+    salaryAmount: details.salaryAmount || String(Math.round(salaryParts.annualCtc / 12) || 0),
+    approvedMonthlyCtc: details.approvedMonthlyCtc || String(Math.round(salaryParts.annualCtc / 12) || ""),
+    salaryNetPay: details.salaryNetPay || employee?.salaryNetPay || "",
+    payrollGroup: details.payrollGroup || "",
+    providentFund: details.providentFund || "",
+    uan: details.uan || "",
+    esic: details.esic || "",
+    esiNumber: details.esiNumber || "",
+    address: details.address || "",
+    bankName: getEditableBankName(employee, details),
+    branchName: details.branchName || "",
+    accountNo: details.accountNo || "",
+    ifscCode: details.ifscCode || "",
+    legalDocuments: {
+      aadharCard: details.aadharCard || "",
+      drivingLicence: details.drivingLicence || "",
+      panCard: details.panCard || "",
+      passportSizePhoto: details.passportSizePhoto || ""
+    },
+    emergencyCountry: emergency.country,
+    emergencyNumber: emergency.number,
+    emergencyPersonName: details.emergencyPersonName || employee?.manager || "",
+    emergencyRelation: details.emergencyRelation || "",
+    emergencyAddress: details.emergencyAddress || "",
+    dateOfBirth: details.dateOfBirth || "",
+    dateOfJoining: details.dateOfJoining || employee?.joiningDate || "",
+    referenceName: details.referenceName || "",
+    referenceCountry: reference.country,
+    referenceNumber: reference.number
   };
 }
 
@@ -214,12 +383,15 @@ function normalizeEmployeeCode(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function hasDuplicateEmployeeCode(rows = [], employeeCode) {
+function hasDuplicateEmployeeCode(rows = [], employeeCode, ignoredEmployeeId = "") {
   const normalizedCode = normalizeEmployeeCode(employeeCode);
 
   if (!normalizedCode) return false;
 
-  return rows.some((employee) => normalizeEmployeeCode(employee.employeeId) === normalizedCode);
+  return rows.some((employee) =>
+    employee.id !== ignoredEmployeeId &&
+    normalizeEmployeeCode(employee.employeeId) === normalizedCode
+  );
 }
 
 function getNextEmployeeCode(rows = []) {
@@ -289,6 +461,7 @@ export default function HrmsPageClient({ data }) {
     }
   }));
   const [documents, setDocuments] = useState(data?.documents || []);
+  const [uploadedAssets, setUploadedAssets] = useState(data?.assets || []);
   const [salarySheet, setSalarySheet] = useState({ rows: [], generated: false, monthLabel: "" });
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -315,12 +488,13 @@ export default function HrmsPageClient({ data }) {
 
     async function refreshHrmsResources() {
       try {
-        const [nextEmployees, nextLeaveRequests, nextAttendanceRecords, nextDocuments, nextPunchActivity] = await Promise.all([
+        const [nextEmployees, nextLeaveRequests, nextAttendanceRecords, nextDocuments, nextPunchActivity, nextUploadedAssets] = await Promise.all([
           fetchResourceRows("/api/employees", "employees"),
           fetchResourceRows("/api/leave-requests", "leaveRequests"),
           fetchResourceRows("/api/attendance-records", "attendanceRecords"),
           fetchResourceRows("/api/documents", "documents"),
-          fetchPunchActivityRows()
+          fetchPunchActivityRows(),
+          fetchResourceRows("/api/uploads?module=Employee", "uploads")
         ]);
 
         if (cancelled) return;
@@ -330,6 +504,7 @@ export default function HrmsPageClient({ data }) {
         setAttendanceRecords(nextAttendanceRecords);
         setDocuments(nextDocuments);
         setPunchActivityRecords(nextPunchActivity);
+        setUploadedAssets(nextUploadedAssets);
       } catch (error) {
         console.error("Unable to refresh HRMS resources.", error);
       }
@@ -603,7 +778,10 @@ export default function HrmsPageClient({ data }) {
                     </button>
                     <button
                       className="mini-button"
-                      onClick={() => setEmployeeEdit(employee)}
+                      onClick={() => {
+                        setEmployeeFormError("");
+                        setEmployeeEdit(createEmployeeEditFormState(employee));
+                      }}
                       type="button"
                     >
                       Edit
@@ -905,6 +1083,7 @@ export default function HrmsPageClient({ data }) {
 
       <EmployeeDetailsModal
         employee={employeeDetail}
+        uploadedAssets={uploadedAssets}
         onClose={() => setEmployeeDetail(null)}
       />
 
@@ -917,34 +1096,37 @@ export default function HrmsPageClient({ data }) {
         setMonth={setAttendanceMasterMonth}
       />
 
-      <EntityModal
+      <EmployeeCreateDrawer
         open={!!employeeEdit}
         title="Update Employee"
-        eyebrow="Employee Master"
         state={employeeEdit}
         setState={setEmployeeEdit}
-        fields={[
-          ["employeeId", "Employee ID"],
-          ["email", "Email"],
-          ["name", "Name"],
-          ["department", "Department"],
-          ["location", "Location"],
-          ["manager", "Manager"],
-          ["grade", "Grade"],
-          ["joiningDate", "Joining Date"],
-          ["salaryBand", "Salary Band"],
-          ["salaryNetPay", "Salary Net Pay"],
-          ["bankStatus", "Bank Status"],
-          ["status", "Status"],
-          ["tone", "Tone"]
-        ]}
+        error={employeeFormError}
         isPending={isPending}
-        onClose={() => setEmployeeEdit(null)}
+        requireCoreFields={false}
+        resetState={employeeEdit?.originalEmployee ? createEmployeeEditFormState(employeeEdit.originalEmployee) : null}
+        submitLabel="Update"
+        suggestedEmployeeCode={employeeEdit?.employeeCode || getNextEmployeeCode(employees)}
+        onClose={() => {
+          setEmployeeFormError("");
+          setEmployeeEdit(null);
+        }}
         onSubmit={() =>
           startTransition(async () => {
-            const updated = await updateEmployeeAction(employeeEdit.id, employeeEdit);
-            setEmployees((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-            setEmployeeEdit(null);
+            setEmployeeFormError("");
+
+            try {
+              if (hasDuplicateEmployeeCode(employees, employeeEdit.employeeCode, employeeEdit.id)) {
+                setEmployeeFormError("Employee Code already exists. Please use a different code.");
+                return;
+              }
+
+              const updated = await updateEmployeeAction(employeeEdit.id, toEmployeePayload(employeeEdit));
+              setEmployees((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+              setEmployeeEdit(null);
+            } catch (error) {
+              setEmployeeFormError(error?.message || "Unable to update employee. Please check the details and try again.");
+            }
           })
         }
       />
@@ -1461,8 +1643,8 @@ function toEmployeePayload(form) {
     salaryBand: salaryBand || "Monthly - INR 0",
     salaryNetPay: Number(form.salaryNetPay) || 0,
     bankStatus: form.bankName || form.accountNo ? "Bank Added" : "Pending",
-    status: "Active",
-    tone: "gold",
+    status: form.status || "Active",
+    tone: form.tone || "gold",
     employeeDetails
   };
 }
@@ -1838,7 +2020,20 @@ function downloadCsv(fileName, rows) {
   URL.revokeObjectURL(url);
 }
 
-function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose, isPending, suggestedEmployeeCode }) {
+function EmployeeCreateDrawer({
+  open,
+  state,
+  setState,
+  error,
+  onSubmit,
+  onClose,
+  isPending,
+  suggestedEmployeeCode,
+  title = "Add Details",
+  submitLabel = "Save",
+  resetState = null,
+  requireCoreFields = true
+}) {
   const [openSections, setOpenSections] = useState({
     basic: true,
     bank: false,
@@ -1849,23 +2044,51 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
   });
 
   useEffect(() => {
-    if (open && state.employeeCode === "37") {
+    if (open && state?.employeeCode === "37") {
       setState((current) => ({ ...current, employeeCode: suggestedEmployeeCode || employeeCreateSeed.employeeCode }));
     }
-  }, [open, setState, state.employeeCode, suggestedEmployeeCode]);
+  }, [open, setState, state?.employeeCode, suggestedEmployeeCode]);
 
-  if (!open) return null;
+  if (!open || !state) return null;
 
   const update = (key) => (event) => {
     setState((current) => ({ ...current, [key]: event.target.value }));
   };
-  const updateLegalDocument = (key) => (event) => {
+  const updateLegalDocument = (key) => async (event) => {
     const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    const isImage = file.type.startsWith("image/") || imageFilePattern.test(file.name);
+    const previewUrl = isImage ? await readFileAsDataUrl(file) : "";
+    let uploadedFile = null;
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("module", "Employee");
+      body.append("owner", state.employeeName || state.displayName || state.employeeCode || "");
+      body.append("label", key);
+
+      const response = await fetch(apiUrl("/api/uploads"), { method: "POST", body });
+
+      if (response.ok) {
+        uploadedFile = await response.json();
+      }
+    } catch (error) {
+      console.error("Unable to upload employee legal document.", error);
+    }
+
     setState((current) => ({
       ...current,
       legalDocuments: {
         ...(current.legalDocuments || {}),
-        [key]: file?.name || ""
+        [key]: {
+          name: uploadedFile?.fileName || file.name,
+          type: uploadedFile?.mimeType || file.type,
+          fileUrl: uploadedFile?.fileUrl || "",
+          url: uploadedFile?.fileUrl || previewUrl
+        }
       }
     }));
   };
@@ -1889,7 +2112,7 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
           }}
         >
           <header className="employee-drawer-titlebar">
-            <h2 id="employee-drawer-title">Add Details</h2>
+            <h2 id="employee-drawer-title">{title}</h2>
             <button className="employee-close-button" onClick={onClose} type="button" aria-label="Close">
               x
             </button>
@@ -1900,23 +2123,23 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
 
             <EmployeeSection title="Basic Details" open={openSections.basic} onToggle={() => toggle("basic")}>
               <div className="pooja-form-grid">
-                <TextField label="Employee Code" required value={state.employeeCode} onChange={update("employeeCode")} />
-                <TextField label="Employee Name" required placeholder="Enter Employee Name" value={state.employeeName} onChange={update("employeeName")} />
+                <TextField label="Employee Code" required={requireCoreFields} value={state.employeeCode} onChange={update("employeeCode")} />
+                <TextField label="Employee Name" required={requireCoreFields} placeholder="Enter Employee Name" value={state.employeeName} onChange={update("employeeName")} />
                 <TextField label="Display Name" placeholder="Enter Display Name" value={state.displayName} onChange={update("displayName")} />
-                <PhoneField label="Mobile Number" required country={state.mobileCountry} number={state.mobileNumber} onCountryChange={update("mobileCountry")} onNumberChange={update("mobileNumber")} />
-                <TextField label="Email" required type="email" placeholder="Enter Employee Email" value={state.email} onChange={update("email")} />
-                <RadioGroup label="Gender" required name="gender" value={state.gender} options={["Male", "Female", "Other"]} onChange={update("gender")} />
-                <SelectField label="Punch In Branch" required allowManual placeholder="Select Branches" value={state.punchInBranch} onChange={update("punchInBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
-                <SelectField label="Master Branch" required allowManual placeholder="Select Master Branches" value={state.masterBranch} onChange={update("masterBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
-                <SelectField label="Department" required allowManual placeholder="Select/Create Department" value={state.department} onChange={update("department")} options={["HR", "Operations", "Finance", "Sales", "Technology"]} />
-                <SelectField label="Designation" required allowManual placeholder="Select/Create Designation" value={state.designation} onChange={update("designation")} options={["Associate", "Executive", "Manager", "Lead", "Admin"]} />
+                <PhoneField label="Mobile Number" required={requireCoreFields} country={state.mobileCountry} number={state.mobileNumber} onCountryChange={update("mobileCountry")} onNumberChange={update("mobileNumber")} />
+                <TextField label="Email" required={requireCoreFields} type="email" placeholder="Enter Employee Email" value={state.email} onChange={update("email")} />
+                <RadioGroup label="Gender" required={requireCoreFields} name={`gender-${state.id || "new"}`} value={state.gender} options={["Male", "Female", "Other"]} onChange={update("gender")} />
+                <SelectField label="Punch In Branch" required={requireCoreFields} allowManual placeholder="Select Branches" value={state.punchInBranch} onChange={update("punchInBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
+                <SelectField label="Master Branch" required={requireCoreFields} allowManual placeholder="Select Master Branches" value={state.masterBranch} onChange={update("masterBranch")} options={["Main Branch", "Corporate Office", "Remote"]} />
+                <SelectField label="Department" required={requireCoreFields} allowManual placeholder="Select/Create Department" value={state.department} onChange={update("department")} options={["HR", "Operations", "Finance", "Sales", "Technology"]} />
+                <SelectField label="Designation" required={requireCoreFields} allowManual placeholder="Select/Create Designation" value={state.designation} onChange={update("designation")} options={["Associate", "Executive", "Manager", "Lead", "Admin"]} />
                 <SelectField label="Employee Type" allowManual placeholder="Select Employee Type" value={state.employeeType} onChange={update("employeeType")} options={["Full Time", "Part Time", "Contract", "Intern"]} />
-                <RadioGroup label="Door Lock Permission" required name="door-lock" value={state.doorLockPermission} options={["Yes", "No"]} onChange={update("doorLockPermission")} />
-                <RadioGroup label="Salary Type" required name="salary-type" value={state.salaryType} options={["Monthly", "Hourly", "Compliance"]} onChange={update("salaryType")} />
+                <RadioGroup label="Door Lock Permission" required={requireCoreFields} name={`door-lock-${state.id || "new"}`} value={state.doorLockPermission} options={["Yes", "No"]} onChange={update("doorLockPermission")} />
+                <RadioGroup label="Salary Type" required={requireCoreFields} name={`salary-type-${state.id || "new"}`} value={state.salaryType} options={["Monthly", "Hourly", "Compliance"]} onChange={update("salaryType")} />
                 <TextField label="" type="number" value={state.salaryAmount} onChange={update("salaryAmount")} />
                 <TextField label="Approved Monthly CTC" type="number" placeholder="Enter Approved Monthly CTC" value={state.approvedMonthlyCtc} onChange={update("approvedMonthlyCtc")} />
                 <TextField label="Salary Net Pay" type="number" placeholder="Enter Monthly Net Pay" value={state.salaryNetPay} onChange={update("salaryNetPay")} />
-                <SelectField label="Payroll Group" required allowManual placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
+                <SelectField label="Payroll Group" required={requireCoreFields} allowManual placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
                 <TextField label="Provident Fund (PF)" placeholder="Enter PF Account Number" value={state.providentFund} onChange={update("providentFund")} />
                 <TextField label="Universal Account Number (UAN)" placeholder="Enter 12-Digit UAN Number" value={state.uan} onChange={update("uan")} />
                 <TextField label="Employee State Insurance Corporation (ESIC)" placeholder="Enter 10-Digit ESIC IP Number" value={state.esic} onChange={update("esic")} />
@@ -1974,11 +2197,11 @@ function EmployeeCreateDrawer({ open, state, setState, error, onSubmit, onClose,
             <button className="pooja-outline-button" onClick={onClose} type="button">
               Cancel
             </button>
-            <button className="pooja-secondary-button" type="button" onClick={() => setState(createEmployeeFormState(suggestedEmployeeCode))}>
+            <button className="pooja-secondary-button" type="button" onClick={() => setState(resetState || createEmployeeFormState(suggestedEmployeeCode))}>
               Reset
             </button>
             <button className="pooja-primary-button" disabled={isPending} type="submit">
-              {isPending ? "Saving..." : "Save"}
+              {isPending ? "Saving..." : submitLabel}
             </button>
           </footer>
         </form>
@@ -2107,36 +2330,94 @@ function PhoneField({ label, required, country, number, onCountryChange, onNumbe
 }
 
 function FileField({ label, fileName, onChange }) {
+  const displayName = getDocumentName(fileName);
+
   return (
     <label className="pooja-file-field full-span">
       <span>{label}</span>
       <input type="file" onChange={onChange} />
-      {fileName ? <small>{fileName}</small> : null}
+      {displayName ? <small>{displayName}</small> : null}
     </label>
   );
 }
 
-function EmployeeDetailsModal({ employee, onClose }) {
+function EmployeeDetailsModal({ employee, uploadedAssets = [], onClose }) {
+  const [preview, setPreview] = useState(null);
+
   return (
-    <Modal open={!!employee} eyebrow="Employee Master" title={employee?.name || "Employee Details"} onClose={onClose}>
-      {employee ? (
-        <div className="employee-detail-grid">
-          {employeeDetailSections.map((section) => (
-            <section className="employee-detail-section" key={section.title}>
-              <h4>{section.title}</h4>
-              <div className="doc-stack">
-                {section.fields.map(([key, label]) => (
-                  <div className="doc-line" key={key}>
-                    <span>{label}</span>
-                    <strong>{String(getEmployeeDetailValue(employee, key) || "-")}</strong>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+    <>
+      <Modal open={!!employee} eyebrow="Employee Master" title={employee?.name || "Employee Details"} onClose={onClose}>
+        {employee ? (
+          <div className="employee-detail-grid">
+            {employeeDetailSections.map((section) => (
+              <section className="employee-detail-section" key={section.title}>
+                <h4>{section.title}</h4>
+                <div className="doc-stack">
+                  {section.fields.map(([key, label]) => {
+                    const value = getEmployeeDetailValue(employee, key);
+                    const displayValue = getDocumentName(value) || String(value || "-");
+                    const canPreview = legalDocumentKeys.has(key) && isSavedDocumentValue(displayValue);
+
+                    return (
+                      <div className="doc-line" key={key}>
+                        <span>{label}</span>
+                        {canPreview ? (
+                          <button
+                            className="document-preview-button"
+                            onClick={() => setPreview({
+                              title: label,
+                              name: displayValue,
+                              src: getDocumentPreviewSrc(value, uploadedAssets, employee, label)
+                            })}
+                            type="button"
+                          >
+                            {displayValue}
+                          </button>
+                        ) : (
+                          <strong>{displayValue}</strong>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
+      </Modal>
+      <ImagePreviewModal preview={preview} onClose={() => setPreview(null)} />
+    </>
+  );
+}
+
+function ImagePreviewModal({ preview, onClose }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [preview?.src]);
+
+  if (!preview) return null;
+
+  return (
+    <div className="image-preview-shell" role="presentation" onClick={onClose}>
+      <div className="image-preview-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <div className="image-preview-head">
+          <div>
+            <p className="eyebrow">{preview.title}</p>
+            <h3>{preview.name}</h3>
+          </div>
+          <button className="ghost-button" onClick={onClose} type="button">
+            Close
+          </button>
         </div>
-      ) : null}
-    </Modal>
+        {preview.src && !failed ? (
+          <img alt={preview.name} src={preview.src} onError={() => setFailed(true)} />
+        ) : (
+          <p className="empty-state">Image preview is not available for this saved filename.</p>
+        )}
+      </div>
+    </div>
   );
 }
 
