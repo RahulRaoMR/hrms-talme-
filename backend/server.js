@@ -345,6 +345,29 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
     workDate: String(req.body?.workDate || "").trim() || formatStorageDate(timestamp),
     geoCoordinates: req.body?.geoCoordinates || undefined
   };
+  const manualEntry = Boolean(req.body?.manualEntry);
+
+  if (manualEntry) {
+    const existingManualPunch = await prisma.punchActivity.findFirst({
+      where: {
+        employeeId: { equals: data.employeeId, mode: "insensitive" },
+        workDate: data.workDate,
+        type: data.type
+      },
+      orderBy: { timestamp: data.type === "Punch In" ? "asc" : "desc" }
+    });
+
+    const row = existingManualPunch
+      ? await prisma.punchActivity.update({
+          where: { id: existingManualPunch.id },
+          data
+        })
+      : await prisma.punchActivity.create({
+          data
+        });
+
+    return res.status(existingManualPunch ? 200 : 201).json(row);
+  }
 
   const latestSameDayPunch = await prisma.punchActivity.findFirst({
     where: {

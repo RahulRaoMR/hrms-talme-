@@ -17,6 +17,8 @@ import SuiteShell from "@/components/suite-shell";
 import StatusBadge from "@/components/status-badge";
 import { apiUrl } from "@/lib/api-client";
 
+const ALL_ATTENDANCE_MASTER = "__all_attendance_master__";
+
 const employeeSeed = {
   employeeId: "",
   email: "",
@@ -52,10 +54,8 @@ const employeeCreateSeed = {
   approvedMonthlyCtc: "",
   salaryNetPay: "",
   payrollGroup: "",
-  providentFund: "",
   uan: "",
   esic: "",
-  esiNumber: "",
   address: "",
   bankName: "",
   branchName: "",
@@ -100,10 +100,8 @@ const employeeDetailSections = [
       ["approvedMonthlyCtc", "Approved Monthly CTC"],
       ["salaryNetPay", "Salary Net Pay"],
       ["payrollGroup", "Payroll Group"],
-      ["providentFund", "PF"],
       ["uan", "UAN"],
       ["esic", "ESIC"],
-      ["esiNumber", "ESI Number"],
       ["address", "Address"]
     ]
   },
@@ -299,10 +297,8 @@ function createEmployeeEditFormState(employee) {
     approvedMonthlyCtc: details.approvedMonthlyCtc || String(Math.round(salaryParts.annualCtc / 12) || ""),
     salaryNetPay: details.salaryNetPay || employee?.salaryNetPay || "",
     payrollGroup: details.payrollGroup || "",
-    providentFund: details.providentFund || "",
     uan: details.uan || "",
     esic: details.esic || "",
-    esiNumber: details.esiNumber || "",
     address: details.address || "",
     bankName: getEditableBankName(employee, details),
     branchName: details.branchName || "",
@@ -445,6 +441,42 @@ async function fetchPunchActivityRows(query = "") {
   return normalizeResourceRows(await response.json(), "punchActivity");
 }
 
+async function postManualPunchActivity(payload) {
+  const path = "/api/punch-activity";
+  const endpointUrl = apiUrl(path);
+  const requestOptions = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...payload,
+      manualEntry: true
+    })
+  };
+
+  let response;
+
+  try {
+    response = await fetch(endpointUrl, requestOptions);
+  } catch (error) {
+    if (endpointUrl === path) {
+      throw error;
+    }
+
+    response = await fetch(path, requestOptions);
+  }
+
+  if (!response.ok && endpointUrl !== path) {
+    response = await fetch(path, requestOptions);
+  }
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result?.error || "Unable to save attendance log.");
+  }
+
+  return response.json();
+}
+
 export default function HrmsPageClient({ data }) {
   const [employees, setEmployees] = useState(data?.employees || []);
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
@@ -469,10 +501,14 @@ export default function HrmsPageClient({ data }) {
   const [employeeEdit, setEmployeeEdit] = useState(null);
   const [employeeDetail, setEmployeeDetail] = useState(null);
   const [attendanceMasterEmployee, setAttendanceMasterEmployee] = useState(null);
+  const [attendanceLogEmployee, setAttendanceLogEmployee] = useState(null);
+  const [attendanceLogDate, setAttendanceLogDate] = useState("");
   const [attendanceMasterMonth, setAttendanceMasterMonth] = useState(() => getMonthInputValue(new Date()));
   const [leaveEdit, setLeaveEdit] = useState(null);
   const [leaveToAccept, setLeaveToAccept] = useState(null);
   const [attendanceEdit, setAttendanceEdit] = useState(null);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [openEmployeeActionId, setOpenEmployeeActionId] = useState(null);
   const [employeeForm, setEmployeeForm] = useState(() => createEmployeeFormState(getNextEmployeeCode(data?.employees || [])));
   const [employeeFormError, setEmployeeFormError] = useState("");
   const [leaveForm, setLeaveForm] = useState(leaveSeed);
@@ -482,6 +518,52 @@ export default function HrmsPageClient({ data }) {
   const [isPending, startTransition] = useTransition();
   const salarySheetTotal = salarySheet.rows.reduce((total, row) => total + row.totalPay, 0);
   const sortedEmployees = sortEmployeesById(employees);
+  const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase();
+  const matchesEmployeeSearch = (item) =>
+    [
+      item.employeeId,
+      item.name,
+      item.email,
+      item.department,
+      item.designation,
+      item.grade,
+      item.location,
+      item.manager,
+      item.bankStatus,
+      item.status,
+      item.firstPunch,
+      item.lastPunch
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalizedEmployeeSearch));
+  const visibleEmployees = normalizedEmployeeSearch
+    ? sortedEmployees.filter(matchesEmployeeSearch)
+    : sortedEmployees;
+  const visibleQuickAttendanceRows = normalizedEmployeeSearch
+    ? quickAttendance.rows.filter(matchesEmployeeSearch)
+    : quickAttendance.rows;
+  const visibleQuickAttendanceSummary = normalizedEmployeeSearch
+    ? {
+        total: visibleQuickAttendanceRows.length,
+        checkedIn: visibleQuickAttendanceRows.filter((row) => row.status === "Checked In").length,
+        punchedOut: visibleQuickAttendanceRows.filter((row) => row.status === "Punched Out").length,
+        noPunch: visibleQuickAttendanceRows.filter((row) => row.status === "Not Yet").length
+      }
+    : quickAttendance.summary;
+  const openAttendanceLogForRow = (row) => {
+    const selectedEmployee = findEmployeeByAttendanceName(row.employeeId, employees);
+
+    if (selectedEmployee) {
+      setAttendanceLogDate(formatAttendanceStorageDate(new Date()));
+      setAttendanceLogEmployee(selectedEmployee);
+    }
+  };
+  const openAttendanceLog = (selectedEmployee, date) => {
+    if (selectedEmployee) {
+      setAttendanceLogDate(date || formatAttendanceStorageDate(new Date()));
+      setAttendanceLogEmployee(selectedEmployee);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -516,6 +598,20 @@ export default function HrmsPageClient({ data }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!openEmployeeActionId) {
+      return;
+    }
+
+    const closeEmployeeActions = () => setOpenEmployeeActionId(null);
+
+    window.addEventListener("click", closeEmployeeActions);
+
+    return () => {
+      window.removeEventListener("click", closeEmployeeActions);
+    };
+  }, [openEmployeeActionId]);
 
   useEffect(() => {
     const syncQuickAttendance = () => {
@@ -665,16 +761,30 @@ export default function HrmsPageClient({ data }) {
             <p className="eyebrow">Employee Master</p>
             <h3>Profiles, bank, salary, and lifecycle</h3>
           </div>
-          <button
-            className="mini-button"
-            onClick={() => {
-              setEmployeeForm(createEmployeeFormState(getNextEmployeeCode(employees)));
-              setEmployeeModalOpen(true);
-            }}
-            type="button"
-          >
-            Add Employee
-          </button>
+          <div className="employee-master-actions">
+            <label className="employee-master-search">
+              <span className="sr-only">Search employees</span>
+              <input
+                className="search-input"
+                placeholder="Search"
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+              />
+            </label>
+            <button className="mini-button" onClick={() => setAttendanceMasterEmployee(ALL_ATTENDANCE_MASTER)} type="button">
+              Attendance Master
+            </button>
+            <button
+              className="mini-button"
+              onClick={() => {
+                setEmployeeForm(createEmployeeFormState(getNextEmployeeCode(employees)));
+                setEmployeeModalOpen(true);
+              }}
+              type="button"
+            >
+              Add Employee
+            </button>
+          </div>
         </div>
         <div className="quick-attendance-board">
           <div className="quick-attendance-head">
@@ -687,22 +797,22 @@ export default function HrmsPageClient({ data }) {
           <div className="quick-attendance-summary">
             <div className="quick-attendance-card">
               <span className="dot blue" />
-              <strong>{quickAttendance.summary.total}</strong>
+              <strong>{visibleQuickAttendanceSummary.total}</strong>
               <small>Total Employees</small>
             </div>
             <div className="quick-attendance-card">
               <span className="dot green" />
-              <strong>{quickAttendance.summary.checkedIn}</strong>
+              <strong>{visibleQuickAttendanceSummary.checkedIn}</strong>
               <small>Checked In</small>
             </div>
             <div className="quick-attendance-card">
               <span className="dot orange" />
-              <strong>{quickAttendance.summary.punchedOut}</strong>
+              <strong>{visibleQuickAttendanceSummary.punchedOut}</strong>
               <small>Punched Out</small>
             </div>
             <div className="quick-attendance-card">
               <span className="dot red" />
-              <strong>{quickAttendance.summary.noPunch}</strong>
+              <strong>{visibleQuickAttendanceSummary.noPunch}</strong>
               <small>Not Yet</small>
             </div>
           </div>
@@ -722,93 +832,182 @@ export default function HrmsPageClient({ data }) {
                 </tr>
               </thead>
               <tbody>
-                {quickAttendance.rows.length ? quickAttendance.rows.map((row) => (
+                {visibleQuickAttendanceRows.length ? visibleQuickAttendanceRows.map((row) => (
                   <tr
                     className="openable-row"
                     key={row.employeeId}
                     onClick={() => setAttendanceMasterEmployee(findEmployeeByAttendanceName(row.employeeId, employees))}
                   >
                     <td>{row.employeeId}</td>
-                    <td>{row.name}</td>
+                    <td>
+                      <button
+                        className="employee-name-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const selectedEmployee = findEmployeeByAttendanceName(row.employeeId, employees);
+
+                          if (selectedEmployee) {
+                            setAttendanceMasterEmployee(selectedEmployee);
+                          }
+                        }}
+                        type="button"
+                      >
+                        {row.name}
+                      </button>
+                    </td>
                     <td>{row.department}</td>
                     <td>{row.designation}</td>
-                    <td>{row.firstPunch}</td>
-                    <td>{row.lastPunch}</td>
+                    <td>
+                      <button
+                        className="punch-time-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openAttendanceLogForRow(row);
+                        }}
+                        type="button"
+                      >
+                        {row.firstPunch}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        className="punch-time-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openAttendanceLogForRow(row);
+                        }}
+                        type="button"
+                      >
+                        {row.lastPunch}
+                      </button>
+                    </td>
                     <td>{row.workingHours}</td>
                     <td>{row.breakHours}</td>
                     <td><StatusBadge tone={row.tone}>{row.status}</StatusBadge></td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan="9">No employee punch activity found for today.</td>
+                    <td colSpan="9">{normalizedEmployeeSearch ? "No punch activity matches this search." : "No employee punch activity found for today."}</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Employee</th>
-              <th>Dept</th>
-              <th>Manager</th>
-              <th>Bank</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedEmployees.length ? sortedEmployees.map((employee) => (
-              <tr className="openable-row" key={employee.id} onClick={() => setAttendanceMasterEmployee(employee)}>
-                <td>{employee.employeeId}</td>
-                <td>{employee.name}</td>
-                <td>{employee.department}</td>
-                <td>{employee.manager}</td>
-                <td>{employee.bankStatus}</td>
-                <td><StatusBadge tone={employee.tone}>{employee.status}</StatusBadge></td>
-                <td>
-                  <div className="row-actions" onClick={(event) => event.stopPropagation()}>
-                    <button className="mini-button" onClick={() => setAttendanceMasterEmployee(employee)} type="button">
-                      Attendance
-                    </button>
-                    <button className="mini-button" onClick={() => setEmployeeDetail(employee)} type="button">
-                      Details
-                    </button>
+        <div className="employee-table-head">
+          <div>
+            <p className="eyebrow">All Employees</p>
+            <h4>Total Employees</h4>
+          </div>
+          <span>{normalizedEmployeeSearch ? `${visibleEmployees.length} of ${sortedEmployees.length}` : sortedEmployees.length}</span>
+        </div>
+        <div className="employee-master-table-wrap">
+          <table className="data-table employee-master-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Employee</th>
+                <th>Dept</th>
+                <th>Manager</th>
+                <th>Bank</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleEmployees.length ? visibleEmployees.map((employee) => (
+                <tr className="openable-row" key={employee.id} onClick={() => setAttendanceMasterEmployee(employee)}>
+                  <td>{employee.employeeId}</td>
+                  <td>
                     <button
-                      className="mini-button"
-                      onClick={() => {
-                        setEmployeeFormError("");
-                        setEmployeeEdit(createEmployeeEditFormState(employee));
+                      className="employee-name-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setAttendanceMasterEmployee(employee);
                       }}
                       type="button"
                     >
-                      Edit
+                      {employee.name}
                     </button>
-                    <button
-                      className="mini-button danger-button"
-                      disabled={isPending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          await deleteEmployeeAction(employee.id);
-                          setEmployees((current) => current.filter((item) => item.id !== employee.id));
-                        })
-                      }
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan="7">No employees added yet.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  </td>
+                  <td>{employee.department}</td>
+                  <td>{employee.manager}</td>
+                  <td>{employee.bankStatus}</td>
+                  <td><StatusBadge tone={employee.tone}>{employee.status}</StatusBadge></td>
+                  <td>
+                    <div className="employee-action-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        aria-expanded={openEmployeeActionId === employee.id}
+                        aria-label={`Actions for ${employee.name}`}
+                        className="employee-action-trigger"
+                        onClick={() => setOpenEmployeeActionId((current) => current === employee.id ? null : employee.id)}
+                        type="button"
+                      >
+                        <span aria-hidden="true" />
+                        <span aria-hidden="true" />
+                        <span aria-hidden="true" />
+                      </button>
+                      {openEmployeeActionId === employee.id ? (
+                        <div className="employee-action-menu" role="menu">
+                          <button
+                            onClick={() => {
+                              setAttendanceMasterEmployee(employee);
+                              setOpenEmployeeActionId(null);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Attendance
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEmployeeDetail(employee);
+                              setOpenEmployeeActionId(null);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Details
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEmployeeFormError("");
+                              setEmployeeEdit(createEmployeeEditFormState(employee));
+                              setOpenEmployeeActionId(null);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="danger-menu-item"
+                            disabled={isPending}
+                            onClick={() => {
+                              setOpenEmployeeActionId(null);
+                              startTransition(async () => {
+                                await deleteEmployeeAction(employee.id);
+                                setEmployees((current) => current.filter((item) => item.id !== employee.id));
+                              });
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="7">{normalizedEmployeeSearch ? "No employees match this search." : "No employees added yet."}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="page-section split-grid">
@@ -1089,11 +1288,25 @@ export default function HrmsPageClient({ data }) {
 
       <AttendanceMasterModal
         employee={attendanceMasterEmployee}
+        employees={sortedEmployees}
+        leaveRequests={leaveRequests}
         month={attendanceMasterMonth}
         onClose={() => setAttendanceMasterEmployee(null)}
+        onOpenAttendanceLog={openAttendanceLog}
         punchActivityRecords={punchActivityRecords}
         records={attendanceRecords}
         setMonth={setAttendanceMasterMonth}
+      />
+
+      <AttendanceLogModal
+        employee={attendanceLogEmployee}
+        initialDate={attendanceLogDate}
+        onClose={() => setAttendanceLogEmployee(null)}
+        onSave={(savedRows) => {
+          setPunchActivityRecords((current) => mergeSavedPunchActivity(current, savedRows));
+          setAttendanceLogEmployee(null);
+        }}
+        punchActivityRecords={punchActivityRecords}
       />
 
       <EmployeeCreateDrawer
@@ -1291,9 +1504,10 @@ function buildQuickAttendanceRow(employee, now, punchActivityRecords = []) {
   const activity = readEmployeePunchActivity(employee.employeeId, now, punchActivityRecords);
   const sortedActivity = sortPunchActivity(activity);
   const firstPunch = sortedActivity[0];
-  const lastPunch = sortedActivity[sortedActivity.length - 1];
-  const lastType = lastPunch?.type;
-  const status = !lastPunch ? "Not Yet" : lastType === "Punch In" ? "Checked In" : "Punched Out";
+  const lastActivity = sortedActivity[sortedActivity.length - 1];
+  const lastPunchOut = [...sortedActivity].reverse().find((entry) => entry.type === "Punch Out");
+  const lastType = lastActivity?.type;
+  const status = !lastActivity ? "Not Yet" : lastType === "Punch In" ? "Checked In" : "Punched Out";
   const tone = status === "Checked In" ? "teal" : status === "Punched Out" ? "gold" : "slate";
 
   return {
@@ -1302,7 +1516,7 @@ function buildQuickAttendanceRow(employee, now, punchActivityRecords = []) {
     department: employee.department || "-",
     designation: employee.grade || getEmployeeDetailValue(employee, "designation") || "-",
     firstPunch: firstPunch ? formatPunchTime(firstPunch.timestamp) : "-",
-    lastPunch: lastPunch ? formatPunchTime(lastPunch.timestamp) : "-",
+    lastPunch: lastPunchOut ? formatPunchTime(lastPunchOut.timestamp) : "-",
     workingHours: sortedActivity.length ? formatDuration(calculatePunchWorkingSeconds(sortedActivity, now)) : "-",
     breakHours: sortedActivity.length ? formatDuration(calculatePunchBreakSeconds(sortedActivity, now)) : "-",
     status,
@@ -1404,6 +1618,15 @@ function mergePunchActivity(records = []) {
     });
 }
 
+function mergeSavedPunchActivity(currentRows = [], savedRows = []) {
+  const savedIds = new Set(savedRows.map((row) => row?.id).filter(Boolean).map(String));
+
+  return mergePunchActivity([
+    ...currentRows.filter((row) => !savedIds.has(String(row?.id || ""))),
+    ...savedRows
+  ]);
+}
+
 function sortPunchActivity(records = []) {
   return [...records].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
 }
@@ -1458,6 +1681,34 @@ function formatAttendanceStorageDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function parseAttendanceStorageDate(value) {
+  const [year, month, day] = String(value || "").split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return new Date();
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function toTimeInputValue(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function buildManualPunchTimestamp(workDate, timeValue) {
+  const [hours, minutes] = String(timeValue || "").split(":").map(Number);
+  const date = parseAttendanceStorageDate(workDate);
+
+  date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date.toISOString();
+}
+
 function formatAttendanceDate(date) {
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
@@ -1491,7 +1742,7 @@ function formatDuration(totalSeconds) {
   return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
 }
 
-function buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords = []) {
+function buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords = [], leaveRequests = []) {
   const { year, monthIndex } = parseMonthValue(month);
   const monthDays = new Date(year, monthIndex + 1, 0).getDate();
   const now = new Date();
@@ -1499,10 +1750,13 @@ function buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords
 
   for (let day = monthDays; day >= 1; day -= 1) {
     const date = new Date(year, monthIndex, day);
+    const isWeekOff = date.getDay() === 0;
+    const isHoliday = !isWeekOff && isAcceptedLeaveDate(employee, date, leaveRequests);
     const activity = sortPunchActivity(readEmployeePunchActivity(employee.employeeId, date, punchActivityRecords));
     const punchIn = activity.find((entry) => entry.type === "Punch In");
     const punchOut = [...activity].reverse().find((entry) => entry.type === "Punch Out");
     const hasActivity = Boolean(activity.length);
+    const absenceLabel = isWeekOff ? "Week Off" : isHoliday ? "Holiday" : null;
 
     rows.push({
       employeeId: employee.employeeId || employee.id || "-",
@@ -1512,16 +1766,79 @@ function buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords
       date: formatAttendanceStorageDate(date),
       displayDate: formatAttendanceMasterDate(date),
       day: new Intl.DateTimeFormat("en-IN", { weekday: "long" }).format(date),
-      punchIn: punchIn ? formatPunchTime(punchIn.timestamp) : "-",
-      punchInGeo: punchIn ? formatPunchGeo(punchIn, employee) : "-",
-      punchOut: punchOut ? formatPunchTime(punchOut.timestamp) : "-",
-      punchOutGeo: punchOut ? formatPunchGeo(punchOut, employee) : "-",
-      workingHours: hasActivity ? formatDuration(calculateAttendanceMasterWorkingSeconds(activity, date, now)) : "-",
-      breakHours: hasActivity ? formatDuration(calculateAttendanceMasterBreakSeconds(activity)) : "-"
+      isWeekOff,
+      isHoliday,
+      punchIn: absenceLabel || (punchIn ? formatPunchTime(punchIn.timestamp) : "-"),
+      punchInGeo: absenceLabel || (punchIn ? formatPunchGeo(punchIn, employee) : "-"),
+      punchOut: absenceLabel || (punchOut ? formatPunchTime(punchOut.timestamp) : "-"),
+      punchOutGeo: absenceLabel || (punchOut ? formatPunchGeo(punchOut, employee) : "-"),
+      workingHours: absenceLabel || (hasActivity ? formatDuration(calculateAttendanceMasterWorkingSeconds(activity, date, now)) : "-"),
+      breakHours: absenceLabel || (hasActivity ? formatDuration(calculateAttendanceMasterBreakSeconds(activity)) : "-")
     });
   }
 
   return rows;
+}
+
+function isAcceptedLeaveDate(employee, date, leaveRequests = []) {
+  const dateKey = formatAttendanceStorageDate(date);
+  const employeeAliases = [
+    employee?.employeeId,
+    employee?.id,
+    employee?.name,
+    getEmployeeDetailValue(employee, "displayName"),
+    getEmployeeDetailValue(employee, "employeeCode")
+  ]
+    .map(normalizeLookup)
+    .filter(Boolean);
+
+  return leaveRequests.some((leave) => {
+    const status = normalizeLookup(leave.status);
+    const leaveEmployee = normalizeLookup(leave.employee || leave.employeeId || leave.name);
+
+    return (
+      (status === "accepted" || status === "leave accepted" || status === "approved") &&
+      employeeAliases.includes(leaveEmployee) &&
+      isDateInsideLeaveDates(dateKey, leave.dates)
+    );
+  });
+}
+
+function isDateInsideLeaveDates(dateKey, dates) {
+  const leaveDateKeys = String(dates || "")
+    .match(/\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4}/g)
+    ?.map(normalizeLeaveDateKey)
+    .filter(Boolean);
+
+  if (!leaveDateKeys?.length) {
+    return false;
+  }
+
+  let [startKey, endKey = startKey] = leaveDateKeys;
+
+  if (startKey > endKey) {
+    [startKey, endKey] = [endKey, startKey];
+  }
+
+  return dateKey >= startKey && dateKey <= endKey;
+}
+
+function normalizeLeaveDateKey(value) {
+  const text = String(value || "").trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const match = text.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+
+  if (!match) {
+    return "";
+  }
+
+  const [, day, month, year] = match;
+
+  return `${year}-${month}-${day}`;
 }
 
 function calculateAttendanceMasterWorkingSeconds(records, rowDate, now) {
@@ -1668,10 +1985,8 @@ function buildEmployeeDetails(form) {
     approvedMonthlyCtc: form.approvedMonthlyCtc,
     salaryNetPay: form.salaryNetPay,
     payrollGroup: form.payrollGroup,
-    providentFund: form.providentFund,
     uan: form.uan,
     esic: form.esic,
-    esiNumber: form.esiNumber,
     address: form.address,
     bankName: form.bankName,
     branchName: form.branchName,
@@ -2140,10 +2455,8 @@ function EmployeeCreateDrawer({
                 <TextField label="Approved Monthly CTC" type="number" placeholder="Enter Approved Monthly CTC" value={state.approvedMonthlyCtc} onChange={update("approvedMonthlyCtc")} />
                 <TextField label="Salary Net Pay" type="number" placeholder="Enter Monthly Net Pay" value={state.salaryNetPay} onChange={update("salaryNetPay")} />
                 <SelectField label="Payroll Group" required={requireCoreFields} allowManual placeholder="Select Payroll Group" value={state.payrollGroup} onChange={update("payrollGroup")} options={["Default Payroll", "Staff Payroll", "Contract Payroll"]} />
-                <TextField label="Provident Fund (PF)" placeholder="Enter PF Account Number" value={state.providentFund} onChange={update("providentFund")} />
                 <TextField label="Universal Account Number (UAN)" placeholder="Enter 12-Digit UAN Number" value={state.uan} onChange={update("uan")} />
                 <TextField label="Employee State Insurance Corporation (ESIC)" placeholder="Enter 10-Digit ESIC IP Number" value={state.esic} onChange={update("esic")} />
-                <TextField label="ESI Number" placeholder="Enter ESI Number" value={state.esiNumber} onChange={update("esiNumber")} />
                 <TextareaField label="Address" value={state.address} onChange={update("address")} />
               </div>
             </EmployeeSection>
@@ -2421,39 +2734,184 @@ function ImagePreviewModal({ preview, onClose }) {
   );
 }
 
-function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords = [], records, setMonth }) {
+function AttendanceLogModal({ employee, initialDate, onClose, onSave, punchActivityRecords = [] }) {
+  const [logDate, setLogDate] = useState(() => formatAttendanceStorageDate(new Date()));
+  const [punchInTime, setPunchInTime] = useState("");
+  const [punchOutTime, setPunchOutTime] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (employee) {
+      setLogDate(initialDate || formatAttendanceStorageDate(new Date()));
+      setError("");
+    }
+  }, [employee, initialDate]);
+
+  useEffect(() => {
+    if (!employee) {
+      return;
+    }
+
+    const activity = sortPunchActivity(readEmployeePunchActivity(employee.employeeId, parseAttendanceStorageDate(logDate), punchActivityRecords));
+    const firstPunchIn = activity.find((entry) => entry.type === "Punch In");
+    const lastPunchOut = [...activity].reverse().find((entry) => entry.type === "Punch Out");
+
+    setPunchInTime(firstPunchIn ? toTimeInputValue(firstPunchIn.timestamp) : "");
+    setPunchOutTime(lastPunchOut ? toTimeInputValue(lastPunchOut.timestamp) : "");
+  }, [employee, logDate, punchActivityRecords]);
+
+  if (!employee) {
+    return null;
+  }
+
+  const saveLog = async (event) => {
+    event.preventDefault();
+    setError("");
+
+    if (!punchInTime && !punchOutTime) {
+      setError("Enter punch in or punch out time.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const entries = [
+        ["Punch In", punchInTime],
+        ["Punch Out", punchOutTime]
+      ].filter(([, timeValue]) => timeValue);
+      const savedRows = await Promise.all(entries.map(([type, timeValue]) => {
+        const timestamp = buildManualPunchTimestamp(logDate, timeValue);
+
+        return postManualPunchActivity({
+          employeeId: employee.employeeId,
+          employeeName: employee.name,
+          type,
+          timestamp,
+          time: formatPunchTime(timestamp).toLowerCase(),
+          workDate: logDate,
+          geoCoordinates: employee.location || getEmployeeDetailValue(employee, "punchInBranch") || getEmployeeDetailValue(employee, "masterBranch") || undefined
+        });
+      }));
+
+      onSave(savedRows);
+    } catch (saveError) {
+      setError(saveError?.message || "Unable to save attendance log.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={!!employee} eyebrow="Attendance Log" title={`${employee.employeeId || "-"} - ${employee.name || "-"}`} onClose={onClose}>
+      <form className="attendance-log-form" onSubmit={saveLog}>
+        <label>
+          <span>Date</span>
+          <input type="date" value={logDate} onChange={(event) => setLogDate(event.target.value)} />
+        </label>
+        <div className="attendance-log-row">
+          <strong>In</strong>
+          <input type="time" value={punchInTime} onChange={(event) => setPunchInTime(event.target.value)} />
+        </div>
+        <div className="attendance-log-row">
+          <strong>Out</strong>
+          <input type="time" value={punchOutTime} onChange={(event) => setPunchOutTime(event.target.value)} />
+        </div>
+        {error ? <p className="form-error">{error}</p> : null}
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={onClose} type="button">
+            Cancel
+          </button>
+          <button className="primary-button" disabled={isSaving} type="submit">
+            {isSaving ? "Saving..." : "Save Time"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function AttendanceMasterModal({ employee, employees = [], leaveRequests = [], month, onClose, onOpenAttendanceLog, punchActivityRecords = [], records, setMonth }) {
   const [isDownloading, setIsDownloading] = useState(false);
-  const rows = employee ? buildEmployeeAttendanceMasterRows(employee, month, punchActivityRecords) : [];
-  const monthRecord = employee ? findEmployeeMonthAttendanceRecord(employee, month, records) : null;
+  const isAllEmployees = employee === ALL_ATTENDANCE_MASTER;
+  const masterEmployees = isAllEmployees ? employees : employee ? [employee] : [];
+  const rows = masterEmployees.flatMap((item) => buildEmployeeAttendanceMasterRows(item, month, punchActivityRecords, leaveRequests));
+  const monthRecords = masterEmployees
+    .map((item) => findEmployeeMonthAttendanceRecord(item, month, records))
+    .filter(Boolean);
+  const monthRecord = !isAllEmployees && monthRecords.length ? monthRecords[0] : null;
+  const summary = isAllEmployees
+    ? monthRecords.reduce((total, record) => ({
+        presentDays: total.presentDays + (Number(record.present) || 0),
+        paidLeave: total.paidLeave + (Number(record.paidLeaves ?? record.leaves) || 0),
+        otHours: total.otHours + (Number(record.otHours ?? record.overtime) || 0)
+      }), { presentDays: 0, paidLeave: 0, otHours: 0 })
+    : {
+        presentDays: monthRecord?.present || 0,
+        paidLeave: monthRecord?.paidLeaves ?? monthRecord?.leaves ?? 0,
+        otHours: monthRecord?.otHours ?? monthRecord?.overtime ?? 0
+      };
+  const masterTitle = isAllEmployees ? "All Employees" : employee?.name;
+  const masterHeader = isAllEmployees
+    ? {
+        employeeId: "All Employees",
+        name: "All Employees",
+        department: "All Departments",
+        designation: "Combined Monthly Sheet"
+      }
+    : {
+        employeeId: employee?.employeeId,
+        name: employee?.name,
+        department: employee?.department,
+        designation: employee?.grade || getEmployeeDetailValue(employee, "designation")
+      };
   const monthLabel = formatMonthLabel(month);
 
   if (!employee) {
     return null;
   }
 
+  const openLogForMasterRow = (row) => {
+    const selectedEmployee = masterEmployees.find((item) =>
+      normalizeLookup(item.employeeId) === normalizeLookup(row.employeeId) ||
+      normalizeLookup(item.name) === normalizeLookup(row.name)
+    );
+
+    onOpenAttendanceLog?.(selectedEmployee, row.date);
+  };
+
   const downloadPdf = async () => {
     setIsDownloading(true);
 
     try {
-      const response = await fetch(apiUrl("/api/pdf/attendance-master"), {
+      const path = "/api/pdf/attendance-master";
+      const endpointUrl = apiUrl(path);
+      const requestOptions = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employee: {
-            employeeId: employee.employeeId,
-            name: employee.name,
-            department: employee.department,
-            designation: employee.grade || getEmployeeDetailValue(employee, "designation")
-          },
+          employee: masterHeader,
           monthLabel,
-          summary: {
-            presentDays: monthRecord?.present || 0,
-            paidLeave: monthRecord?.paidLeaves ?? monthRecord?.leaves ?? 0,
-            otHours: monthRecord?.otHours ?? monthRecord?.overtime ?? 0
-          },
+          summary,
           rows
         })
-      });
+      };
+      let response;
+
+      try {
+        response = await fetch(endpointUrl, requestOptions);
+      } catch (error) {
+        if (endpointUrl === path) {
+          throw error;
+        }
+
+        response = await fetch(path, requestOptions);
+      }
+
+      if (!response.ok && endpointUrl !== path) {
+        response = await fetch(path, requestOptions);
+      }
 
       if (!response.ok) {
         throw new Error("Unable to download Attendance Master PDF.");
@@ -2464,8 +2922,10 @@ function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords 
       const link = document.createElement("a");
 
       link.href = url;
-      link.download = `attendance-master-${employee.employeeId || employee.name || "employee"}-${month}.pdf`;
+      link.download = `attendance-master-${isAllEmployees ? "all-employees" : employee.employeeId || employee.name || "employee"}-${month}.pdf`;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
       URL.revokeObjectURL(url);
     } finally {
       setIsDownloading(false);
@@ -2481,7 +2941,7 @@ function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords 
         </button>
         <div>
           <p className="eyebrow">Attendance Master</p>
-          <h2>{employee.name}</h2>
+          <h2>{masterTitle}</h2>
         </div>
         <button className="primary-button" disabled={isDownloading} onClick={downloadPdf} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -2503,8 +2963,8 @@ function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords 
 
           <div className="attendance-master-toolbar">
             <div>
-              <strong>{employee.employeeId}</strong>
-              <span>{employee.name} - {employee.department || "-"} - {employee.grade || "-"}</span>
+              <strong>{masterHeader.employeeId}</strong>
+              <span>{masterHeader.name} - {masterHeader.department || "-"} - {masterHeader.designation || "-"}</span>
             </div>
             <label>
               <span>Month</span>
@@ -2514,9 +2974,9 @@ function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords 
 
           <div className="attendance-master-summary">
             <div><strong>{monthLabel}</strong><small>Attendance period</small></div>
-            <div><strong>{monthRecord?.present || 0}</strong><small>Present days</small></div>
-            <div><strong>{monthRecord?.paidLeaves ?? monthRecord?.leaves ?? 0}</strong><small>Paid leave</small></div>
-            <div><strong>{monthRecord?.otHours ?? monthRecord?.overtime ?? 0}</strong><small>OT hours</small></div>
+            <div><strong>{summary.presentDays}</strong><small>Present days</small></div>
+            <div><strong>{summary.paidLeave}</strong><small>Paid leave</small></div>
+            <div><strong>{summary.otHours}</strong><small>OT hours</small></div>
           </div>
 
           <div className="attendance-master-table-wrap">
@@ -2539,16 +2999,40 @@ function AttendanceMasterModal({ employee, month, onClose, punchActivityRecords 
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.date}>
+                  <tr className={row.isWeekOff || row.isHoliday ? "attendance-absence-row" : undefined} key={`${row.employeeId}-${row.date}`}>
                     <td>{row.employeeId}</td>
                     <td>{row.name}</td>
                     <td>{row.department}</td>
                     <td>{row.designation}</td>
                     <td>{row.displayDate}</td>
                     <td>{row.day}</td>
-                    <td>{row.punchIn}</td>
+                    <td>
+                      {row.isWeekOff || row.isHoliday ? (
+                        <span className="absence-label">{row.punchIn}</span>
+                      ) : (
+                        <button
+                          className="punch-time-button"
+                          onClick={() => openLogForMasterRow(row)}
+                          type="button"
+                        >
+                          {row.punchIn}
+                        </button>
+                      )}
+                    </td>
                     <td>{row.punchInGeo}</td>
-                    <td>{row.punchOut}</td>
+                    <td>
+                      {row.isWeekOff || row.isHoliday ? (
+                        <span className="absence-label">{row.punchOut}</span>
+                      ) : (
+                        <button
+                          className="punch-time-button"
+                          onClick={() => openLogForMasterRow(row)}
+                          type="button"
+                        >
+                          {row.punchOut}
+                        </button>
+                      )}
+                    </td>
                     <td>{row.punchOutGeo}</td>
                     <td>{row.workingHours}</td>
                     <td>{row.breakHours}</td>

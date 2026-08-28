@@ -331,6 +331,8 @@ export default function AtsPageClient({ data = {} }) {
   const [requirementSearch, setRequirementSearch] = useState("");
   const [requirementPage, setRequirementPage] = useState(1);
   const [editState, setEditState] = useState(null);
+  const [openCandidateActionId, setOpenCandidateActionId] = useState(null);
+  const [openRequirementActionId, setOpenRequirementActionId] = useState(null);
 
   const importCandidateFromCv = async (file) => {
     if (!file) return;
@@ -585,7 +587,7 @@ export default function AtsPageClient({ data = {} }) {
                           title="Delete requirement"
                           type="button"
                         >
-                          🗑️
+                          Delete
                         </button>
                       </td>
                     </tr>
@@ -777,14 +779,82 @@ export default function AtsPageClient({ data = {} }) {
                   </td>
                 ))}
                 <td>
-                  <div className="row-actions">
+                  <div className="candidate-action-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      aria-expanded={openCandidateActionId === candidate.id}
+                      aria-label={`Actions for ${candidate.name}`}
+                      className="candidate-action-trigger"
+                      onClick={() =>
+                        setOpenCandidateActionId((current) => (current === candidate.id ? null : candidate.id))
+                      }
+                      type="button"
+                    >
+                      <span aria-hidden="true" />
+                      <span aria-hidden="true" />
+                      <span aria-hidden="true" />
+                    </button>
+                    {openCandidateActionId === candidate.id ? (
+                      <div className="candidate-action-menu" role="menu">
+                        <Link
+                          href={`/candidates/${candidate.id}`}
+                          onClick={() => setOpenCandidateActionId(null)}
+                          role="menuitem"
+                        >
+                          View
+                        </Link>
+                        <button
+                          onClick={() => {
+                            setOpenCandidateActionId(null);
+                            setEditState(candidate);
+                            setEditModalOpen(true);
+                          }}
+                          role="menuitem"
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          disabled={isPending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              setOpenCandidateActionId(null);
+                              const approved = await approveCandidateAction(candidate.id);
+                              replace(candidate.id, approved);
+                              await reload();
+                            })
+                          }
+                          role="menuitem"
+                          type="button"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="danger-menu-item"
+                          disabled={isPending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              setOpenCandidateActionId(null);
+                              await deleteCandidateAction(candidate.id);
+                              remove(candidate.id);
+                              await reload();
+                            })
+                          }
+                          role="menuitem"
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="row-actions candidate-actions-legacy">
                     <Link
                       aria-label={`View ${candidate.name}`}
                       className="mini-button table-icon-button"
                       href={`/candidates/${candidate.id}`}
                       title="View"
                     >
-                      👁️
+                      View
                     </Link>
                     <button
                       aria-label={`Edit ${candidate.name}`}
@@ -796,7 +866,7 @@ export default function AtsPageClient({ data = {} }) {
                       title="Edit"
                       type="button"
                     >
-                      ✏️
+                      Edit
                     </button>
                     <button
                       aria-label={`Approve ${candidate.name}`}
@@ -812,7 +882,7 @@ export default function AtsPageClient({ data = {} }) {
                       title="Approve"
                       type="button"
                     >
-                      ✅
+                      Approve
                     </button>
                     <button
                       aria-label={`Delete ${candidate.name}`}
@@ -828,7 +898,7 @@ export default function AtsPageClient({ data = {} }) {
                       title="Delete"
                       type="button"
                     >
-                      🗑️
+                      Delete
                     </button>
                   </div>
                 </td>

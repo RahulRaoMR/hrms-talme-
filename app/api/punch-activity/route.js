@@ -1,4 +1,4 @@
-import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
+import { createActivityLog, createResource, getResource, updateResource } from "@/lib/local-api-store";
 import { createPersistentAuditLog, hasPersistentDatabase, prisma } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 
@@ -118,8 +118,40 @@ export async function POST(request) {
     workDate: String(payload.workDate || "").trim() || formatStorageDate(timestamp),
     geoCoordinates: payload.geoCoordinates || undefined
   };
+  const manualEntry = Boolean(payload.manualEntry);
 
   if (hasPersistentDatabase) {
+    if (manualEntry) {
+      const existingManualPunch = await prisma.punchActivity.findFirst({
+        where: {
+          employeeId: { equals: data.employeeId, mode: "insensitive" },
+          workDate: data.workDate,
+          type: data.type
+        },
+        orderBy: { timestamp: data.type === "Punch In" ? "asc" : "desc" }
+      });
+
+      const row = existingManualPunch
+        ? await prisma.punchActivity.update({
+            where: { id: existingManualPunch.id },
+            data: {
+              ...data,
+              employeeName: data.employeeName || null,
+              timestamp
+            }
+          })
+        : await prisma.punchActivity.create({
+            data: {
+              ...data,
+              employeeName: data.employeeName || null,
+              timestamp
+            }
+          });
+
+      await writePunchAudit(request, row);
+      return Response.json(row, { status: existingManualPunch ? 200 : 201 });
+    }
+
     const latestSameDayPunch = await prisma.punchActivity.findFirst({
       where: {
         employeeId: { equals: data.employeeId, mode: "insensitive" },
@@ -159,12 +191,38 @@ export async function POST(request) {
   const proxyRequest = new Request(request.url, {
     method: "POST",
     headers: request.headers,
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      ...payload,
+      manualEntry
+    })
   });
   const proxiedResponse = await proxyToConfiguredApi(proxyRequest, "/api/punch-activity");
 
   if (proxiedResponse?.ok) {
     return proxiedResponse;
+  }
+
+  if (manualEntry) {
+    const existingLocalPunches = sortPunchRows(
+      filterPunchRows(getResource("punch-activity") || [], {
+        employeeId: data.employeeId.toLowerCase(),
+        workDate: data.workDate,
+        month: ""
+      }).filter((row) => row.type === data.type)
+    );
+    const existingLocalPunch = data.type === "Punch In"
+      ? existingLocalPunches[existingLocalPunches.length - 1]
+      : existingLocalPunches[0];
+
+    if (existingLocalPunch) {
+      const row = updateResource("punch-activity", existingLocalPunch.id, data);
+      await writePunchAudit(request, row);
+      return Response.json(row);
+    }
+
+    const row = createResource("punch-activity", data);
+    await writePunchAudit(request, row);
+    return Response.json(row, { status: 201 });
   }
 
   const latestLocalPunch = sortPunchRows(

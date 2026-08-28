@@ -9,28 +9,28 @@ const roleOptions = {
   admin: {
     label: "Super Admin",
     identifierLabel: "Corporate Email",
-    identifier: "saidarshaan@talme.in",
+    identifier: "",
     password: "",
     destination: "/dashboard"
   },
   payrollAts: {
     label: "Payroll + ATS",
     identifierLabel: "Corporate Email",
-    identifier: "Nandhini@talme.in",
+    identifier: "",
     password: "",
     destination: "/payroll"
   },
   invoice: {
     label: "Accounts",
     identifierLabel: "Corporate Email",
-    identifier: "accounts@talme.in",
+    identifier: "",
     password: "",
     destination: "/invoices"
   },
   ats: {
     label: "ATS",
     identifierLabel: "Corporate Email",
-    identifier: "Harshitha@talme.in",
+    identifier: "",
     password: "",
     destination: "/ats"
   },
