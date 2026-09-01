@@ -68,12 +68,16 @@ function groupByDay(updates) {
 export default function DailyUpdatesPageClient() {
   const [session, setSession] = useState(null);
   const [updates, setUpdates] = useState([]);
-  const [activeTab, setActiveTab] = useState("mine");
-  const [dateRange, setDateRange] = useState("today");
+  const [activeTab, setActiveTab] = useState("all");
+  const [dateRange, setDateRange] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
   const [message, setMessage] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [editingMessage, setEditingMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [savingId, setSavingId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
   const currentUser = session?.user || {};
   const currentEmail = currentUser.email || "local@talme.ai";
 
@@ -161,11 +165,70 @@ export default function DailyUpdatesPageClient() {
 
       setMessage("");
       setActiveTab("all");
-      setDateRange("today");
+      setDateRange("all");
       setUserFilter("all");
       await loadUpdates();
     } finally {
       setPosting(false);
+    }
+  }
+
+  function startEditing(update) {
+    setEditingId(update.id);
+    setEditingMessage(update.message || "");
+  }
+
+  function cancelEditing() {
+    setEditingId("");
+    setEditingMessage("");
+  }
+
+  async function saveUpdate(id) {
+    const trimmedMessage = editingMessage.trim();
+    if (!trimmedMessage) return;
+
+    setSavingId(id);
+
+    try {
+      const response = await fetch(apiUrl(`/api/daily-updates/${id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmedMessage })
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to update daily update.");
+      }
+
+      cancelEditing();
+      await loadUpdates();
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  async function deleteUpdate(id) {
+    const confirmed = window.confirm("Delete this update?");
+    if (!confirmed) return;
+
+    setDeletingId(id);
+
+    try {
+      const response = await fetch(apiUrl(`/api/daily-updates/${id}`), {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to delete daily update.");
+      }
+
+      if (editingId === id) {
+        cancelEditing();
+      }
+
+      await loadUpdates();
+    } finally {
+      setDeletingId("");
     }
   }
 
@@ -251,7 +314,47 @@ export default function DailyUpdatesPageClient() {
                         <span>{formatTimestamp(update.createdAt)}</span>
                         {update.authorRole ? <em>{update.authorRole}</em> : null}
                       </div>
-                      <p>{update.message}</p>
+                      {editingId === update.id ? (
+                        <div className="daily-edit-form">
+                          <textarea
+                            value={editingMessage}
+                            onChange={(event) => setEditingMessage(event.target.value)}
+                            rows={5}
+                          />
+                          <div className="daily-update-actions">
+                            <button
+                              className="ghost-button"
+                              disabled={savingId === update.id || !editingMessage.trim()}
+                              onClick={() => saveUpdate(update.id)}
+                              type="button"
+                            >
+                              {savingId === update.id ? "Saving..." : "Save"}
+                            </button>
+                            <button className="ghost-button" onClick={cancelEditing} type="button">
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p>{update.message}</p>
+                          {mine ? (
+                            <div className="daily-update-actions">
+                              <button className="ghost-button" onClick={() => startEditing(update)} type="button">
+                                Edit
+                              </button>
+                              <button
+                                className="ghost-button danger"
+                                disabled={deletingId === update.id}
+                                onClick={() => deleteUpdate(update.id)}
+                                type="button"
+                              >
+                                {deletingId === update.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                     {mine ? <div className="daily-avatar">{initials(update.authorName || currentUser.name)}</div> : null}
                   </article>
