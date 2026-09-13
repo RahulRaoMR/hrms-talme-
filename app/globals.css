@@ -5737,6 +5737,217 @@ body.light-mode .pooja-outline-button {
   border-top: 6px solid rgba(214, 176, 106, 0.38);
 }
 
+.pending-card.has-rows {
+  display: grid;
+  gap: 14px;
+}
+
+.pending-regularization-head {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.pending-regularization-head h2 {
+  margin: 0;
+}
+
+.pending-regularization-head strong {
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 205, 104, 0.16);
+  color: var(--gold);
+  font-size: 0.82rem;
+}
+
+.pending-calendar-icon {
+  width: 28px;
+  height: 28px;
+  position: relative;
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+}
+
+.pending-calendar-icon::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 6px;
+  height: 2px;
+  background: var(--gold);
+}
+
+.pending-calendar-icon::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: -5px;
+  width: 12px;
+  height: 8px;
+  border-left: 2px solid var(--gold);
+  border-right: 2px solid var(--gold);
+}
+
+.pending-regularization-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pending-regularization-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(214, 176, 106, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 16px 28px rgba(4, 11, 20, 0.18);
+}
+
+.pending-regularization-top {
+  display: grid;
+  grid-template-columns: 54px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.pending-date-chip {
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(214, 176, 106, 0.18);
+  color: var(--gold);
+}
+
+.pending-date-chip strong {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.pending-date-chip span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pending-regularization-top time {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.pending-regularization-top button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(242, 180, 164, 0.42);
+  border-radius: 999px;
+  background: rgba(242, 180, 164, 0.12);
+  color: #f2b4a4;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.pending-regularization-top button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.pending-regularization-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.pending-regularization-card p strong {
+  color: var(--text);
+}
+
+.pending-regularization-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 194, 13, 0.4);
+  border-radius: 10px;
+  background: rgba(255, 194, 13, 0.1);
+  color: #ffd96a;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.regularization-confirm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(5, 10, 16, 0.62);
+}
+
+.regularization-confirm-dialog {
+  width: min(100%, 320px);
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(214, 176, 106, 0.2);
+  border-radius: 16px;
+  background: #111b2a;
+  color: var(--text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
+}
+
+.regularization-confirm-dialog h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.regularization-confirm-dialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.regularization-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.regularization-confirm-actions button {
+  min-height: 42px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.regularization-confirm-actions button:first-child {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.regularization-confirm-actions button:last-child {
+  border: 0;
+  background: #e85f70;
+  color: #fff;
+}
+
+.regularization-confirm-actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .regularization-head {
   min-height: 56px;
   justify-content: flex-start;
@@ -5793,6 +6004,296 @@ body.light-mode .pooja-outline-button {
 
 .regularization-activity {
   margin-top: 30px;
+}
+
+.regularization-sheet-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(5, 10, 16, 0.58);
+}
+
+.regularization-bottom-sheet {
+  width: 100%;
+  max-height: min(86%, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  padding: 14px 22px calc(22px + env(safe-area-inset-bottom));
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  background: #fff;
+  color: #142334;
+  box-shadow: 0 -18px 40px rgba(10, 19, 30, 0.18);
+}
+
+.regularization-bottom-sheet.picker-mode {
+  max-height: min(72%, 430px);
+}
+
+.regularization-sheet-handle {
+  width: 34px;
+  height: 4px;
+  align-self: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #d3d8de;
+}
+
+.regularization-sheet-head {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.regularization-sheet-head h2 {
+  margin: 0;
+  color: #142334;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.regularization-sheet-close {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: #eff3f7;
+  color: #6d7b8b;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.regularization-sheet-label {
+  display: grid;
+  gap: 8px;
+  color: #142334;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.regularization-sheet-label em {
+  color: #d53645;
+  font-style: normal;
+}
+
+.regularization-time-field,
+.regularization-sheet-label textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d8dee6;
+  border-radius: 10px;
+  background: #fff;
+  color: #142334;
+  font: inherit;
+  font-weight: 600;
+}
+
+.regularization-time-field {
+  display: grid;
+  grid-template-columns: 22px 1fr 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.regularization-time-field strong {
+  min-width: 0;
+  color: #9aa7b5;
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.regularization-time-field.has-value strong {
+  color: #142334;
+}
+
+.regularization-time-field small {
+  color: #8b99a7;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.regularization-clock-icon {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  display: inline-block;
+  border: 2px solid #1594d2;
+  border-radius: 50%;
+}
+
+.regularization-clock-icon::before,
+.regularization-clock-icon::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 3px;
+  width: 2px;
+  height: 5px;
+  border-radius: 999px;
+  background: #1594d2;
+  transform-origin: bottom center;
+}
+
+.regularization-clock-icon::after {
+  top: 7px;
+  width: 5px;
+  height: 2px;
+}
+
+.regularization-sheet-label textarea {
+  min-height: 44px;
+  resize: vertical;
+  padding: 13px 14px;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.regularization-sheet-label textarea::placeholder {
+  color: #9aa7b5;
+}
+
+.regularization-form-error {
+  margin: -4px 0 0;
+  color: #d53645;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.regularization-picker-selected {
+  margin: -6px 0 0;
+  color: #607082;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.regularization-time-wheel {
+  min-height: 166px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(106px, 1.35fr) repeat(3, minmax(36px, 0.65fr));
+  gap: 2px;
+  overflow: hidden;
+  padding: 14px 8px;
+  border: 1px solid #d6edf8;
+  border-radius: 12px;
+  background: #f4fbff;
+}
+
+.regularization-time-wheel::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 30px;
+  z-index: 0;
+  border-radius: 6px;
+  background: rgba(200, 211, 220, 0.5);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.regularization-wheel-column {
+  max-height: 138px;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  overflow-y: auto;
+  scroll-snap-type: y proximity;
+  scrollbar-width: none;
+}
+
+.regularization-wheel-column::-webkit-scrollbar {
+  display: none;
+}
+
+.regularization-wheel-column button {
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #7c8792;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.05;
+  scroll-snap-align: center;
+}
+
+.regularization-wheel-column.date-wheel button {
+  justify-items: start;
+  padding-left: 4px;
+  text-align: left;
+}
+
+.regularization-wheel-column button.active {
+  color: #142334;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.regularization-wheel-column button small {
+  margin-top: 2px;
+  color: #8b8f94;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.regularization-sheet-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.regularization-cancel-button,
+.regularization-submit-button {
+  min-height: 42px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.regularization-cancel-button {
+  border: 1px solid #ecf0f4;
+  background: #fff;
+  color: #168ac8;
+}
+
+.regularization-submit-button {
+  border: 0;
+  background: linear-gradient(135deg, #8ed2f1, #1a9bd6);
+  color: #fff;
+}
+
+.regularization-submit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .phone-empty {
@@ -9413,4 +9914,78 @@ body.light-mode .invoice-action-bar {
   .nav-lock {
     white-space: normal;
   }
+}
+/* Punch regularization review follows the existing shift table layout. */
+.punch-review-table-scroll { overflow-x: auto; }
+.punch-review-table { min-width: 1100px; }
+.punch-review-table td { vertical-align: top; }
+.punch-review-table small { display: block; margin-top: 5px; max-width: 220px; overflow-wrap: anywhere; }
+.punch-review-filter { display: flex; align-items: center; gap: 10px; }
+.punch-review-actions { display: flex; gap: 8px; flex-wrap: wrap; min-width: 170px; }
+.punch-review-actions button { padding: 8px 12px; }
+.punch-review-error { color: #bd263d; overflow-wrap: anywhere; }
+.punch-review-section .regularization-confirm-dialog textarea { display: block; width: 100%; min-height: 90px; margin-top: 8px; }
+.punch-review-confirm-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(16, 26, 39, 0.52);
+  backdrop-filter: blur(3px);
+}
+
+.punch-review-confirm-dialog {
+  width: min(100%, 420px);
+  gap: 16px;
+  padding: 24px;
+}
+
+.punch-review-decline-reason {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.punch-review-confirm-dialog textarea {
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.punch-review-confirm-dialog textarea::placeholder {
+  color: var(--muted);
+}
+
+body.light-mode .punch-review-confirm-dialog {
+  border-color: #d7e0eb;
+  background: #ffffff;
+  color: #142132;
+  box-shadow: 0 24px 64px rgba(15, 28, 44, 0.28);
+}
+
+body.light-mode .punch-review-confirm-dialog h2,
+body.light-mode .punch-review-confirm-dialog p,
+body.light-mode .punch-review-decline-reason {
+  color: #142132;
+}
+
+body.light-mode .punch-review-confirm-dialog p {
+  color: #566779;
+}
+
+body.light-mode .punch-review-confirm-dialog textarea {
+  border-color: #cfd9e6;
+  background: #f7f9fc;
+  color: #142132;
+}
+
+body.light-mode .punch-review-confirm-dialog .regularization-confirm-actions button:first-child {
+  border-color: #d1dae5;
+  background: #eef3f8;
+  color: #25364a;
 }

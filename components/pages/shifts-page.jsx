@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import SuiteShell from "@/components/suite-shell";
 import StatusBadge from "@/components/status-badge";
-import { apiUrl } from "@/lib/api-client";
+import PunchRegularizationRequests from "@/components/punch-regularization-requests";
 
 const storageKey = "talme-employee-shift-assignments";
 
@@ -60,7 +60,7 @@ async function upsertShiftAssignment(assignment) {
     id: assignment.id || `shift-${assignment.employeeId}`
   };
   const path = `/api/shift-assignments/${encodeURIComponent(row.id)}`;
-  const response = await fetch(apiUrl(path), {
+  const response = await fetch(path, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(row)
@@ -70,7 +70,7 @@ async function upsertShiftAssignment(assignment) {
     return response.json();
   }
 
-  const createResponse = await fetch(apiUrl("/api/shift-assignments"), {
+  const createResponse = await fetch("/api/shift-assignments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(row)
@@ -103,11 +103,40 @@ function calculateShiftHours(start, end, breakMinutes) {
 }
 
 export default function ShiftsPageClient({ data }) {
-  const employees = useMemo(() => data?.employees || [], [data?.employees]);
-  const serverAssignments = useMemo(() => normalizeServerAssignments(data?.shiftAssignments || []), [data?.shiftAssignments]);
+  const [rosterData, setRosterData] = useState(null);
+  const employees = useMemo(() => rosterData?.employees || data?.employees || [], [data?.employees, rosterData]);
+  const serverAssignments = useMemo(
+    () => normalizeServerAssignments(rosterData?.shiftAssignments || data?.shiftAssignments || []),
+    [data?.shiftAssignments, rosterData]
+  );
   const [assignments, setAssignments] = useState({});
   const [bulkShift, setBulkShift] = useState("General");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshRoster() {
+      try {
+        const response = await fetch("/api/shift-roster", { cache: "no-store" });
+        const nextData = await response.json();
+
+        if (response.ok && Array.isArray(nextData.employees) && !cancelled) {
+          setRosterData(nextData);
+        }
+      } catch {
+        // The server-rendered roster remains available while the database reconnects.
+      }
+    }
+
+    refreshRoster();
+    window.addEventListener("focus", refreshRoster);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshRoster);
+    };
+  }, []);
 
   useEffect(() => {
     const saved = loadSavedAssignments();
@@ -243,6 +272,8 @@ export default function ShiftsPageClient({ data }) {
         </div>
         {message ? <p className="session-note">{message}</p> : null}
       </section>
+
+      <PunchRegularizationRequests employees={employees} assignments={assignments} />
 
       <section className="page-section panel shift-table-panel">
         <div className="panel-head">

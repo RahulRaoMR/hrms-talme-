@@ -3,6 +3,7 @@ import {
   createPersistentAuditLog,
   createPersistentResource,
   hasPersistentDatabase,
+  isDatabaseUnavailableError,
   listPersistentResource
 } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
@@ -37,6 +38,13 @@ function getUniqueFieldLabel(error) {
 }
 
 function persistentErrorResponse(error) {
+  if (isDatabaseUnavailableError(error)) {
+    return Response.json(
+      { error: "Database is temporarily unavailable. Please check the PostgreSQL connection and try again." },
+      { status: 503 }
+    );
+  }
+
   if (error?.code === "P2002") {
     const label = getUniqueFieldLabel(error);
     return Response.json({ error: `${label} already exists. Please use a different ${label.toLowerCase()}.` }, { status: 409 });

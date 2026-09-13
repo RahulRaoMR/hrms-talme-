@@ -1,7 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
-import { createPersistentAuditLog, createPersistentResource, hasPersistentDatabase, listPersistentResource } from "@/lib/prisma-store";
+import {
+  createPersistentAuditLog,
+  createPersistentResource,
+  hasPersistentDatabase,
+  isDatabaseUnavailableError,
+  listPersistentResource
+} from "@/lib/prisma-store";
 import { getConfiguredApiBase } from "@/lib/server-api";
 import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
@@ -20,6 +26,13 @@ function missingPersistentStoreResponse() {
 }
 
 function persistentErrorResponse(error) {
+  if (isDatabaseUnavailableError(error)) {
+    return Response.json(
+      { error: "Database is temporarily unavailable. Please check the PostgreSQL connection and try again." },
+      { status: 503 }
+    );
+  }
+
   if (error?.status) {
     return Response.json({ error: error.message }, { status: error.status });
   }

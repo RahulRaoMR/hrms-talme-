@@ -1,11 +1,17 @@
+import { attendancePunches } from "./lib/punch-status.js";
 import dotenv from "dotenv";
 import crypto from "node:crypto";
+import { punchUser, scopedEmployee, listRegularizations, decideRegularization, submitManualPunch, fail } from "./lib/punch-regularization.js";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { PrismaClient } from "@prisma/client";
 import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
+import {
+  isMissingPunchActivityRegularizationColumn,
+  punchActivityRegularizationMigrationMessage
+} from "./lib/punch-activity-schema.js";
 import { buildPayslipRowsFromQuery, createPayslipPdf } from "../lib/payslip-pdf.js";
 import {
   buildAuditDetail,
@@ -58,7 +64,7 @@ const resourceMap = {
   employees: { model: "employee", orderBy: { createdAt: "desc" }, fields: ["employeeId", "email", "name", "department", "location", "manager", "grade", "joiningDate", "salaryBand", "salaryNetPay", "bankStatus", "status", "tone", "employeeDetails"] },
   "leave-requests": { model: "leaveRequest", orderBy: { createdAt: "desc" }, fields: ["employee", "leaveType", "dates", "balance", "reason", "approver", "status", "tone"] },
   "attendance-records": { model: "attendanceRecord", orderBy: { createdAt: "desc" }, fields: ["employee", "salaryNetPay", "month", "monthDays", "sundays", "holidays", "paidLeaves", "otHours", "present", "leaves", "overtime", "shift", "lockState", "tone"] },
-  "punch-activity": { model: "punchActivity", orderBy: { timestamp: "desc" }, fields: ["employeeId", "employeeName", "type", "timestamp", "time", "workDate", "geoCoordinates"] },
+  "punch-activity": { model: "punchActivity", orderBy: { timestamp: "desc" }, fields: ["employeeId", "employeeName", "type", "timestamp", "time", "workDate", "reason", "regularizationStatus", "geoCoordinates"] },
   "vendor-workers": { model: "vendorWorker", orderBy: { createdAt: "desc" }, fields: ["workerId", "name", "vendor", "site", "skill", "wageRate", "attendance", "status", "tone"] },
   documents: { model: "documentRecord", orderBy: { createdAt: "desc" }, fields: ["owner", "docType", "module", "expiry", "status", "tone"] },
   approvals: { model: "approvalItem", orderBy: { createdAt: "desc" }, fields: ["module", "title", "owner", "amount", "level", "status", "tone"] },
@@ -295,11 +301,23 @@ app.post("/api/ats/sharepoint-sync/export", asyncHandler(async (_req, res) => {
   res.json(await exportAtsToSharePoint(prisma));
 }));
 
+app.get("/api/punch-activity/regularizations", asyncHandler(async (req, res) => {
+  res.json(await listRegularizations(prisma, punchUser(req.headers.authorization), req.query.employeeId));
+}));
+
+app.patch("/api/punch-activity/:id/review", asyncHandler(async (req, res) => {
+  if (!["Accepted", "Declined"].includes(req.body?.status)) fail(400, "Choose Accepted or Declined.");
+  res.json(await decideRegularization(prisma, punchUser(req.headers.authorization), req.params.id, req.body.status, req.body.reason));
+}));
+
 app.get("/api/punch-activity", asyncHandler(async (req, res) => {
-  const employeeId = String(req.query.employeeId || "").trim();
+  const employeeId = scopedEmployee(punchUser(req.headers.authorization), req.query.employeeId);
   const workDate = String(req.query.date || req.query.workDate || "").trim();
   const month = String(req.query.month || "").trim();
+  const regularizationStatus = String(req.query.regularizationStatus || "").trim();
+
   const where = {};
+  if (regularizationStatus) where.regularizationStatus = regularizationStatus;
 
   if (employeeId) {
     where.employeeId = { equals: employeeId, mode: "insensitive" };
@@ -336,6 +354,8 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Punch timestamp is invalid." });
   }
 
+  const reason = req.body?.reason ? String(req.body.reason).trim() : "";
+  const regularizationStatus = reason || req.body?.regularizationStatus ? "Pending" : "";
   const data = {
     employeeId,
     employeeName: req.body?.employeeName ? String(req.body.employeeName).trim() : null,
@@ -347,30 +367,16 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
   };
   const manualEntry = Boolean(req.body?.manualEntry);
 
-  if (manualEntry) {
-    const existingManualPunch = await prisma.punchActivity.findFirst({
-      where: {
-        employeeId: { equals: data.employeeId, mode: "insensitive" },
-        workDate: data.workDate,
-        type: data.type
-      },
-      orderBy: { timestamp: data.type === "Punch In" ? "asc" : "desc" }
-    });
-
-    const row = existingManualPunch
-      ? await prisma.punchActivity.update({
-          where: { id: existingManualPunch.id },
-          data
-        })
-      : await prisma.punchActivity.create({
-          data
-        });
-
-    return res.status(existingManualPunch ? 200 : 201).json(row);
+  const user = punchUser(req.headers.authorization);
+  scopedEmployee(user, employeeId);
+  if (manualEntry || regularizationStatus) {
+    const result = await submitManualPunch(prisma, user, data, reason);
+    return res.status(result.created ? 201 : 200).json(result.row);
   }
 
   const latestSameDayPunch = await prisma.punchActivity.findFirst({
     where: {
+          OR: [{ regularizationStatus: null }, { regularizationStatus: "" }, { regularizationStatus: "Accepted" }],
       employeeId: { equals: data.employeeId, mode: "insensitive" },
       workDate: data.workDate
     },
@@ -383,6 +389,7 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
 
   const existing = await prisma.punchActivity.findFirst({
     where: {
+          OR: [{ regularizationStatus: null }, { regularizationStatus: "" }, { regularizationStatus: "Accepted" }],
       employeeId: { equals: data.employeeId, mode: "insensitive" },
       type: data.type,
       timestamp
@@ -399,6 +406,10 @@ app.post("/api/punch-activity", asyncHandler(async (req, res) => {
 
   await writeAuditLog(req, type, "Punch Activity", employeeId, `${type} by ${data.employeeName || employeeId} at ${data.time}`);
   res.status(201).json(row);
+}));
+
+app.patch("/api/punch-activity/:id/withdraw", asyncHandler(async (req, res) => {
+  res.json(await decideRegularization(prisma, punchUser(req.headers.authorization), req.params.id, "Withdrawn"));
 }));
 
 app.get("/api/employee-portal", asyncHandler(async (_req, res) => {
@@ -489,6 +500,7 @@ app.get("/api/search", asyncHandler(async (req, res) => {
 }));
 
 app.get("/api/export/:dataset", asyncHandler(async (req, res) => {
+  if (req.params.dataset === "punch-activity") return res.status(405).json({ error: "Use the authenticated punch activity list." });
   const config = resourceMap[req.params.dataset];
   if (!config) return res.status(404).json({ error: "Unknown export dataset." });
   const rows = await prisma[config.model].findMany({ orderBy: config.orderBy });
@@ -643,6 +655,7 @@ app.post("/api/:resource", asyncHandler(async (req, res) => {
 }));
 
 app.get("/api/:resource/:id", asyncHandler(async (req, res) => {
+  if (req.params.resource === "punch-activity") return res.status(405).json({ error: "Use the authenticated punch activity list." });
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const row = await prisma[config.model].findUnique({ where: { id: req.params.id } });
@@ -651,6 +664,7 @@ app.get("/api/:resource/:id", asyncHandler(async (req, res) => {
 }));
 
 app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
+  if (req.params.resource === "punch-activity") return res.status(405).json({ error: "Use the punch review or withdrawal action." });
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const previousRow = req.params.resource === "leave-requests"
@@ -667,6 +681,7 @@ app.patch("/api/:resource/:id", asyncHandler(async (req, res) => {
 }));
 
 app.delete("/api/:resource/:id", asyncHandler(async (req, res) => {
+  if (req.params.resource === "punch-activity") return res.status(405).json({ error: "Use the punch review or withdrawal action." });
   const config = resourceMap[req.params.resource];
   if (!config) return res.status(404).json({ error: "Unknown API resource." });
   const row = req.params.resource === "uploads"
@@ -684,6 +699,18 @@ app.delete("/api/:resource/:id", asyncHandler(async (req, res) => {
 }));
 
 app.use((error, _req, res, _next) => {
+  if (error.status) return res.status(error.status).json({ error: error.message });
+  if (isMissingPunchActivityRegularizationColumn(error)) {
+    return res.status(503).json({ error: punchActivityRegularizationMigrationMessage });
+  }
+
+  if (isDatabaseUnavailableError(error)) {
+    console.warn(`Database unavailable: ${error.message?.split("\n")[0] || "connection failed"}`);
+    return res.status(503).json({
+      error: "Database is temporarily unavailable. Please check the PostgreSQL connection and try again."
+    });
+  }
+
   console.error(error);
   res.status(error.status || 500).json({ error: error.message || "Internal server error." });
 });
@@ -706,7 +733,7 @@ async function getSuiteData() {
     prisma.punchActivity.findMany({ orderBy: { timestamp: "desc" } }).catch(() => [])
   ]);
 
-  return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings, punchActivity };
+  return { employees, leaveRequests, attendanceRecords, vendorWorkers, documents, approvals, settings, punchActivity: attendancePunches(punchActivity) };
 }
 
 async function refreshAtsResourceFromSharePoint(resource) {

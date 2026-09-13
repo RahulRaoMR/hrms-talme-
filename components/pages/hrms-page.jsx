@@ -1,4 +1,6 @@
 "use client";
+import { getSuiteSession } from "@/lib/auth-session";
+import { isActivePunch } from "@/lib/punch-status";
 
 import { useEffect, useState, useTransition } from "react";
 import {
@@ -432,7 +434,7 @@ async function fetchResourceRows(path, key) {
 }
 
 async function fetchPunchActivityRows(query = "") {
-  const response = await fetch(`/api/punch-activity${query}`, { cache: "no-store" });
+  const response = await fetch(`/api/punch-activity${query}`, { cache: "no-store", headers: { Authorization: `Bearer ${getSuiteSession()?.token || ""}` } });
 
   if (!response.ok) {
     throw new Error(`/api/punch-activity failed with ${response.status}`);
@@ -443,10 +445,10 @@ async function fetchPunchActivityRows(query = "") {
 
 async function postManualPunchActivity(payload) {
   const path = "/api/punch-activity";
-  const endpointUrl = apiUrl(path);
+  const endpointUrl = path;
   const requestOptions = {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSuiteSession()?.token || ""}` },
     body: JSON.stringify({
       ...payload,
       manualEntry: true
@@ -1539,7 +1541,7 @@ function readEmployeePunchActivity(employeeId, date, punchActivityRecords = []) 
     .map(normalizePunchActivityEntry);
 
   if (typeof window === "undefined") {
-    return databaseActivity;
+    return databaseActivity.filter(isActivePunch);
   }
 
   const storageKey = `talme-employee-phone-activity-${employeeId}-${dateKey}`;
@@ -1555,7 +1557,7 @@ function readEmployeePunchActivity(employeeId, date, punchActivityRecords = []) 
 
     return mergePunchActivity([...databaseActivity, ...fallbackActivity, ...sessionActivity]);
   } catch {
-    return databaseActivity;
+    return databaseActivity.filter(isActivePunch);
   }
 }
 
@@ -1609,12 +1611,13 @@ function mergePunchActivity(records = []) {
     .filter((entry) => {
       const key = getPunchActivityKey(entry);
 
-      if (!entry.type || !entry.timestamp || seen.has(key)) {
+      if (!entry.type || !entry.timestamp || seen.has(key) || (entry.id && seen.has(entry.id))) {
         return false;
       }
 
       seen.add(key);
-      return true;
+      if (entry.id) seen.add(entry.id);
+      return isActivePunch(entry);
     });
 }
 

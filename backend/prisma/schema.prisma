@@ -241,6 +241,11 @@ model PunchActivity {
   timestamp      DateTime
   time           String
   workDate       String
+  reason         String?
+  regularizationStatus String?
+  regularizationReviewedBy String?
+  regularizationReviewedAt DateTime?
+  regularizationDeclineReason String?
   geoCoordinates Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

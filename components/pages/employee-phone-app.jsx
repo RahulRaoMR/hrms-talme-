@@ -1,9 +1,10 @@
 "use client";
+import { isActivePunch } from "@/lib/punch-status";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api-client";
-import { clearSuiteSession } from "@/lib/auth-session";
+import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
 
 const tabs = [
   { id: "calendar", label: "Calendar", icon: "CAL" },
@@ -332,6 +333,17 @@ function getDateFromCalendarDay(monthDate, day) {
   return new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
 }
 
+function parseStorageDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
 function getActivityStorageKey(employeeId, date) {
   return `talme-employee-phone-activity-${employeeId}-${formatStorageDate(date)}`;
 }
@@ -372,12 +384,13 @@ function mergeActivityRecords(records = []) {
   records.map(normalizeActivityEntry).forEach((entry) => {
     const key = getActivityEntryKey(entry);
 
-    if (!entry.type || !entry.timestamp || seen.has(key)) {
+    if (!entry.type || !entry.timestamp || seen.has(key) || (entry.id && seen.has(entry.id))) {
       return;
     }
 
     seen.add(key);
-    entries.push(entry);
+    if (entry.id) seen.add(entry.id);
+    if (isActivePunch(entry)) entries.push(entry);
   });
 
   return sortActivity(entries).reverse();
@@ -432,6 +445,37 @@ function createEmptyWorkSession() {
     endAt: null,
     breakStartedAt: null,
     breakSeconds: 0
+  };
+}
+
+function sanitizeStoredWorkSession(session, todayKey, now = new Date()) {
+  if (!session?.startAt) {
+    return null;
+  }
+
+  const startAt = new Date(session.startAt);
+
+  if (Number.isNaN(startAt.getTime()) || formatStorageDate(startAt) !== todayKey || startAt > now) {
+    return null;
+  }
+
+  const breakStartedAt = session.breakStartedAt ? new Date(session.breakStartedAt) : null;
+  const safeBreakStartedAt =
+    breakStartedAt &&
+    !Number.isNaN(breakStartedAt.getTime()) &&
+    formatStorageDate(breakStartedAt) === todayKey &&
+    breakStartedAt >= startAt &&
+    breakStartedAt <= now
+      ? breakStartedAt.toISOString()
+      : null;
+  const grossSeconds = Math.max(0, Math.floor((now.getTime() - startAt.getTime()) / 1000));
+  const breakSeconds = Math.max(0, Number(session.breakSeconds) || 0);
+
+  return {
+    startAt: startAt.toISOString(),
+    endAt: null,
+    breakStartedAt: safeBreakStartedAt,
+    breakSeconds: Math.min(breakSeconds, grossSeconds)
   };
 }
 
@@ -498,6 +542,89 @@ function formatRegularizationDate(date) {
     month: "short",
     year: "numeric"
   }).format(date);
+}
+
+function formatRegularizationPunchValue(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  }).format(date).replace(/,/g, "").toLowerCase();
+}
+
+function addDays(date, days) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function getPickerDraftFromDate(date) {
+  const hour24 = date.getHours();
+  const hour12 = hour24 % 12 || 12;
+
+  return {
+    dateKey: formatStorageDate(date),
+    hour: String(hour12).padStart(2, "0"),
+    minute: String(date.getMinutes()).padStart(2, "0"),
+    period: hour24 >= 12 ? "PM" : "AM"
+  };
+}
+
+function getDateFromPickerDraft(draft) {
+  const date = parseStorageDate(draft.dateKey);
+  const hour = Number(draft.hour) || 12;
+  const minute = Number(draft.minute) || 0;
+  const hour24 = draft.period === "PM" ? (hour % 12) + 12 : hour % 12;
+
+  date.setHours(hour24, minute, 0, 0);
+  return date;
+}
+
+function getRegularizationPunchType(records = []) {
+  const state = getActivityState(records);
+
+  if (state.hasPunchIn && !state.hasPunchOut) return "Punch Out";
+  if (!state.hasPunchIn && state.hasPunchOut) return "Punch In";
+
+  const lastPunch = sortActivity(records).at(-1);
+  return lastPunch?.type === "Punch In" ? "Punch Out" : "Punch In";
+}
+
+function isPendingRegularization(entry = {}) {
+  return String(entry.regularizationStatus || "").trim().toLowerCase() === "pending";
+}
+
+function isWithdrawnRegularization(entry = {}) {
+  return String(entry.regularizationStatus || "").trim().toLowerCase() === "withdrawn";
+}
+
+function sortPendingRegularizations(records = []) {
+  return [...records]
+    .filter(entry => Boolean(entry.regularizationStatus))
+    .sort((left, right) => new Date(right.timestamp || 0) - new Date(left.timestamp || 0));
+}
+
+function mergePendingRegularizationEntry(records = [], entry = {}) {
+  return sortPendingRegularizations([
+    entry,
+    ...records.filter((item) => String(item?.id || "") !== String(entry?.id || ""))
+  ]);
+}
+
+function getPendingRegularizationDateParts(entry = {}) {
+  const date = parseStorageDate(entry.workDate || entry.timestamp);
+
+  return {
+    day: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date),
+    weekday: new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(date),
+    fullDate: new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }).format(date)
+  };
 }
 
 function calculateActivityBreakSeconds(records) {
@@ -571,6 +698,229 @@ function EmptyState({ compact = false }) {
         <div className="empty-board">x</div>
       </div>
       <p>Oops! We couldn't find anything to show</p>
+    </div>
+  );
+}
+
+function RegularizationPunchSheet({
+  canSubmit,
+  error,
+  form,
+  onApplyPicker,
+  onCancelPicker,
+  onClose,
+  onOpenPicker,
+  onSubmit,
+  pickerDraft,
+  pickerOpen,
+  selectedDate,
+  setForm,
+  setPickerDraft,
+  submitting,
+  today
+}) {
+  const baseDate = form.punchAt || selectedDate || today;
+  const dateOptions = useMemo(
+    () => Array.from({ length: 31 }, (_, index) => {
+      const date = addDays(baseDate, index - 15);
+      const dateKey = formatStorageDate(date);
+      const label = new Intl.DateTimeFormat("en-IN", {
+        weekday: "short",
+        month: "short",
+        day: "numeric"
+      }).format(date);
+
+      return {
+        value: dateKey,
+        label,
+        sublabel: dateKey === formatStorageDate(today) ? "Today" : ""
+      };
+    }),
+    [baseDate, today]
+  );
+  const hourOptions = useMemo(
+    () => Array.from({ length: 12 }, (_, index) => {
+      const value = String(index + 1).padStart(2, "0");
+      return { value, label: value };
+    }),
+    []
+  );
+  const minuteOptions = useMemo(
+    () => Array.from({ length: 60 }, (_, index) => {
+      const value = String(index).padStart(2, "0");
+      return { value, label: value };
+    }),
+    []
+  );
+  const selectedPickerDate = getDateFromPickerDraft(pickerDraft);
+
+  return (
+    <div
+      className="regularization-sheet-layer"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+      role="presentation"
+    >
+      <form className={`regularization-bottom-sheet ${pickerOpen ? "picker-mode" : ""}`} onSubmit={onSubmit} role="dialog" aria-modal="true" aria-label="Add New Time">
+        <span className="regularization-sheet-handle" />
+        <div className="regularization-sheet-head">
+          <h2>{pickerOpen ? "Add Time" : "Add New Time"}</h2>
+          <button className="regularization-sheet-close" onClick={onClose} type="button" aria-label="Close">x</button>
+        </div>
+
+        {pickerOpen ? (
+          <>
+            <p className="regularization-picker-selected">{formatRegularizationPunchValue(selectedPickerDate)}</p>
+            <div className="regularization-time-wheel" aria-label="Punch time picker">
+              <RegularizationWheelColumn
+                activeValue={pickerDraft.dateKey}
+                className="date-wheel"
+                onSelect={(value) => setPickerDraft((current) => ({ ...current, dateKey: value }))}
+                options={dateOptions}
+              />
+              <RegularizationWheelColumn
+                activeValue={pickerDraft.hour}
+                onSelect={(value) => setPickerDraft((current) => ({ ...current, hour: value }))}
+                options={hourOptions}
+              />
+              <RegularizationWheelColumn
+                activeValue={pickerDraft.minute}
+                onSelect={(value) => setPickerDraft((current) => ({ ...current, minute: value }))}
+                options={minuteOptions}
+              />
+              <RegularizationWheelColumn
+                activeValue={pickerDraft.period}
+                onSelect={(value) => setPickerDraft((current) => ({ ...current, period: value }))}
+                options={[{ value: "AM", label: "AM" }, { value: "PM", label: "PM" }]}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="regularization-sheet-label">
+              <span>Punch Time <em>*</em></span>
+              <button className={`regularization-time-field ${form.punchAt ? "has-value" : ""}`} onClick={onOpenPicker} type="button">
+                <i className="regularization-clock-icon" aria-hidden="true" />
+                <strong>{form.punchAt ? formatRegularizationPunchValue(form.punchAt) : "Add Time"}</strong>
+                <small aria-hidden="true">v</small>
+              </button>
+            </label>
+
+            <label className="regularization-sheet-label">
+              <span>Mention Reason <em>*</em></span>
+              <textarea
+                onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
+                placeholder="Write your reason"
+                rows="2"
+                value={form.reason}
+              />
+            </label>
+          </>
+        )}
+
+        {error ? <p className="regularization-form-error">{error}</p> : null}
+
+        <div className="regularization-sheet-actions">
+          <button className="regularization-cancel-button" onClick={pickerOpen ? onCancelPicker : onClose} type="button">Cancel</button>
+          {pickerOpen ? (
+            <button className="regularization-submit-button" onClick={onApplyPicker} type="button">Apply</button>
+          ) : (
+            <button className="regularization-submit-button" disabled={!canSubmit || submitting} type="submit">
+              {submitting ? "Adding..." : "Add Punch Time"}
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RegularizationWheelColumn({ activeValue, className = "", onSelect, options }) {
+  return (
+    <div className={`regularization-wheel-column ${className}`}>
+      {options.map((option) => (
+        <button
+          className={option.value === activeValue ? "active" : ""}
+          key={option.value}
+          onClick={() => onSelect(option.value)}
+          type="button"
+        >
+          <span>{option.label}</span>
+          {option.sublabel ? <small>{option.sublabel}</small> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PendingRegularizationSection({
+  error,
+  onAskWithdraw,
+  pendingRegularizations,
+  t,
+  withdrawingId
+}) {
+  return (
+    <section className={`pending-card ${pendingRegularizations.length ? "has-rows" : ""}`}>
+      <div className="pending-regularization-head">
+        <span className="pending-calendar-icon" aria-hidden="true" />
+        <h2>Regularization Requests</h2>
+        {pendingRegularizations.length ? <strong>{pendingRegularizations.length}</strong> : null}
+      </div>
+
+      {error ? <p className="pending-regularization-error">{error}</p> : null}
+
+      {pendingRegularizations.length ? (
+        <div className="pending-regularization-list">
+          {pendingRegularizations.map((entry) => {
+            const dateParts = getPendingRegularizationDateParts(entry);
+            const isWithdrawing = withdrawingId === entry.id;
+
+            return (
+              <article className="pending-regularization-card" key={entry.id || `${entry.workDate}-${entry.type}-${entry.timestamp}`}>
+                <div className="pending-regularization-top">
+                  <div className="pending-date-chip">
+                    <strong>{dateParts.day}</strong>
+                    <span>{dateParts.weekday}</span>
+                  </div>
+                  <time>{dateParts.fullDate}</time>
+                  {isPendingRegularization(entry) ? <button disabled={isWithdrawing} onClick={() => onAskWithdraw(entry)} type="button">
+                    {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+                  </button> : null}
+                </div>
+                <p><strong>Add Punch Time:</strong> {entry.time || nowTime(new Date(entry.timestamp || Date.now()))}</p>
+                <p><strong>Status:</strong> {entry.regularizationStatus}</p>
+                <p><strong>Reason:</strong> {entry.reason || "-"}</p>
+                {entry.regularizationDeclineReason ? <p><strong>Decline reason:</strong> {entry.regularizationDeclineReason}</p> : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyState compact />
+      )}
+    </section>
+  );
+}
+
+function WithdrawRegularizationDialog({ onCancel, onConfirm, request, submitting }) {
+  if (!request) {
+    return null;
+  }
+
+  return (
+    <div className="regularization-confirm-layer" role="presentation">
+      <div className="regularization-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="withdraw-regularization-title">
+        <h2 id="withdraw-regularization-title">Withdraw Regularization?</h2>
+        <p>Are you sure you want to withdraw this regularization request?</p>
+        <div className="regularization-confirm-actions">
+          <button onClick={onCancel} disabled={submitting} type="button">Cancel</button>
+          <button onClick={onConfirm} disabled={submitting} type="button">{submitting ? "Withdrawing..." : "Withdraw"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -699,6 +1049,19 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const [draftLanguage, setDraftLanguage] = useState("en");
   const [languageMessage, setLanguageMessage] = useState("");
   const [shiftAssignments, setShiftAssignments] = useState(() => normalizeShiftAssignments(data.shiftAssignments || []));
+  const [regularizationSheetOpen, setRegularizationSheetOpen] = useState(false);
+  const [regularizationPickerOpen, setRegularizationPickerOpen] = useState(false);
+  const [regularizationForm, setRegularizationForm] = useState(() => ({
+    punchAt: null,
+    reason: ""
+  }));
+  const [regularizationPickerDraft, setRegularizationPickerDraft] = useState(() => getPickerDraftFromDate(new Date()));
+  const [regularizationError, setRegularizationError] = useState("");
+  const [regularizationSubmitting, setRegularizationSubmitting] = useState(false);
+  const [pendingRegularizations, setPendingRegularizations] = useState([]);
+  const [pendingRegularizationError, setPendingRegularizationError] = useState("");
+  const [withdrawRequest, setWithdrawRequest] = useState(null);
+  const [withdrawingRegularizationId, setWithdrawingRegularizationId] = useState("");
   const swipeStartX = useRef(0);
   const swipeMaxOffset = useRef(0);
   const employeeName = employee.name || "Employee";
@@ -777,7 +1140,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const monthTitle = useMemo(() => formatMonthTitle(visibleMonth), [visibleMonth]);
   const selectedDateKey = selectedCalendarDate ? formatStorageDate(selectedCalendarDate) : "";
   const selectedDateActivity = useMemo(
-    () => sortActivity(calendarActivityByDate[selectedDateKey] || []),
+    () => sortActivity((calendarActivityByDate[selectedDateKey] || []).filter(isActivePunch)),
     [calendarActivityByDate, selectedDateKey]
   );
   const selectedActivityState = useMemo(() => getActivityState(selectedDateActivity), [selectedDateActivity]);
@@ -796,7 +1159,72 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const pendingLeaveRequests = leaveRequests.filter((leave) => isPendingLeaveStatus(leave.status));
   const historyLeaveRequests = leaveRequests.filter((leave) => !isPendingLeaveStatus(leave.status));
   const visibleLeaveRequests = leaveTab === "history" ? historyLeaveRequests : pendingLeaveRequests;
+  const regularizationCanSubmit = Boolean(regularizationForm.punchAt && regularizationForm.reason.trim()) && !regularizationSubmitting;
   const t = (key) => translate(language, key);
+
+  useEffect(() => {
+    setPendingRegularizations(sortPendingRegularizations(
+      (data.punchActivity || []).filter((entry) => normalizeEmployeeId(entry.employeeId) === normalizeEmployeeId(employeeId))
+    ));
+  }, [data.punchActivity, employeeId]);
+
+  useEffect(() => {
+    if (!employeeId) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function refreshPendingRegularizations() {
+      try {
+        const response = await fetch(
+          apiUrl(`${punchActivityApiPath}?employeeId=${encodeURIComponent(employeeId)}`),
+          {
+            cache: "no-store",
+            headers: { "x-talme-actor": employeeId, Authorization: `Bearer ${getSuiteSession()?.token || ""}` }
+          }
+        );
+
+        if (!response.ok) throw new Error("Unable to refresh regularization requests.");
+
+        const rows = await response.json();
+
+        if (!cancelled) {
+          setPendingRegularizations(sortPendingRegularizations(Array.isArray(rows) ? rows : []));
+          setPendingRegularizationError("");
+          const byDate = {};
+          for (const row of rows) {
+            if (!byDate[row.workDate]) byDate[row.workDate] = [];
+            byDate[row.workDate].push(row);
+          }
+          setCalendarActivityByDate(current => {
+            const next = { ...current };
+            for (const [dateKey, records] of Object.entries(byDate)) {
+              next[dateKey] = mergeActivityRecords([...records, ...(current[dateKey] || [])]);
+              window.localStorage.setItem(getActivityStorageKey(employeeId, parseStorageDate(dateKey)), JSON.stringify(next[dateKey]));
+            }
+            return next;
+          });
+          const dateKey = formatStorageDate(new Date());
+          setActivity(current => mergeActivityRecords([...(byDate[dateKey] || []), ...current]));
+        }
+      } catch {
+        if (!cancelled) {
+          setPendingRegularizationError("Unable to refresh regularization requests.");
+        }
+      }
+    }
+
+    refreshPendingRegularizations();
+    window.addEventListener("focus", refreshPendingRegularizations);
+    const timer = window.setInterval(refreshPendingRegularizations, 15000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshPendingRegularizations);
+      window.clearInterval(timer);
+    };
+  }, [activeTab, employeeId]);
 
   useEffect(() => {
     const storedEmployeeId = window.sessionStorage.getItem(employeeSessionStorageKey);
@@ -899,7 +1327,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
       setShiftAssignments(localAssignments);
 
       try {
-        const response = await fetch(apiUrl("/api/shift-assignments"));
+        const response = await fetch("/api/shift-assignments");
 
         if (response.ok) {
           const rows = await response.json();
@@ -928,7 +1356,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     const storedActivity = window.localStorage.getItem(activityStorageKey);
     const storedSession = window.localStorage.getItem(sessionStorageKey);
     const localActivity = storedActivity ? JSON.parse(storedActivity) : [];
-    const parsedSession = storedSession ? JSON.parse(storedSession) : null;
+    const parsedSession = storedSession ? sanitizeStoredWorkSession(JSON.parse(storedSession), todayKey, today) : null;
     const sessionBackfillActivity = buildActivityFromSession(parsedSession, employeeId, employeeName, todayKey);
     const initialDatabaseActivity = (data.punchActivity || []).filter((entry) =>
       normalizeEmployeeId(entry.employeeId) === normalizeEmployeeId(employeeId) &&
@@ -943,6 +1371,10 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     setActivity(initialActivity);
     setWorkSession(initialWorkSession);
 
+    if (!parsedSession && storedSession) {
+      window.localStorage.removeItem(sessionStorageKey);
+    }
+
     sessionBackfillActivity.forEach((entry) => {
       if (!initialDatabaseActivity.some((item) => getActivityEntryKey(item) === getActivityEntryKey(entry))) {
         persistPunchActivity(entry);
@@ -952,7 +1384,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     async function refreshPunchActivity() {
       try {
         const response = await fetch(`${punchActivityApiPath}?employeeId=${encodeURIComponent(employeeId)}&date=${todayKey}`, {
-          cache: "no-store"
+          cache: "no-store", headers: { Authorization: `Bearer ${getSuiteSession()?.token || ""}` }
         });
 
         if (!response.ok) return;
@@ -978,10 +1410,9 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   }, [activityStorageKey, data.punchActivity, employeeId, sessionStorageKey, todayKey]);
 
   useEffect(() => {
-    if (activity.length) {
-      window.localStorage.setItem(activityStorageKey, JSON.stringify(activity));
-    }
-  }, [activity, activityStorageKey]);
+    window.localStorage.setItem(activityStorageKey, JSON.stringify(activity));
+    setWorkSession(buildWorkSessionFromActivity(activity, todayKey) || createEmptyWorkSession());
+  }, [activity, activityStorageKey, todayKey]);
 
   useEffect(() => {
     if (activeTab !== "calendar") {
@@ -1017,8 +1448,13 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   }, [workSession, sessionStorageKey]);
 
   const isPunchedIn = useMemo(() => {
+    const latestActivity = sortActivity(activity).at(-1);
+
+    if (latestActivity?.type === "Punch In") return true;
+    if (latestActivity?.type === "Punch Out") return false;
+
     return Boolean(workSession?.startAt && !workSession?.breakStartedAt);
-  }, [workSession]);
+  }, [activity, workSession]);
 
   const elapsedBreakSeconds = useMemo(() => {
     if (!workSession) return 0;
@@ -1045,7 +1481,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
     try {
       const response = await fetch(punchActivityApiPath, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSuiteSession()?.token || ""}` },
         body: JSON.stringify({
           employeeId,
           employeeName,
@@ -1135,6 +1571,190 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
 
       return next;
     });
+  }
+
+  function openRegularizationSheet() {
+    const defaultDate = selectedCalendarDate || today;
+
+    setRegularizationForm({
+      punchAt: null,
+      reason: ""
+    });
+    setRegularizationPickerDraft(getPickerDraftFromDate(defaultDate));
+    setRegularizationPickerOpen(false);
+    setRegularizationError("");
+    setRegularizationSheetOpen(true);
+  }
+
+  function closeRegularizationSheet() {
+    if (regularizationSubmitting) return;
+
+    setRegularizationSheetOpen(false);
+    setRegularizationPickerOpen(false);
+    setRegularizationError("");
+  }
+
+  function openRegularizationPicker() {
+    setRegularizationPickerDraft(getPickerDraftFromDate(regularizationForm.punchAt || selectedCalendarDate || today));
+    setRegularizationPickerOpen(true);
+    setRegularizationError("");
+  }
+
+  function applyRegularizationPicker() {
+    setRegularizationForm((current) => ({
+      ...current,
+      punchAt: getDateFromPickerDraft(regularizationPickerDraft)
+    }));
+    setRegularizationPickerOpen(false);
+    setRegularizationError("");
+  }
+
+  function mergeRegularizationEntry(currentRows, savedEntry) {
+    const savedId = String(savedEntry?.id || "");
+    const savedEmployeeId = normalizeEmployeeId(savedEntry?.employeeId);
+    const savedWorkDate = String(savedEntry?.workDate || "");
+    const savedType = String(savedEntry?.type || "");
+
+    return mergeActivityRecords([
+      savedEntry,
+      ...currentRows.filter((entry) => {
+        if (savedId && String(entry?.id || "") === savedId) return false;
+
+        return !(
+          normalizeEmployeeId(entry?.employeeId) === savedEmployeeId &&
+          String(entry?.workDate || "") === savedWorkDate &&
+          String(entry?.type || "") === savedType
+        );
+      })
+    ]);
+  }
+
+  async function submitRegularizationPunch(event) {
+    event.preventDefault();
+
+    if (regularizationSubmitting) return;
+
+    const punchAt = regularizationForm.punchAt;
+    const reason = regularizationForm.reason.trim();
+
+    if (!punchAt || !reason) {
+      setRegularizationError("Punch time and reason are required.");
+      return;
+    }
+
+    setRegularizationSubmitting(true);
+    setRegularizationError("");
+
+    try {
+      const workDate = formatStorageDate(punchAt);
+      const currentDateActivity = calendarActivityByDate[workDate] || [];
+      const type = getRegularizationPunchType(currentDateActivity);
+      const response = await fetch(apiUrl(punchActivityApiPath), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-talme-actor": employeeId,
+          Authorization: `Bearer ${getSuiteSession()?.token || ""}`
+        },
+        body: JSON.stringify({
+          employeeId,
+          employeeName,
+          type,
+          timestamp: punchAt.toISOString(),
+          time: nowTime(punchAt),
+          workDate,
+          reason,
+          manualEntry: true,
+          geoCoordinates: employee.location || employee.employeeDetails?.punchInBranch || employee.employeeDetails?.masterBranch || undefined
+        })
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || "Unable to add punch time.");
+      }
+
+      const savedEntry = await response.json();
+      const savedDate = parseStorageDate(savedEntry.workDate || workDate);
+      const savedDateKey = formatStorageDate(savedDate);
+
+      setCalendarActivityByDate((current) => {
+        const nextRows = mergeRegularizationEntry(current[savedDateKey] || [], savedEntry);
+        window.localStorage.setItem(getActivityStorageKey(employeeId, savedDate), JSON.stringify(nextRows));
+
+        return {
+          ...current,
+          [savedDateKey]: nextRows
+        };
+      });
+
+      if (savedDateKey === todayKey) {
+        setActivity((current) => mergeRegularizationEntry(current, savedEntry));
+      }
+
+      setPendingRegularizations((current) => mergePendingRegularizationEntry(current, savedEntry));
+      setSelectedCalendarDate(savedDate);
+      setRegularizationSheetOpen(false);
+      setRegularizationPickerOpen(false);
+      setRegularizationForm({ punchAt: null, reason: "" });
+    } catch (saveError) {
+      setRegularizationError(saveError?.message || "Unable to add punch time.");
+    } finally {
+      setRegularizationSubmitting(false);
+    }
+  }
+
+  async function withdrawRegularization() {
+    if (!withdrawRequest?.id || withdrawingRegularizationId) {
+      return;
+    }
+
+    setWithdrawingRegularizationId(withdrawRequest.id);
+    setPendingRegularizationError("");
+
+    try {
+      const response = await fetch(apiUrl(`${punchActivityApiPath}/${encodeURIComponent(withdrawRequest.id)}/withdraw`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-talme-actor": employeeId,
+          Authorization: `Bearer ${getSuiteSession()?.token || ""}`
+        },
+        body: JSON.stringify({ employeeId })
+      });
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || "Unable to withdraw regularization.");
+      }
+
+      const withdrawn = await response.json();
+      const withdrawnId = String(withdrawn?.id || withdrawRequest.id);
+      const withdrawnDate = parseStorageDate(withdrawn?.workDate || withdrawRequest.workDate || withdrawRequest.timestamp);
+      const withdrawnDateKey = formatStorageDate(withdrawnDate);
+
+      setPendingRegularizations((current) => mergePendingRegularizationEntry(current, withdrawn));
+      setCalendarActivityByDate((current) => {
+        const currentRows = current[withdrawnDateKey] || [];
+        const nextRows = currentRows.filter((entry) => String(entry.id || "") !== withdrawnId);
+        window.localStorage.setItem(getActivityStorageKey(employeeId, withdrawnDate), JSON.stringify(nextRows));
+
+        return {
+          ...current,
+          [withdrawnDateKey]: nextRows
+        };
+      });
+
+      if (withdrawnDateKey === todayKey) {
+        setActivity((current) => current.filter((entry) => String(entry.id || "") !== withdrawnId));
+      }
+
+      setWithdrawRequest(null);
+    } catch (withdrawError) {
+      setPendingRegularizationError(withdrawError?.message || "Unable to withdraw regularization.");
+    } finally {
+      setWithdrawingRegularizationId("");
+    }
   }
 
   function resetSwipe() {
@@ -1331,7 +1951,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                 <section className="phone-section regularization-activity">
                   <div className="activity-section-head">
                     <h2>Your activity</h2>
-                    <button type="button">Add Punch</button>
+                    <button onClick={openRegularizationSheet} type="button">Add Punch</button>
                   </div>
                   {selectedDateActivity.length ? (
                     selectedDateActivity.map((entry, index) => (
@@ -1347,6 +1967,7 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                     <EmptyState />
                   )}
                 </section>
+                <PendingRegularizationSection error={pendingRegularizationError} onAskWithdraw={setWithdrawRequest} pendingRegularizations={pendingRegularizations.filter(entry => entry.workDate === selectedDateKey)} t={t} withdrawingId={withdrawingRegularizationId} />
               </>
             ) : (
               <>
@@ -1388,10 +2009,13 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
                     ["weekoff", "Week Off"], ["holiday", "Holiday"], ["late", "Late"], ["error", "Punch Error"]
                   ].map(([tone, label]) => <span key={tone}><i className={tone} />{label}</span>)}
                 </div>
-                <section className="pending-card">
-                  <h2>{t("pendingRegularization")}</h2>
-                  <EmptyState compact />
-                </section>
+                <PendingRegularizationSection
+                  error={pendingRegularizationError}
+                  onAskWithdraw={setWithdrawRequest}
+                  pendingRegularizations={pendingRegularizations}
+                  t={t}
+                  withdrawingId={withdrawingRegularizationId}
+                />
               </>
             )}
           </section>
@@ -1651,6 +2275,37 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
             ))}
           </nav>
         ) : null}
+
+        {regularizationSheetOpen ? (
+          <RegularizationPunchSheet
+            canSubmit={regularizationCanSubmit}
+            error={regularizationError}
+            form={regularizationForm}
+            onApplyPicker={applyRegularizationPicker}
+            onCancelPicker={() => setRegularizationPickerOpen(false)}
+            onClose={closeRegularizationSheet}
+            onOpenPicker={openRegularizationPicker}
+            onSubmit={submitRegularizationPunch}
+            pickerDraft={regularizationPickerDraft}
+            pickerOpen={regularizationPickerOpen}
+            selectedDate={selectedCalendarDate}
+            setForm={setRegularizationForm}
+            setPickerDraft={setRegularizationPickerDraft}
+            submitting={regularizationSubmitting}
+            today={today}
+          />
+        ) : null}
+
+        <WithdrawRegularizationDialog
+          onCancel={() => {
+            if (!withdrawingRegularizationId) {
+              setWithdrawRequest(null);
+            }
+          }}
+          onConfirm={withdrawRegularization}
+          request={withdrawRequest}
+          submitting={Boolean(withdrawingRegularizationId)}
+        />
       </div>
     </div>
   );

@@ -1,6 +1,12 @@
-import { createActivityLog, createResource, getResource, updateResource } from "@/lib/local-api-store";
+import { handlePunchRequest, resolvePunchUser } from "@/lib/punch-request-handler";
+import { scopedEmployee, submitManualPunch } from "@/backend/lib/punch-regularization";
+import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
 import { createPersistentAuditLog, hasPersistentDatabase, prisma } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
+import {
+  isMissingPunchActivityRegularizationColumn,
+  punchActivityRegularizationMigrationMessage
+} from "@/backend/lib/punch-activity-schema";
 
 function formatStorageDate(date) {
   const year = date.getFullYear();
@@ -37,7 +43,8 @@ function normalizeFilterParams(request) {
   return {
     employeeId: String(searchParams.get("employeeId") || "").trim().toLowerCase(),
     workDate: String(searchParams.get("date") || searchParams.get("workDate") || "").trim(),
-    month: String(searchParams.get("month") || "").trim()
+    month: String(searchParams.get("month") || "").trim(),
+    regularizationStatus: String(searchParams.get("regularizationStatus") || "").trim().toLowerCase()
   };
 }
 
@@ -45,10 +52,12 @@ function filterPunchRows(rows, filters) {
   return rows.filter((row) => {
     const rowEmployeeId = String(row.employeeId || "").trim().toLowerCase();
     const rowWorkDate = String(row.workDate || "").trim();
+    const rowRegularizationStatus = String(row.regularizationStatus || "").trim().toLowerCase();
 
     if (filters.employeeId && rowEmployeeId !== filters.employeeId) return false;
     if (filters.workDate && rowWorkDate !== filters.workDate) return false;
     if (!filters.workDate && /^\d{4}-\d{2}$/.test(filters.month) && !rowWorkDate.startsWith(filters.month)) return false;
+    if (filters.regularizationStatus && rowRegularizationStatus !== filters.regularizationStatus) return false;
 
     return true;
   });
@@ -58,40 +67,27 @@ function sortPunchRows(rows = []) {
   return [...rows].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
 }
 
-export async function GET(request) {
-  const filters = normalizeFilterParams(request);
+function migrationRequiredResponse() {
+  return Response.json({ error: punchActivityRegularizationMigrationMessage }, { status: 503 });
+}
 
-  if (hasPersistentDatabase) {
-    const where = {};
-
-    if (filters.employeeId) {
-      where.employeeId = { equals: filters.employeeId, mode: "insensitive" };
-    }
-
-    if (filters.workDate) {
-      where.workDate = filters.workDate;
-    } else if (/^\d{4}-\d{2}$/.test(filters.month)) {
-      where.workDate = { startsWith: filters.month };
-    }
-
-    const rows = await prisma.punchActivity.findMany({
-      where,
+export function GET(request) {
+  return handlePunchRequest(request, async (db, user) => {
+    const filters = normalizeFilterParams(request);
+    const employeeId = scopedEmployee(user, filters.employeeId);
+    return db.punchActivity.findMany({
+      where: {
+        ...(employeeId ? { employeeId: { equals: employeeId, mode: "insensitive" } } : {}),
+        ...(filters.workDate ? { workDate: filters.workDate } : /^\d{4}-\d{2}$/.test(filters.month) ? { workDate: { startsWith: filters.month } } : {}),
+        ...(filters.regularizationStatus ? { regularizationStatus: { equals: filters.regularizationStatus, mode: "insensitive" } } : {})
+      },
       orderBy: { timestamp: "desc" }
     });
-
-    return Response.json(rows);
-  }
-
-  const proxiedResponse = await proxyToConfiguredApi(request, `/api/punch-activity${new URL(request.url).search}`);
-
-  if (proxiedResponse?.ok) {
-    return proxiedResponse;
-  }
-
-  return Response.json(filterPunchRows(getResource("punch-activity") || [], filters));
+  });
 }
 
 export async function POST(request) {
+  const originalRequest = request.clone();
   const payload = await request.json().catch(() => ({}));
   const timestamp = new Date(payload.timestamp || Date.now());
   const employeeId = String(payload.employeeId || "").trim();
@@ -109,6 +105,8 @@ export async function POST(request) {
     return Response.json({ error: "Punch timestamp is invalid." }, { status: 400 });
   }
 
+  const reason = payload.reason ? String(payload.reason).trim() : "";
+  const regularizationStatus = reason || payload.regularizationStatus ? "Pending" : "";
   const data = {
     employeeId,
     employeeName: payload.employeeName ? String(payload.employeeName).trim() : undefined,
@@ -120,72 +118,63 @@ export async function POST(request) {
   };
   const manualEntry = Boolean(payload.manualEntry);
 
+  if (manualEntry || regularizationStatus) {
+    return handlePunchRequest(originalRequest, async (db, user) => {
+      const result = await submitManualPunch(db, user, { ...data, timestamp }, reason);
+      return result.row;
+    });
+  }
+  try {
+    scopedEmployee(await resolvePunchUser(request), employeeId);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: error.status || 401 });
+  }
+
   if (hasPersistentDatabase) {
-    if (manualEntry) {
-      const existingManualPunch = await prisma.punchActivity.findFirst({
+    try {
+      const latestSameDayPunch = await prisma.punchActivity.findFirst({
         where: {
+          OR: [{ regularizationStatus: null }, { regularizationStatus: "" }, { regularizationStatus: "Accepted" }],
           employeeId: { equals: data.employeeId, mode: "insensitive" },
-          workDate: data.workDate,
-          type: data.type
+          workDate: data.workDate
         },
-        orderBy: { timestamp: data.type === "Punch In" ? "asc" : "desc" }
+        orderBy: { timestamp: "desc" }
       });
 
-      const row = existingManualPunch
-        ? await prisma.punchActivity.update({
-            where: { id: existingManualPunch.id },
-            data: {
-              ...data,
-              employeeName: data.employeeName || null,
-              timestamp
-            }
-          })
-        : await prisma.punchActivity.create({
-            data: {
-              ...data,
-              employeeName: data.employeeName || null,
-              timestamp
-            }
-          });
+      if (latestSameDayPunch?.type === data.type) {
+        return Response.json(latestSameDayPunch);
+      }
+
+      const existing = await prisma.punchActivity.findFirst({
+        where: {
+          OR: [{ regularizationStatus: null }, { regularizationStatus: "" }, { regularizationStatus: "Accepted" }],
+          employeeId: { equals: data.employeeId, mode: "insensitive" },
+          type: data.type,
+          timestamp
+        }
+      });
+
+      if (existing) {
+        return Response.json(existing);
+      }
+
+      const row = await prisma.punchActivity.create({
+        data: {
+          ...data,
+          employeeName: data.employeeName || null,
+          timestamp
+        }
+      });
 
       await writePunchAudit(request, row);
-      return Response.json(row, { status: existingManualPunch ? 200 : 201 });
-    }
-
-    const latestSameDayPunch = await prisma.punchActivity.findFirst({
-      where: {
-        employeeId: { equals: data.employeeId, mode: "insensitive" },
-        workDate: data.workDate
-      },
-      orderBy: { timestamp: "desc" }
-    });
-
-    if (latestSameDayPunch?.type === data.type) {
-      return Response.json(latestSameDayPunch);
-    }
-
-    const existing = await prisma.punchActivity.findFirst({
-      where: {
-        employeeId: { equals: data.employeeId, mode: "insensitive" },
-        type: data.type,
-        timestamp
+      return Response.json(row, { status: 201 });
+    } catch (error) {
+      if (isMissingPunchActivityRegularizationColumn(error)) {
+        return migrationRequiredResponse();
       }
-    });
 
-    if (existing) {
-      return Response.json(existing);
+      throw error;
     }
-
-    const row = await prisma.punchActivity.create({
-      data: {
-        ...data,
-        employeeName: data.employeeName || null,
-        timestamp
-      }
-    });
-
-    await writePunchAudit(request, row);
-    return Response.json(row, { status: 201 });
   }
 
   const proxyRequest = new Request(request.url, {
@@ -198,31 +187,8 @@ export async function POST(request) {
   });
   const proxiedResponse = await proxyToConfiguredApi(proxyRequest, "/api/punch-activity");
 
-  if (proxiedResponse?.ok) {
+  if (proxiedResponse) {
     return proxiedResponse;
-  }
-
-  if (manualEntry) {
-    const existingLocalPunches = sortPunchRows(
-      filterPunchRows(getResource("punch-activity") || [], {
-        employeeId: data.employeeId.toLowerCase(),
-        workDate: data.workDate,
-        month: ""
-      }).filter((row) => row.type === data.type)
-    );
-    const existingLocalPunch = data.type === "Punch In"
-      ? existingLocalPunches[existingLocalPunches.length - 1]
-      : existingLocalPunches[0];
-
-    if (existingLocalPunch) {
-      const row = updateResource("punch-activity", existingLocalPunch.id, data);
-      await writePunchAudit(request, row);
-      return Response.json(row);
-    }
-
-    const row = createResource("punch-activity", data);
-    await writePunchAudit(request, row);
-    return Response.json(row, { status: 201 });
   }
 
   const latestLocalPunch = sortPunchRows(

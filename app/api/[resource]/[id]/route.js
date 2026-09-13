@@ -48,6 +48,7 @@ async function writeAuditEntry(request, action, resource, row, id) {
 
 export async function GET(request, context) {
   const { resource, id } = await context.params;
+  if (resource === "punch-activity") return Response.json({ error: "Use the authenticated punch activity endpoints." }, { status: 405 });
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}${new URL(request.url).search}`);
 
   if (proxiedResponse) {
@@ -72,6 +73,7 @@ export async function GET(request, context) {
 
 export async function PATCH(request, context) {
   const { resource, id } = await context.params;
+  if (resource === "punch-activity") return Response.json({ error: "Use the authenticated punch activity endpoints." }, { status: 405 });
 
   let payload;
 
@@ -110,6 +112,7 @@ export async function PATCH(request, context) {
 
 export async function DELETE(request, context) {
   const { resource, id } = await context.params;
+  if (resource === "punch-activity") return Response.json({ error: "Use the authenticated punch activity endpoints." }, { status: 405 });
   const proxiedResponse = await proxyToConfiguredApi(request, `/api/${resource}/${id}`);
 
   if (proxiedResponse) {
