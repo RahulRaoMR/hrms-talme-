@@ -19,7 +19,7 @@ async function load(file, dependencies, globals = {}) {
   return module.namespace;
 }
 
-async function fixture({ role = "Employee HRMS", persistent = true } = {}) {
+async function fixture({ role = "Employee HRMS", persistent = true, identifier = "TTPL-1", requestedRole = "employee" } = {}) {
   const employee = { id: "emp-1", employeeId: "TTPL-1", name: "Test Employee", email: "employee@talme.test" };
   const account = { id: "user-1", email: employee.email, name: employee.name, role, active: true, passwordHash: await bcrypt.hash("OldPassword1", 4) };
   const state = { now: Date.now(), emails: [], writes: [], updates: [], localReads: 0, failedDelivery: false, failedWrite: false, unavailable: false, random: 0 };
@@ -75,9 +75,9 @@ async function fixture({ role = "Employee HRMS", persistent = true } = {}) {
   }, { process: { env: { NODE_ENV: "production", AUTH_SECRET: "test-only-key" } } });
   return {
     employee, account, state, reset,
-    request: () => reset.requestLocalPasswordReset({ identifier: "TTPL-1", role: "employee" }),
+    request: () => reset.requestLocalPasswordReset({ identifier, role: requestedRole }),
     confirm: (extra = {}) => reset.confirmLocalPasswordReset({ email: employee.email, otp: state.emails.at(-1), password: "NewPassword2", ...extra }),
-    login: (password, role = "employee") => login.POST(new Request("http://test/api/auth/login", { method: "POST", body: JSON.stringify({ email: "TTPL-1", password, role }) }))
+    login: (password, role = requestedRole) => login.POST(new Request("http://test/api/auth/login", { method: "POST", body: JSON.stringify({ email: identifier, password, role }) }))
   };
 }
 
@@ -89,6 +89,23 @@ test("both employee login role names match without granting a corporate role", (
   assert.equal(roles.loginRolesMatch("ATS", "employee"), false);
   assert.equal(roles.canonicalLoginRole("Employee HRMS"), "Employee HRMS");
 });
+
+for (const role of ["Enterprise Admin", "Super Admin", "Admin", "Administrator"]) {
+  test(`${role} can sign in and reset a password as Super Admin without changing its assigned role`, async () => {
+    const f = await fixture({ role, identifier: "employee@talme.test", requestedRole: "admin" });
+    assert.equal((await f.login("OldPassword1")).status, 200);
+    assert.equal((await f.login("WrongPassword1")).status, 401);
+    await f.request();
+    await f.confirm();
+    assert.equal((await f.login("OldPassword1")).status, 401);
+    const response = await f.login("NewPassword2");
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).user.role, "Enterprise Admin");
+    assert.equal(f.account.role, role);
+    assert.equal(f.account.active, true);
+    assert.equal(f.state.localReads, 0);
+  });
+}
 
 for (const role of ["Employee", "Employee HRMS"]) {
   test(`${role} can reset and sign in through either entry point without changing assigned permissions`, async () => {
@@ -194,6 +211,16 @@ test("local employee accounts retain their role and only accept the new password
   const response = await f.login("NewPassword2");
   assert.equal(response.status, 200);
   assert.equal((await response.json()).user.role, "Employee HRMS");
+});
+
+test("local create-only employee onboarding preserves existing corporate and employee credentials", async () => {
+  const f = await fixture({ persistent: false });
+  assert.equal(f.reset.setLocalEmployeePassword("saidarshaan@talme.in", "DoNotReplace1", { role: "Employee", createOnly: true }), false);
+  f.reset.setLocalEmployeePassword(f.employee.email, "OldPassword1", { role: "Employee HRMS", name: f.employee.name });
+  assert.equal(f.reset.setLocalEmployeePassword(f.employee.email, "DoNotReplace1", { role: "Employee", createOnly: true }), false);
+  assert.equal((await f.login("OldPassword1")).status, 200);
+  assert.equal((await f.login("DoNotReplace1")).status, 401);
+  assert.equal(f.reset.setLocalEmployeePassword("new@example.test", "TemporaryPassword1", { role: "Employee", createOnly: true }), true);
 });
 
 test("the shared employee sign-in supports legacy deployed roles without retrying corporate roles", async () => {

@@ -10,7 +10,7 @@ export const employeeService = {
   async create(payload) {
     const employee = await baseService.create(payload);
     const account = await createEmployeePortalAccount(employee);
-    await sendWelcomeEmailToEmployee(employee, { password: account.password });
+    if (account.created) await sendWelcomeEmailToEmployee(employee, { password: account.password });
     return employee;
   }
 };

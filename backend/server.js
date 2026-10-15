@@ -11,6 +11,7 @@ import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
 import { invoiceRoutes } from "./modules/invoices/routes.js";
 import { invoiceSummarySelect } from "../lib/invoice-records.js";
 import { canonicalLoginRole, normalizeLoginRole, loginRolesMatch } from "../lib/login-roles.js";
+import { createEmployeeLoginAccount } from "../lib/employee-account.js";
 import {
   isMissingPunchActivityRegularizationColumn,
   punchActivityRegularizationMigrationMessage
@@ -1305,31 +1306,7 @@ function buildWelcomeEmail(employee, password) {
 }
 
 async function createEmployeePortalAccount(employee, password) {
-  const loginEmail = getEmployeeLoginEmail(employee);
-
-  if (!loginEmail) {
-    return { created: false, reason: "Missing employee email or employee ID." };
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.upsert({
-    where: { email: loginEmail },
-    update: {
-      name: employee.name,
-      role: "Employee",
-      active: true,
-      passwordHash
-    },
-    create: {
-      name: employee.name,
-      email: loginEmail,
-      role: "Employee",
-      active: true,
-      passwordHash
-    }
-  });
-
-  return { created: true };
+  return createEmployeeLoginAccount(prisma, employee, password);
 }
 
 async function onboardEmployee(employee) {
