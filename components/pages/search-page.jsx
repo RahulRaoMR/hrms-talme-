@@ -123,7 +123,7 @@ export default function SearchPageClient() {
   return (
     <SuiteShell
       eyebrow="Global Search"
-      title="Search Employees, ATS, VMS, Payroll, Documents, and Approvals"
+      title="Search"
       primaryHref="/dashboard"
       primaryLabel="Back To Dashboard"
       brandEyebrow="Search Suite"

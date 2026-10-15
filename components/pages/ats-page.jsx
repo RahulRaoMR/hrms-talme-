@@ -1,5 +1,10 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+import CoreRowMenu from "@/components/core-row-menu";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -305,9 +310,9 @@ function parseCandidateCvText(text) {
 }
 
 export default function AtsPageClient({ data = {} }) {
-  const { items: candidates, prepend, reload, replace, remove } = useDemoStore(
+  const { items: candidates, error: candidateLoadError, prepend, reload, replace, remove } = useDemoStore(
     storeKeys.candidates,
-    demoSeed.candidates,
+    data.candidates || demoSeed.candidates,
     "/api/candidates"
   );
   const [sourceFilter, setSourceFilter] = useState("All");
@@ -471,7 +476,7 @@ export default function AtsPageClient({ data = {} }) {
   return (
     <SuiteShell
       eyebrow="ATS Module"
-      title="Recruitment Command Center"
+      title="Recruitment"
       primaryHref="/hrms"
       primaryLabel="Go To HRMS"
       actions={
@@ -537,15 +542,15 @@ export default function AtsPageClient({ data = {} }) {
                   onChange={(event) => setRequirementSearchInput(event.target.value)}
                 />
                 <button className="mini-button" type="submit">
-                  Search
+                  <CoreActionLabel label="Search" />
                 </button>
                 {requirementSearch ? (
                   <button className="mini-button" onClick={clearRequirementSearch} type="button">
-                    Clear
+                    <CoreActionLabel label="Clear" />
                   </button>
                 ) : null}
               </form>
-              <table className="data-table requirement-table">
+              <CoreTable className="data-table requirement-table">
                 <thead>
                   <tr>
                     {requirementFields.map((field) => (
@@ -587,7 +592,7 @@ export default function AtsPageClient({ data = {} }) {
                           title="Delete requirement"
                           type="button"
                         >
-                          Delete
+                          <CoreActionLabel label="Delete" />
                         </button>
                       </td>
                     </tr>
@@ -598,7 +603,7 @@ export default function AtsPageClient({ data = {} }) {
                     </tr>
                   ) : null}
                 </tbody>
-              </table>
+              </CoreTable>
               <div className="requirement-pagination">
                 <p className="requirement-count">
                   Showing {requirementFrom}-{requirementTo} of {filteredJobOpenings.length} registered requirements
@@ -610,7 +615,7 @@ export default function AtsPageClient({ data = {} }) {
                     onClick={() => setRequirementPage((current) => Math.max(1, current - 1))}
                     type="button"
                   >
-                    Previous
+                    <CoreActionLabel label="Previous" />
                   </button>
                   <span className="page-badge">
                     {safeRequirementPage} / {requirementTotalPages}
@@ -621,7 +626,7 @@ export default function AtsPageClient({ data = {} }) {
                     onClick={() => setRequirementPage((current) => Math.min(requirementTotalPages, current + 1))}
                     type="button"
                   >
-                    Next
+                    <CoreActionLabel label="Next" />
                   </button>
                 </div>
               </div>
@@ -645,7 +650,7 @@ export default function AtsPageClient({ data = {} }) {
             }}
             type="button"
           >
-            Add Candidate
+            <CoreActionLabel label="Add Candidate" />
           </button>
         </div>
         <div className="flow-grid">
@@ -657,6 +662,9 @@ export default function AtsPageClient({ data = {} }) {
       </section>
 
       <section className="page-section panel" id="candidate-shortlist">
+        {candidateLoadError || data.loadError ? (
+          <p className="form-error" role="alert">{candidateLoadError || data.loadError}</p>
+        ) : null}
         <div className="panel-head">
           <div>
             <p className="eyebrow">Candidate Shortlist</p>
@@ -682,11 +690,11 @@ export default function AtsPageClient({ data = {} }) {
               }}
             />
             <button className="mini-button candidate-toolbar-button" type="submit">
-              Search
+              <CoreActionLabel label="Search" />
             </button>
             {query ? (
               <button className="mini-button candidate-toolbar-button" onClick={clearCandidateSearch} type="button">
-                Clear
+                <CoreActionLabel label="Clear" />
               </button>
             ) : null}
           </form>
@@ -716,7 +724,7 @@ export default function AtsPageClient({ data = {} }) {
             />
           </div>
         </div>
-        <table className="data-table candidate-master-table">
+        <CoreTable className="data-table candidate-master-table">
           <thead>
             <tr>
               <th>
@@ -794,7 +802,7 @@ export default function AtsPageClient({ data = {} }) {
                       <span aria-hidden="true" />
                     </button>
                     {openCandidateActionId === candidate.id ? (
-                      <div className="candidate-action-menu" role="menu">
+                      <CoreRowMenu className="candidate-action-menu" role="menu" onClose={() => setOpenCandidateActionId(null)}>
                         <Link
                           href={`/candidates/${candidate.id}`}
                           onClick={() => setOpenCandidateActionId(null)}
@@ -844,7 +852,7 @@ export default function AtsPageClient({ data = {} }) {
                         >
                           Delete
                         </button>
-                      </div>
+                      </CoreRowMenu>
                     ) : null}
                   </div>
                   <div className="row-actions candidate-actions-legacy">
@@ -866,7 +874,7 @@ export default function AtsPageClient({ data = {} }) {
                       title="Edit"
                       type="button"
                     >
-                      Edit
+                      <CoreActionLabel label="Edit" />
                     </button>
                     <button
                       aria-label={`Approve ${candidate.name}`}
@@ -882,7 +890,7 @@ export default function AtsPageClient({ data = {} }) {
                       title="Approve"
                       type="button"
                     >
-                      Approve
+                      <CoreActionLabel label="Approve" />
                     </button>
                     <button
                       aria-label={`Delete ${candidate.name}`}
@@ -898,7 +906,7 @@ export default function AtsPageClient({ data = {} }) {
                       title="Delete"
                       type="button"
                     >
-                      Delete
+                      <CoreActionLabel label="Delete" />
                     </button>
                   </div>
                 </td>
@@ -910,7 +918,7 @@ export default function AtsPageClient({ data = {} }) {
               </tr>
             ) : null}
           </tbody>
-        </table>
+        </CoreTable>
         <div className="pagination-row">
           <span className="pagination-note">
             Showing {pagedCandidates.length} of {filteredCandidates.length} candidates
@@ -922,7 +930,7 @@ export default function AtsPageClient({ data = {} }) {
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               type="button"
             >
-              Previous
+              <CoreActionLabel label="Previous" />
             </button>
             <span className="page-badge">
               {safeCandidatePage} / {totalPages}
@@ -933,7 +941,7 @@ export default function AtsPageClient({ data = {} }) {
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               type="button"
             >
-              Next
+              <CoreActionLabel label="Next" />
             </button>
           </div>
         </div>

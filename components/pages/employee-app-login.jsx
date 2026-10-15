@@ -2,32 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiUrl } from "@/lib/api-client";
 import { saveSuiteSession } from "@/lib/auth-session";
+import { signInEmployee } from "@/lib/employee-login";
+import PasswordResetForm from "@/components/password-reset-form";
+import { ArrowLeft, Eye, EyeOff, LogIn } from "lucide-react";
+import "./employee-app.css";
 
 const employeeSessionKey = "talme-employee-app-employee-id";
-
-async function fetchWithLocalFallback(path, options) {
-  const endpointUrl = apiUrl(path);
-
-  if (endpointUrl === path) {
-    return fetch(path, options);
-  }
-
-  try {
-    const response = await fetch(endpointUrl, options);
-
-    if (response.status < 500 && ![404, 405].includes(response.status)) {
-      return response;
-    }
-  } catch (error) {
-    // The deployed/static frontend can be configured with a backend API URL,
-    // but the Next.js route beside this page is the safest fallback for the
-    // packaged employee app and local previews.
-  }
-
-  return fetch(path, options);
-}
 
 export default function EmployeeAppLogin() {
   const router = useRouter();
@@ -37,6 +18,8 @@ export default function EmployeeAppLogin() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   useEffect(() => {
     window.history.pushState({ employeeLogin: true }, "", window.location.href);
@@ -65,19 +48,15 @@ export default function EmployeeAppLogin() {
         throw new Error("Employee ID is required.");
       }
 
+      if (employeeId.includes("@")) {
+        throw new Error("Enter Employee ID, not email.");
+      }
+
       if (!formState.password.trim()) {
         throw new Error("Password is required.");
       }
 
-      const response = await fetchWithLocalFallback("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: employeeId,
-          password: formState.password,
-          role: "employee"
-        })
-      });
+      const response = await signInEmployee(employeeId, formState.password);
       const payload = await response.json().catch(() => ({
         error: "Login service is not available. Check the backend API URL and try again."
       }));
@@ -106,7 +85,7 @@ export default function EmployeeAppLogin() {
   }
 
   return (
-    <main className="employee-login-shell">
+    <main className="employee-login-shell core-employee-login">
       <section className="employee-login-phone">
         <button
           className="employee-login-back"
@@ -114,21 +93,30 @@ export default function EmployeeAppLogin() {
           type="button"
           aria-label="Back to Talme HRMS"
         >
-          <span>&lt;</span>
+          <ArrowLeft size={16} aria-hidden="true" />
           Talme HRMS
         </button>
         <div className="employee-login-hero">
           <div className="employee-login-logo">
             <img src="/talme-logo.png" alt="Talme Logo" />
           </div>
-          <p>Talme Employee App</p>
-          <h1>Sign in to continue</h1>
+          <p>Talme Technologies</p>
+          <h1>Employee App</h1>
         </div>
 
-        <form className="employee-login-form" onSubmit={submit}>
+        {resetOpen ? (
+          <PasswordResetForm
+            role="employee"
+            initialIdentifier={formState.employeeId}
+            className="employee-login-form employee-password-reset"
+            onClose={() => setResetOpen(false)}
+            onComplete={({ identifier, password }) => setFormState({ employeeId: identifier, password })}
+          />
+        ) : <form className="employee-login-form" onSubmit={submit}>
           <label>
             <span>Employee ID</span>
             <input
+              autoComplete="username"
               value={formState.employeeId}
               onChange={(event) => setFormState((current) => ({ ...current, employeeId: event.target.value }))}
               placeholder="Employee ID"
@@ -136,19 +124,21 @@ export default function EmployeeAppLogin() {
           </label>
           <label>
             <span>Password</span>
-            <input
-              type="password"
+            <div className="employee-login-password"><input
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
               value={formState.password}
               onChange={(event) => setFormState((current) => ({ ...current, password: event.target.value }))}
               placeholder="Password"
-            />
+            /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
           </label>
+          <button className="employee-login-forgot" onClick={() => { setError(""); setShowPassword(false); setResetOpen(true); }} type="button">Forgot Password?</button>
           <button className="phone-primary" disabled={submitting} type="submit">
-            {submitting ? "Signing In..." : "Access Employee App"}
+            <LogIn size={17} aria-hidden="true" />{submitting ? "Signing In..." : "Sign In"}
           </button>
-        </form>
+        </form>}
 
-        {error ? <p className="employee-login-error">{error}</p> : null}
+        {!resetOpen && error ? <p className="employee-login-error" role="alert">{error}</p> : null}
 
         <p className="employee-login-policy">
           By continuing, you agree to the{" "}

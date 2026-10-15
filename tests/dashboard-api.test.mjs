@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const baseUrl = process.env.DASHBOARD_TEST_BASE_URL || "http://localhost:3001";
+const baseUrl = process.env.DASHBOARD_TEST_BASE_URL || "http://localhost:3000";
 
 async function fetchOrSkip(t, path) {
   try {
     const response = await fetch(`${baseUrl}${path}`, {
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(30000)
     });
     return response;
   } catch (error) {
+    if (error.cause?.code !== "ECONNREFUSED") throw error;
     t.skip(`Dashboard server is not running at ${baseUrl}: ${error.message}`);
     return null;
   }

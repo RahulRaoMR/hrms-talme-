@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useState, useTransition } from "react";
 import {
   createApprovalItemAction,
@@ -30,13 +34,13 @@ export default function ApprovalsPageClient({ approvals: initialApprovals }) {
   return (
     <SuiteShell
       eyebrow="Approval Inbox"
-      title="Cross-Module Approval Command"
+      title="Approvals"
       primaryHref="/reports"
       primaryLabel="Open Reports"
       brandEyebrow="Governance Suite"
       actions={
         <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-          Add Approval
+          <CoreActionLabel label="Add Approval" />
         </button>
       }
     >
@@ -47,7 +51,7 @@ export default function ApprovalsPageClient({ approvals: initialApprovals }) {
             <h3>Leave, payroll, invoice, and vendor approvals</h3>
           </div>
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Module</th>
@@ -86,11 +90,11 @@ export default function ApprovalsPageClient({ approvals: initialApprovals }) {
                         }
                         type="button"
                       >
-                        Approve
+                        <CoreActionLabel label="Approve" />
                       </button>
                     ) : null}
                     <button className="mini-button" onClick={() => setEditState(approval)} type="button">
-                      Edit
+                      <CoreActionLabel label="Edit" />
                     </button>
                     <button
                       className="mini-button danger-button"
@@ -103,14 +107,14 @@ export default function ApprovalsPageClient({ approvals: initialApprovals }) {
                       }
                       type="button"
                     >
-                      Delete
+                      <CoreActionLabel label="Delete" />
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
 
       <EntityModal

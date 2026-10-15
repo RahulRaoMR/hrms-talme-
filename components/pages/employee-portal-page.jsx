@@ -46,7 +46,7 @@ export default function EmployeePortalPageClient({ data }) {
   return (
     <SuiteShell
       eyebrow="Employee Self-Service"
-      title="Payslips, Leave, Attendance, and Profile Updates"
+      title="Employee Portal"
       primaryHref="/vendor-portal"
       primaryLabel="Vendor Portal"
       brandEyebrow="Self-Service Suite"

@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useMemo, useState, useTransition } from "react";
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
@@ -226,7 +230,7 @@ export default function LeavesPageClient({ data }) {
           </div>
         </div>
         {filteredEmployeeRows.length ? (
-          <table className="data-table leave-summary-table">
+          <CoreTable className="data-table leave-summary-table">
             <thead>
               <tr>
                 <th>Employee</th>
@@ -256,7 +260,7 @@ export default function LeavesPageClient({ data }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </CoreTable>
         ) : (
           <p className="empty-state">No employee leave details found. Add employees in HRMS or create a leave request here.</p>
         )}
@@ -270,7 +274,7 @@ export default function LeavesPageClient({ data }) {
           </div>
         </div>
         {filteredRequests.length ? (
-          <table className="data-table leave-request-table">
+          <CoreTable className="data-table leave-request-table">
             <thead>
               <tr>
                 <th>Employee</th>
@@ -307,7 +311,7 @@ export default function LeavesPageClient({ data }) {
                         Reject
                       </button>
                       <button className="mini-button" onClick={() => setLeaveEdit(leave)} type="button">
-                        Edit
+                        <CoreActionLabel label="Edit" />
                       </button>
                       <button
                         className="mini-button danger-button"
@@ -321,14 +325,14 @@ export default function LeavesPageClient({ data }) {
                         }
                         type="button"
                       >
-                        Delete
+                        <CoreActionLabel label="Delete" />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </CoreTable>
         ) : (
           <p className="empty-state">No leave requests match the current search or status filter.</p>
         )}

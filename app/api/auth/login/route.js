@@ -2,7 +2,16 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { createActivityLog } from "@/lib/local-api-store";
 import { getLocalLoginAccount, hasLocalPasswordOverride } from "@/lib/password-reset-store";
-import { createPersistentAuditLog, hasPersistentDatabase, isDatabaseUnavailableError, prisma } from "@/lib/prisma-store";
+import { proxyToConfiguredApi } from "@/lib/server-api";
+import { canonicalLoginRole, normalizeLoginRole, isEmployeeLoginRole as isEmployeeIdLoginRole, loginRolesMatch } from "@/lib/login-roles";
+import {
+  canUsePersistentDatabase,
+  canUseLocalMutationFallback,
+  createPersistentAuditLog,
+  isDatabaseUnavailableError,
+  markPersistentDatabaseUnavailable,
+  prisma
+} from "@/lib/prisma-store";
 
 const authSecret = process.env.AUTH_SECRET || "talme-dev-secret";
 const defaultAdminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "talme123";
@@ -12,6 +21,9 @@ const reviewEmployeeId = process.env.PLAY_REVIEW_EMPLOYEE_ID || "TALME-REVIEW";
 const reviewEmployeePassword = process.env.PLAY_REVIEW_EMPLOYEE_PASSWORD || defaultAccessPassword;
 
 export async function POST(request) {
+  const proxiedResponse = await proxyToConfiguredApi(request, "/api/auth/login");
+  if (proxiedResponse) return proxiedResponse;
+
   const body = await request.json().catch(() => ({}));
   const identifier = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "").trim();
@@ -41,16 +53,20 @@ export async function POST(request) {
     });
   }
 
-  const persistentUser = await getPersistentLoginUser(identifier, password, expectedRole)
-    .catch((error) => {
-      if (!isDatabaseUnavailableError(error)) {
-        throw error;
-      }
-
-      console.error("Login database is unavailable; trying local authentication.", error.code);
-      return null;
-    });
-  const user = persistentUser || await getLocalLoginUser(identifier, password, expectedRole);
+  let user;
+  if (canUsePersistentDatabase()) {
+    try {
+      user = await getPersistentLoginUser(identifier, password, expectedRole);
+    } catch (error) {
+      if (!isDatabaseUnavailableError(error)) throw error;
+      markPersistentDatabaseUnavailable(error);
+      return Response.json({ error: "Login service is temporarily unavailable. Please retry shortly." }, { status: 503 });
+    }
+  } else if (canUseLocalMutationFallback()) {
+    user = await getLocalLoginUser(identifier, password, expectedRole);
+  } else {
+    return Response.json({ error: "Login service is temporarily unavailable. Please retry shortly." }, { status: 503 });
+  }
 
   if (!user) {
     return Response.json(
@@ -98,7 +114,7 @@ function getPlayReviewEmployee(identifier, password, expectedRole) {
 }
 
 async function getPersistentLoginUser(identifier, password, expectedRole) {
-  if (!hasPersistentDatabase) return null;
+  if (!canUsePersistentDatabase()) return null;
 
   const employee =
     expectedRole === "Employee" || !identifier.includes("@")
@@ -117,7 +133,7 @@ async function getPersistentLoginUser(identifier, password, expectedRole) {
     where: { email: loginEmail }
   });
 
-  if (!user || !user.active || (expectedRole && canonicalLoginRole(user.role) !== canonicalLoginRole(expectedRole))) {
+  if (!user || !user.active || !loginRolesMatch(user.role, expectedRole)) {
     return null;
   }
 
@@ -134,28 +150,6 @@ async function getPersistentLoginUser(identifier, password, expectedRole) {
     role: canonicalLoginRole(user.role),
     employeeId: employee?.employeeId || null
   };
-}
-
-function normalizeLoginRole(role) {
-  const roles = {
-    admin: "Enterprise Admin",
-    superAdmin: "Enterprise Admin",
-    administrator: "Enterprise Admin",
-    hr: "HR",
-    payrollAts: "Payroll + ATS",
-    ats: "ATS",
-    invoice: "Accounts",
-    accounts: "Accounts",
-    employeeHrms: "Employee HRMS",
-    payroll: "Payroll",
-    employee: "Employee"
-  };
-
-  return roles[role] || role || "";
-}
-
-function isEmployeeIdLoginRole(role) {
-  return ["Employee", "Employee HRMS"].includes(role);
 }
 
 async function getLocalLoginUser(identifier, password, expectedRole) {
@@ -247,27 +241,13 @@ async function getLocalLoginUser(identifier, password, expectedRole) {
     (entry) =>
       entry.email === identifier &&
       entry.password === password &&
-      (!expectedRole || canonicalLoginRole(entry.role) === canonicalLoginRole(expectedRole))
+      loginRolesMatch(entry.role, expectedRole)
   );
 
   if (!user) return null;
 
   const { password: _password, ...safe } = user;
   return safe;
-}
-
-function canonicalLoginRole(role) {
-  const normalized = String(role || "").trim().toLowerCase();
-
-  if (["admin", "administrator", "super admin", "enterprise admin"].includes(normalized)) {
-    return "Enterprise Admin";
-  }
-
-  if (["account", "accounts", "invoice", "finance"].includes(normalized)) {
-    return "Accounts";
-  }
-
-  return role || "";
 }
 
 function createSessionToken(user) {

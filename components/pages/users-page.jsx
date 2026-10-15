@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useMemo, useState, useTransition } from "react";
 import {
   createUserAction,
@@ -73,7 +77,7 @@ export default function UsersPageClient() {
       brandEyebrow="Access Control"
       actions={
         <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-          Add User
+          <CoreActionLabel label="Add User" />
         </button>
       }
     >
@@ -92,7 +96,7 @@ export default function UsersPageClient() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Name</th>
@@ -123,7 +127,7 @@ export default function UsersPageClient() {
                       }}
                       type="button"
                     >
-                      Edit
+                      <CoreActionLabel label="Edit" />
                     </button>
                     <button
                       className="mini-button danger-button"
@@ -137,14 +141,14 @@ export default function UsersPageClient() {
                       }
                       type="button"
                     >
-                      Delete
+                      <CoreActionLabel label="Delete" />
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
 
       <UserModal

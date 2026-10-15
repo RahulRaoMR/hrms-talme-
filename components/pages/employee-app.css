@@ -1,0 +1,57 @@
+body .employee-login-shell.core-employee-login, body .phone-app-shell.core-employee-app { --text: #252d35; --muted: #68757f; --line: #e4e9ec; --gold-2: #24795b; --panel: #fff; --panel-soft: #f6f8f9; background: #f6f8f9; color: var(--text); font-family: Arial, sans-serif; letter-spacing: 0; }
+.employee-login-shell.core-employee-login *, .phone-app-shell.core-employee-app * { box-sizing: border-box; letter-spacing: 0; }
+body .employee-login-shell.core-employee-login { padding: 30px 16px; }
+.employee-login-shell.core-employee-login .employee-login-phone { width: min(420px, 100%); min-height: 0; padding: 26px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 6px 24px #1a303b08; overflow: visible; }
+.employee-login-shell.core-employee-login .employee-login-back { position: static; display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; min-width: 0; width: auto; height: 30px; border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--muted); font: 12px Arial, sans-serif; backdrop-filter: none; }
+.employee-login-shell.core-employee-login .employee-login-hero { background: transparent; border: 0; border-radius: 0; padding: 25px 0; text-align: left; }
+.employee-login-shell.core-employee-login .employee-login-logo { width: 54px; height: 54px; padding: 0; margin: 0 0 16px; border: 0; border-radius: 0; box-shadow: none; background: #fff; }
+.employee-login-shell.core-employee-login .employee-login-hero p { color: var(--muted); font: 12px Arial, sans-serif; margin: 0 0 7px; }
+.employee-login-shell.core-employee-login .employee-login-hero h1 { font: 700 25px/1.3 Arial, sans-serif; color: var(--text); margin: 0; }
+.employee-login-shell.core-employee-login .employee-login-form { padding: 0; gap: 18px; }
+.employee-login-shell.core-employee-login .employee-login-form label { min-width: 0; display: grid; gap: 7px; }
+.employee-login-shell.core-employee-login .employee-login-form label > span { font: 12px Arial, sans-serif; color: var(--muted); }
+.employee-login-shell.core-employee-login .employee-login-form input { min-width: 0; width: 100%; height: 42px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--text); font: 13px Arial, sans-serif; padding: 10px 12px; margin: 0; }
+.employee-login-shell.core-employee-login .employee-login-password { position: relative; }
+.employee-login-shell.core-employee-login .employee-login-password input { padding-right: 42px; }
+.employee-login-shell.core-employee-login .employee-login-password button { position: absolute; top: 1px; right: 1px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.employee-login-shell.core-employee-login .employee-login-forgot { justify-self: end; width: auto; padding: 0; border: 0; color: #24795b; background: transparent; font: 600 12px/1.5 Arial, sans-serif; cursor: pointer; }
+.employee-login-shell.core-employee-login .employee-password-reset .password-reset-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.employee-login-shell.core-employee-login .employee-password-reset .password-reset-secondary button { color: #24795b; }
+.employee-login-shell.core-employee-login .employee-password-reset .form-error { color: #a52f3c; }
+.employee-login-shell.core-employee-login .phone-primary, .phone-app-shell.core-employee-app .phone-device .phone-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border-radius: 5px; border: 1px solid #24795b; padding: 10px 14px; background: #24795b; color: #fff; font: 600 13px/1.4 Arial, sans-serif; box-shadow: none; text-decoration: none; }
+.employee-login-shell.core-employee-login .phone-primary { width: 100%; margin-top: 3px; }
+.employee-login-shell.core-employee-login .employee-login-error { margin: 18px 0 0; border-radius: 5px; font-size: 12px; }
+.employee-login-shell.core-employee-login .employee-login-policy { margin: 22px 0 0; font-size: 11px; color: var(--muted); text-align: left; }
+.employee-login-shell.core-employee-login .employee-login-policy a { color: #24795b; }
+.employee-login-shell.core-employee-login :is(button, a, input):focus-visible, .phone-app-shell.core-employee-app :is(button, a, input, select, textarea):focus-visible { outline: 2px solid #4c9cbe; outline-offset: 3px; }
+body .phone-app-shell.core-employee-app { padding: 18px; }
+.phone-app-shell.core-employee-app .phone-device { background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px #1a303b08; }
+.phone-app-shell.core-employee-app .phone-device .phone-screen { background: #fff; color: var(--text); }
+.phone-app-shell.core-employee-app .phone-device .phone-hero { background: #f6f8f9; border-color: var(--line); border-radius: 0; padding-bottom: 26px; }
+.phone-app-shell.core-employee-app .phone-device :is(h1, h2, h3) { font-family: Arial, sans-serif; color: var(--text); }
+.phone-app-shell.core-employee-app .phone-device h1 { font-size: 21px; }
+.phone-app-shell.core-employee-app .phone-device h2 { font-size: 15px; }
+.phone-app-shell.core-employee-app .phone-device :is(.phone-menu-button, .phone-back-button, .month-row button) { border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--muted); width: 34px; height: 34px; }
+.phone-app-shell.core-employee-app .phone-device .hours-card { margin-top: 18px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); box-shadow: none; }
+.phone-app-shell.core-employee-app .phone-device .time-boxes strong { background: #f6f8f9; color: var(--text); border: 1px solid var(--line); border-radius: 5px; font-size: 27px; }
+.phone-app-shell.core-employee-app .phone-device .break-pill { border-radius: 4px; background: #eaf5ef; color: #24795b; }
+.phone-app-shell.core-employee-app .phone-device .shift-card { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--muted); background: transparent; font-size: 12px; }
+.phone-app-shell.core-employee-app .phone-device :is(.activity-row, .phone-list .process-card) { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.phone-app-shell.core-employee-app .phone-device .phone-action-stack { background: #fff; border-top: 1px solid var(--line); }
+.phone-app-shell.core-employee-app .phone-device .swipe-button { background: #24795b; color: #fff; border: 0; border-radius: 6px; font-size: 13px; }
+.phone-app-shell.core-employee-app .phone-device .swipe-button > span { background: #fff; color: #24795b; border-radius: 4px; }
+.phone-app-shell.core-employee-app .phone-device .phone-bottom-nav { background: #fff; border-top: 1px solid var(--line); box-shadow: none; padding: 8px 6px; }
+.phone-app-shell.core-employee-app .phone-device .phone-bottom-nav button { background: transparent; color: var(--muted); border-radius: 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; padding: 7px 2px; }
+.phone-app-shell.core-employee-app .phone-device .phone-bottom-nav button.active { background: #eaf5ef; color: #24795b; }
+.phone-app-shell.core-employee-app .phone-device .phone-bottom-nav small { font-size: 9px; color: inherit; }
+.phone-app-shell.core-employee-app .phone-device :is(.phone-tabs, .phone-list, .payslip-card, .attendance-card, .loan-card) { border-color: var(--line); border-radius: 6px; background: #fff; color: var(--text); }
+.phone-app-shell.core-employee-app .phone-device .phone-tabs button.active { background: #eaf5ef; color: #24795b; }
+.phone-app-shell.core-employee-app .phone-device :is(.phone-form input, .phone-form select, .phone-form textarea) { background: #fff; color: var(--text); border: 1px solid var(--line); border-radius: 5px; font-size: 13px; }
+.phone-app-shell.core-employee-app .phone-device .drawer-panel { background: #fff; color: var(--text); border-color: var(--line); border-radius: 0; }
+.phone-app-shell.core-employee-app .phone-device .drawer-panel button { color: var(--text); }
+@media (max-width: 600px) {
+  body .employee-login-shell.core-employee-login { place-items: start center; padding: 28px 18px; background: #fff; }
+  .employee-login-shell.core-employee-login .employee-login-phone { width: 100%; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+  body .phone-app-shell.core-employee-app { padding: 0; }
+  .phone-app-shell.core-employee-app .phone-device { width: 100%; height: 100dvh; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
+}

@@ -5,13 +5,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api-client";
 import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
+import { Bell, CalendarDays, CalendarOff, Home, Menu, Receipt } from "lucide-react";
+import "./employee-app.css";
 
 const tabs = [
-  { id: "calendar", label: "Calendar", icon: "CAL" },
-  { id: "leave", label: "Leave", icon: "LV" },
-  { id: "home", label: "Home", icon: "HM" },
-  { id: "payslips", label: "Payslips", icon: "PAY" },
-  { id: "notifications", label: "Notifications", icon: "NTF" }
+  { id: "calendar", label: "Calendar", icon: CalendarDays },
+  { id: "leave", label: "Leave", icon: CalendarOff },
+  { id: "home", label: "Home", icon: Home },
+  { id: "payslips", label: "Payslips", icon: Receipt },
+  { id: "notifications", label: "Notifications", icon: Bell }
 ];
 
 const dayStatus = {
@@ -1863,13 +1865,13 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   }
 
   return (
-    <div className="phone-app-shell">
+    <div className="phone-app-shell core-employee-app">
       <div className="phone-device">
         {activeTab === "home" && (
           <>
             <section className="phone-screen home-screen">
               <header className="phone-hero">
-                <button className="phone-menu-button" onClick={() => setDrawerOpen(true)} type="button">=</button>
+                <button className="phone-menu-button" onClick={() => setDrawerOpen(true)} type="button" title="Open menu" aria-label="Open menu"><Menu size={19} /></button>
                 <div>
                   <p>{t("welcome")}</p>
                   <h1>{employeeName}</h1>
@@ -2268,8 +2270,8 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
         {tabs.some((tab) => tab.id === activeTab) ? (
           <nav className="phone-bottom-nav">
             {tabs.map((tab) => (
-              <button className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)} type="button" key={tab.id}>
-                <span>{tab.icon}</span>
+              <button className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)} type="button" key={tab.id} aria-label={t(tab.id)} aria-current={activeTab === tab.id ? "page" : undefined}>
+                <tab.icon size={19} aria-hidden="true" />
                 <small>{t(tab.id)}</small>
               </button>
             ))}

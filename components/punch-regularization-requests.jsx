@@ -1,5 +1,7 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { getSuiteSession } from "@/lib/auth-session";
@@ -80,7 +82,7 @@ export default function PunchRegularizationRequests({ employees, assignments }) 
       {error ? <p className="punch-review-error" role="alert">{error} <button type="button" onClick={refresh}>Retry</button></p> : null}
       {loading ? <p role="status">Loading requests...</p> : visible.length ? (
         <div className="punch-review-table-scroll">
-          <table className="data-table punch-review-table">
+          <CoreTable className="data-table punch-review-table">
             <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>Shift</th><th>Requested Punch</th><th>Scheduled Start</th><th>Scheduled End</th><th>Break</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>{visible.map(row => {
               const employee = employees.find(item => String(item.employeeId || item.id).toLowerCase() === row.employeeId.toLowerCase());
@@ -103,7 +105,7 @@ export default function PunchRegularizationRequests({ employees, assignments }) 
                 ) : own && row.regularizationStatus === "Pending" ? "Awaiting HR review" : "-"}</td>
               </tr>;
             })}</tbody>
-          </table>
+          </CoreTable>
         </div>
       ) : !error ? <p className="empty-state">No {status === "All" ? "" : status.toLowerCase() + " "}regularization requests.</p> : null}
       {declining && typeof document !== "undefined" ? createPortal(<div className="regularization-confirm-layer punch-review-confirm-layer">

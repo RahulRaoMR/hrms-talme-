@@ -4,6 +4,8 @@ import { createActivityLog, createResource, getResource } from "@/lib/local-api-
 import {
   createPersistentAuditLog,
   createPersistentResource,
+  canUsePersistentDatabase,
+  canUseLocalMutationFallback,
   hasPersistentDatabase,
   isDatabaseUnavailableError,
   listPersistentResource
@@ -11,11 +13,10 @@ import {
 import { getConfiguredApiBase } from "@/lib/server-api";
 import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
-function shouldUseLocalMutationFallback() {
-  return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
-}
-
 function missingPersistentStoreResponse() {
+  if (hasPersistentDatabase && process.env.FORCE_LOCAL_API_STORE !== "true") {
+    return Response.json({ error: "Unable to save files because the database connection failed. Please try again shortly." }, { status: 503 });
+  }
   return Response.json(
     {
       error:
@@ -49,7 +50,12 @@ export async function GET(request) {
   }
 
   const module = new URL(request.url).searchParams.get("module") || "All";
-  const persistentRows = await listPersistentResource("uploads");
+  let persistentRows;
+  try {
+    persistentRows = await listPersistentResource("uploads", { fallbackOnError: false });
+  } catch (error) {
+    return persistentErrorResponse(error);
+  }
   const localRows = getResource("uploads") || [];
   const rows = mergeUploadRows(persistentRows || [], localRows);
   const filteredRows = module === "All" ? rows : rows.filter((row) => row.module === module);
@@ -64,6 +70,10 @@ export async function POST(request) {
     return proxiedResponse;
   }
 
+  if (!canUsePersistentDatabase() && !canUseLocalMutationFallback()) {
+    return missingPersistentStoreResponse();
+  }
+
   let payload;
 
   try {
@@ -72,7 +82,7 @@ export async function POST(request) {
     return Response.json({ error: error?.message || "Unable to upload file." }, { status: error?.status || 400 });
   }
 
-  if (hasPersistentDatabase) {
+  if (canUsePersistentDatabase()) {
     const persistentRow = await createPersistentResource("uploads", payload).catch((error) => persistentErrorResponse(error));
 
     if (persistentRow instanceof Response) {
@@ -85,7 +95,7 @@ export async function POST(request) {
     }
   }
 
-  if (!shouldUseLocalMutationFallback()) {
+  if (!canUseLocalMutationFallback()) {
     return missingPersistentStoreResponse();
   }
 

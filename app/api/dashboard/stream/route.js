@@ -9,16 +9,37 @@ export async function GET(request) {
   const authenticatedRole = searchParams.get("role") || "Admin";
   const normalizedRole = normalizeDashboardRole(authenticatedRole);
   const encoder = new TextEncoder();
+  let stop;
 
   const stream = new ReadableStream({
-    async start(controller) {
+    start(controller) {
       let closed = false;
+      let timer;
+
+      stop = (closeController = true) => {
+        if (closed) return;
+        closed = true;
+        clearTimeout(timer);
+        request.signal.removeEventListener("abort", onAbort);
+        if (closeController) controller.close();
+      };
+
+      function onAbort() {
+        stop();
+      }
+
+      request.signal.addEventListener("abort", onAbort, { once: true });
+      if (request.signal.aborted) {
+        stop();
+        return;
+      }
 
       async function send() {
         if (closed) return;
 
         try {
           const payload = await getDashboardData({ range, role: normalizedRole });
+          if (closed) return;
           const visibleWidgetIds = payload.visibleWidgets.map((widget) => widget.id);
           const dashboardDebug = {
             authenticatedRole,
@@ -27,21 +48,19 @@ export async function GET(request) {
             visibleWidgetIds
           };
 
-          console.log(dashboardDebug);
           controller.enqueue(encoder.encode(`event: dashboard\ndata: ${JSON.stringify({ ...payload, dashboardDebug })}\n\n`));
         } catch (error) {
+          if (closed) return;
           controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ message: error?.message || "Dashboard stream failed." })}\n\n`));
         }
+
+        if (!closed) timer = setTimeout(send, 30000);
       }
 
-      await send();
-      const interval = setInterval(send, 30000);
-
-      request.signal.addEventListener("abort", () => {
-        closed = true;
-        clearInterval(interval);
-        controller.close();
-      });
+      void send();
+    },
+    cancel() {
+      stop(false);
     }
   });
 

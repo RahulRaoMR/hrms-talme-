@@ -32,6 +32,10 @@ pnpm-debug.log*
 dev-server*.log
 talme-dev.log
 
+# generated browser checks and invoice samples
+/artifacts/
+/.tmp-*/
+
 # os/editor
 .DS_Store
 Thumbs.db

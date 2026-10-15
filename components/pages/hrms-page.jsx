@@ -1,4 +1,9 @@
 "use client";
+
+import CoreTable from "@/components/core-table";
+import CoreRowMenu from "@/components/core-row-menu";
+
+import CoreActionLabel from "@/components/core-action-label";
 import { getSuiteSession } from "@/lib/auth-session";
 import { isActivePunch } from "@/lib/punch-status";
 
@@ -427,7 +432,8 @@ async function fetchResourceRows(path, key) {
   }
 
   if (!response.ok) {
-    throw new Error(`${path} failed with ${response.status}`);
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result?.error || `${path} failed with ${response.status}`);
   }
 
   return normalizeResourceRows(await response.json(), key);
@@ -437,7 +443,8 @@ async function fetchPunchActivityRows(query = "") {
   const response = await fetch(`/api/punch-activity${query}`, { cache: "no-store", headers: { Authorization: `Bearer ${getSuiteSession()?.token || ""}` } });
 
   if (!response.ok) {
-    throw new Error(`/api/punch-activity failed with ${response.status}`);
+    const result = await response.json().catch(() => ({}));
+    throw new Error(response.status === 401 ? "Sign in again to load punch activity." : result?.error || "Unable to load punch activity.");
   }
 
   return normalizeResourceRows(await response.json(), "punchActivity");
@@ -481,6 +488,8 @@ async function postManualPunchActivity(payload) {
 
 export default function HrmsPageClient({ data }) {
   const [employees, setEmployees] = useState(data?.employees || []);
+  const [resourceErrors, setResourceErrors] = useState(data?.loadError ? [data.loadError] : []);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [leaveRequests, setLeaveRequests] = useState(data?.leaveRequests || []);
   const [attendanceRecords, setAttendanceRecords] = useState(data?.attendanceRecords || []);
   const [punchActivityRecords, setPunchActivityRecords] = useState(data?.punchActivity || []);
@@ -572,7 +581,7 @@ export default function HrmsPageClient({ data }) {
 
     async function refreshHrmsResources() {
       try {
-        const [nextEmployees, nextLeaveRequests, nextAttendanceRecords, nextDocuments, nextPunchActivity, nextUploadedAssets] = await Promise.all([
+        const results = await Promise.allSettled([
           fetchResourceRows("/api/employees", "employees"),
           fetchResourceRows("/api/leave-requests", "leaveRequests"),
           fetchResourceRows("/api/attendance-records", "attendanceRecords"),
@@ -583,12 +592,17 @@ export default function HrmsPageClient({ data }) {
 
         if (cancelled) return;
 
-        setEmployees(nextEmployees);
-        setLeaveRequests(nextLeaveRequests);
-        setAttendanceRecords(nextAttendanceRecords);
-        setDocuments(nextDocuments);
-        setPunchActivityRecords(nextPunchActivity);
-        setUploadedAssets(nextUploadedAssets);
+        const setters = [setEmployees, setLeaveRequests, setAttendanceRecords, setDocuments, setPunchActivityRecords, setUploadedAssets];
+        const labels = ["Employees", "Leave requests", "Attendance", "Documents", "Punch activity", "Uploaded files"];
+        const errors = [];
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            setters[index](result.value);
+          } else {
+            errors.push(`${labels[index]}: ${result.reason?.message || "Unable to load records."}`);
+          }
+        });
+        setResourceErrors(errors);
       } catch (error) {
         console.error("Unable to refresh HRMS resources.", error);
       }
@@ -599,7 +613,7 @@ export default function HrmsPageClient({ data }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshVersion]);
 
   useEffect(() => {
     if (!openEmployeeActionId) {
@@ -752,7 +766,7 @@ export default function HrmsPageClient({ data }) {
   return (
     <SuiteShell
       eyebrow="HRMS Module"
-      title="Employee Lifecycle, Attendance, Leave, and Payroll Readiness"
+      title="Employees"
       primaryHref="/payroll"
       primaryLabel="Open Payroll"
       brandEyebrow="HRMS Suite"
@@ -784,10 +798,16 @@ export default function HrmsPageClient({ data }) {
               }}
               type="button"
             >
-              Add Employee
+              <CoreActionLabel label="Add Employee" />
             </button>
           </div>
         </div>
+        {resourceErrors.length ? (
+          <div role="alert">
+            {resourceErrors.map((message) => <p className="form-error" key={message}>{message}</p>)}
+            <button className="mini-button" type="button" onClick={() => setRefreshVersion((value) => value + 1)}>Retry</button>
+          </div>
+        ) : null}
         <div className="quick-attendance-board">
           <div className="quick-attendance-head">
             <div>
@@ -819,7 +839,7 @@ export default function HrmsPageClient({ data }) {
             </div>
           </div>
           <div className="quick-attendance-table-wrap">
-            <table className="data-table quick-attendance-table">
+            <CoreTable className="data-table quick-attendance-table">
               <thead>
                 <tr>
                   <th>Employee ID</th>
@@ -893,7 +913,7 @@ export default function HrmsPageClient({ data }) {
                   </tr>
                 )}
               </tbody>
-            </table>
+            </CoreTable>
           </div>
         </div>
         <div className="employee-table-head">
@@ -904,7 +924,7 @@ export default function HrmsPageClient({ data }) {
           <span>{normalizedEmployeeSearch ? `${visibleEmployees.length} of ${sortedEmployees.length}` : sortedEmployees.length}</span>
         </div>
         <div className="employee-master-table-wrap">
-          <table className="data-table employee-master-table">
+          <CoreTable className="data-table employee-master-table">
             <thead>
               <tr>
                 <th>ID</th>
@@ -950,7 +970,7 @@ export default function HrmsPageClient({ data }) {
                         <span aria-hidden="true" />
                       </button>
                       {openEmployeeActionId === employee.id ? (
-                        <div className="employee-action-menu" role="menu">
+                        <CoreRowMenu className="employee-action-menu" role="menu" onClose={() => setOpenEmployeeActionId(null)}>
                           <button
                             onClick={() => {
                               setAttendanceMasterEmployee(employee);
@@ -997,7 +1017,7 @@ export default function HrmsPageClient({ data }) {
                           >
                             Delete
                           </button>
-                        </div>
+                        </CoreRowMenu>
                       ) : null}
                     </div>
                   </td>
@@ -1008,7 +1028,7 @@ export default function HrmsPageClient({ data }) {
                 </tr>
               )}
             </tbody>
-          </table>
+          </CoreTable>
         </div>
       </section>
 
@@ -1023,7 +1043,7 @@ export default function HrmsPageClient({ data }) {
               Add Attendance
             </button>
           </div>
-          <table className="data-table">
+          <CoreTable className="data-table">
             <thead>
               <tr>
                 <th>Employee</th>
@@ -1056,7 +1076,7 @@ export default function HrmsPageClient({ data }) {
                   <td>
                     <div className="row-actions">
                       <button className="mini-button" onClick={() => setAttendanceEdit(record)} type="button">
-                        Edit
+                        <CoreActionLabel label="Edit" />
                       </button>
                       <button
                         className="mini-button danger-button"
@@ -1069,14 +1089,14 @@ export default function HrmsPageClient({ data }) {
                         }
                         type="button"
                       >
-                        Delete
+                        <CoreActionLabel label="Delete" />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </CoreTable>
         </article>
         <article className="panel">
           <div className="panel-head">
@@ -1106,7 +1126,7 @@ export default function HrmsPageClient({ data }) {
                     </button>
                   ) : null}
                   <button className="mini-button" onClick={() => setLeaveEdit(leave)} type="button">
-                    Edit
+                    <CoreActionLabel label="Edit" />
                   </button>
                   <button
                     className="mini-button danger-button"
@@ -1119,7 +1139,7 @@ export default function HrmsPageClient({ data }) {
                     }
                     type="button"
                   >
-                    Delete
+                    <CoreActionLabel label="Delete" />
                   </button>
                 </div>
               </div>
@@ -1182,7 +1202,7 @@ export default function HrmsPageClient({ data }) {
           </div>
           {salarySheet.rows.length ? (
             <>
-              <table className="data-table salary-sheet-table">
+              <CoreTable className="data-table salary-sheet-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -1219,7 +1239,7 @@ export default function HrmsPageClient({ data }) {
                     <td><strong>{formatInr(salarySheetTotal)}</strong></td>
                   </tr>
                 </tfoot>
-              </table>
+              </CoreTable>
               <div className="salary-sheet-actions">
                 <button className="primary-button" onClick={downloadSalarySlips} type="button">
                   Download Salary Slip
@@ -2724,7 +2744,7 @@ function ImagePreviewModal({ preview, onClose }) {
             <h3>{preview.name}</h3>
           </div>
           <button className="ghost-button" onClick={onClose} type="button">
-            Close
+            <CoreActionLabel label="Close" />
           </button>
         </div>
         {preview.src && !failed ? (

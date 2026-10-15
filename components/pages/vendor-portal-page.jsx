@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useState, useTransition } from "react";
 import {
   createVendorWorkerAction,
@@ -24,27 +28,47 @@ const workerSeed = {
 };
 
 export default function VendorPortalPageClient({ data }) {
-  const [workers, setWorkers] = useState(data.workers);
-  const [vendors] = useState(data.vendors);
-  const [invoices] = useState(data.invoices);
+  const [workers, setWorkers] = useState(Array.isArray(data.workers) ? data.workers : []);
+  const [vendors] = useState(Array.isArray(data.vendors) ? data.vendors : []);
+  const [invoices] = useState(Array.isArray(data.invoices) ? data.invoices : []);
   const [modalOpen, setModalOpen] = useState(false);
   const [editState, setEditState] = useState(null);
   const [formState, setFormState] = useState(workerSeed);
+  const [actionError, setActionError] = useState(data.loadError || "");
   const [isPending, startTransition] = useTransition();
+
+  function runWorkerAction(action) {
+    setActionError("");
+    startTransition(() => {
+      action().catch((error) => {
+        setActionError(error?.message || "Unable to save worker changes.");
+      });
+    });
+  }
 
   return (
     <SuiteShell
       eyebrow="Vendor Portal"
-      title="Registration, Worker Uploads, Invoices, and Payment Tracking"
+      title="Vendor Portal"
       primaryHref="/notifications"
       primaryLabel="Open Alerts"
       brandEyebrow="Supplier Suite"
       actions={
-        <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-          Add Worker
+        <button
+          className="ghost-button"
+          onClick={() => {
+            setActionError("");
+            setFormState(workerSeed);
+            setModalOpen(true);
+          }}
+          type="button"
+        >
+          <CoreActionLabel label="Add Worker" />
         </button>
       }
     >
+      {actionError ? <p className="form-error">{actionError}</p> : null}
+
       <section className="page-section panel-grid">
         <article className="panel">
           <div className="panel-head">
@@ -54,12 +78,12 @@ export default function VendorPortalPageClient({ data }) {
             </div>
           </div>
           <div className="doc-stack">
-            {vendors.map((vendor) => (
+            {vendors.length ? vendors.map((vendor) => (
               <div className="doc-line" key={vendor.id}>
                 <span>{vendor.vendor} - {vendor.category}</span>
-                <strong>{vendor.status}</strong>
+                <strong>{vendor.status || vendor.label || "Not added"}</strong>
               </div>
-            ))}
+            )) : <div className="doc-line"><span>Vendor profiles</span><strong>Not added</strong></div>}
           </div>
         </article>
         <article className="panel">
@@ -69,7 +93,7 @@ export default function VendorPortalPageClient({ data }) {
               <h3>Contract workforce</h3>
             </div>
           </div>
-          <table className="data-table">
+          <CoreTable className="data-table">
             <thead>
               <tr>
                 <th>ID</th>
@@ -81,7 +105,7 @@ export default function VendorPortalPageClient({ data }) {
               </tr>
             </thead>
             <tbody>
-              {workers.map((worker) => (
+              {workers.length ? workers.map((worker) => (
                 <tr key={worker.id}>
                   <td>{worker.workerId}</td>
                   <td>{worker.name}</td>
@@ -90,28 +114,39 @@ export default function VendorPortalPageClient({ data }) {
                   <td><StatusBadge tone={worker.tone}>{worker.status}</StatusBadge></td>
                   <td>
                     <div className="row-actions">
-                      <button className="mini-button" onClick={() => setEditState(worker)} type="button">
-                        Edit
+                      <button
+                        className="mini-button"
+                        onClick={() => {
+                          setActionError("");
+                          setEditState(worker);
+                        }}
+                        type="button"
+                      >
+                        <CoreActionLabel label="Edit" />
                       </button>
                       <button
                         className="mini-button danger-button"
                         disabled={isPending}
                         onClick={() =>
-                          startTransition(async () => {
+                          runWorkerAction(async () => {
                             await deleteVendorWorkerAction(worker.id);
                             setWorkers((current) => current.filter((item) => item.id !== worker.id));
                           })
                         }
                         type="button"
                       >
-                        Delete
+                        <CoreActionLabel label="Delete" />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={6}>No workers found.</td>
+                </tr>
+              )}
             </tbody>
-          </table>
+          </CoreTable>
         </article>
       </section>
 
@@ -134,7 +169,7 @@ export default function VendorPortalPageClient({ data }) {
             </a>
           ) : null}
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Vendor</th>
@@ -145,7 +180,7 @@ export default function VendorPortalPageClient({ data }) {
             </tr>
           </thead>
           <tbody>
-            {invoices.map((invoice) => (
+            {invoices.length ? invoices.map((invoice) => (
               <tr key={invoice.id}>
                 <td>{invoice.vendor}</td>
                 <td>{invoice.invoiceNo}</td>
@@ -153,9 +188,13 @@ export default function VendorPortalPageClient({ data }) {
                 <td>{invoice.amount}</td>
                 <td><StatusBadge tone={invoice.tone}>{invoice.status}</StatusBadge></td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={5}>No invoices found.</td>
+              </tr>
+            )}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
 
       <EntityModal
@@ -163,12 +202,14 @@ export default function VendorPortalPageClient({ data }) {
         title="Create Vendor Worker"
         state={formState}
         setState={setFormState}
+        error={actionError}
         isPending={isPending}
         onClose={() => setModalOpen(false)}
         onSubmit={() =>
-          startTransition(async () => {
+          runWorkerAction(async () => {
             const created = await createVendorWorkerAction(formState);
             setWorkers((current) => [created, ...current]);
+            setFormState(workerSeed);
             setModalOpen(false);
           })
         }
@@ -179,10 +220,11 @@ export default function VendorPortalPageClient({ data }) {
         title="Update Vendor Worker"
         state={editState}
         setState={setEditState}
+        error={actionError}
         isPending={isPending}
         onClose={() => setEditState(null)}
         onSubmit={() =>
-          startTransition(async () => {
+          runWorkerAction(async () => {
             const updated = await updateVendorWorkerAction(editState.id, editState);
             setWorkers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
             setEditState(null);
@@ -193,7 +235,7 @@ export default function VendorPortalPageClient({ data }) {
   );
 }
 
-function EntityModal({ open, title, state, setState, onSubmit, onClose, isPending }) {
+function EntityModal({ open, title, state, setState, onSubmit, onClose, isPending, error }) {
   return (
     <Modal open={open} eyebrow="Vendor Portal" title={title} onClose={onClose}>
       {state ? (
@@ -234,6 +276,7 @@ function EntityModal({ open, title, state, setState, onSubmit, onClose, isPendin
               {isPending ? "Saving..." : "Save Worker"}
             </button>
           </div>
+          {error ? <p className="form-error">{error}</p> : null}
         </form>
       ) : null}
     </Modal>

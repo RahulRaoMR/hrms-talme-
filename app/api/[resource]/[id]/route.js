@@ -1,20 +1,21 @@
 import { createActivityLog, deleteResource, getResource, updateResource } from "@/lib/local-api-store";
 import {
   createPersistentAuditLog,
+  canUsePersistentDatabase,
+  canUseLocalMutationFallback,
+  hasPersistentDatabase,
   deletePersistentResource,
   getPersistentResource,
-  hasPersistentDatabase,
   updatePersistentResource
 } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import { sendLeaveStatusNotification } from "@/lib/leave-notifications";
 import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
-function shouldUseLocalMutationFallback() {
-  return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
-}
-
 function missingPersistentStoreResponse() {
+  if (hasPersistentDatabase && process.env.FORCE_LOCAL_API_STORE !== "true") {
+    return Response.json({ error: "Unable to save changes because the database connection failed. Please try again shortly." }, { status: 503 });
+  }
   return Response.json(
     {
       error:
@@ -83,7 +84,7 @@ export async function PATCH(request, context) {
     return proxiedResponse;
   }
 
-  if (hasPersistentDatabase) {
+  if (canUsePersistentDatabase()) {
     payload = await request.json().catch(() => ({}));
     const previousRow = await getPersistentResource(resource, id);
     const persistentRow = await updatePersistentResource(resource, id, payload);
@@ -94,7 +95,7 @@ export async function PATCH(request, context) {
     }
   }
 
-  if (!shouldUseLocalMutationFallback()) {
+  if (!canUseLocalMutationFallback()) {
     return missingPersistentStoreResponse();
   }
 
@@ -126,7 +127,7 @@ export async function DELETE(request, context) {
     return Response.json(persistentRow);
   }
 
-  if (!shouldUseLocalMutationFallback()) {
+  if (!canUseLocalMutationFallback()) {
     return missingPersistentStoreResponse();
   }
 

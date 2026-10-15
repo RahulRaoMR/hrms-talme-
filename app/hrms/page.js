@@ -12,15 +12,16 @@ export default async function HrmsPage() {
   try {
     data =
       (await fetchServerApiJson("/api/hrms")) ||
-      (await getPersistentHrmsData()) ||
+      (await getPersistentHrmsData({ fallbackOnError: false })) ||
       getLocalSuiteData() ||
       getEnterpriseSuiteData();
-  } catch {
+  } catch (error) {
     data = {
       employees: [],
       leaveRequests: [],
       attendanceRecords: [],
-      documents: []
+      documents: [],
+      loadError: error?.status ? error.message : "Unable to load saved HRMS records. Please try again shortly."
     };
   }
 

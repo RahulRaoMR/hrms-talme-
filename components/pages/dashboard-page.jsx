@@ -1,12 +1,15 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Download, EyeOff, RefreshCw, RotateCcw } from "lucide-react";
 
 import SuiteShell from "@/components/suite-shell";
 import { getSuiteSession } from "@/lib/auth-session";
 
 const REFRESH_MS = 30000;
+const REQUEST_TIMEOUT_MS = 30000;
 const PREF_KEY = "talme-dashboard-personalization-v2";
+const utilityWidgetIds = new Set(["notifications", "systemHealth", "activity"]);
 const ranges = [
   ["today", "Today"],
   ["7d", "7 Days"],
@@ -47,141 +50,177 @@ function dashboardApiPath(path) {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-async function loadDashboard(range, role) {
+async function loadDashboard(range, role, signal) {
   const session = getSuiteSession();
-  console.log("[dashboard] request", {
-    roleQuery: role,
-    authenticatedSessionRole: session?.user?.role || null,
-    includesSessionToken: Boolean(session?.token)
-  });
-
   const response = await fetch(dashboardApiPath(`/api/dashboard?range=${encodeURIComponent(range)}&role=${encodeURIComponent(role)}`), {
     cache: "no-store",
+    signal,
     headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined
   });
 
   if (!response.ok) {
-    throw new Error(`Dashboard API returned ${response.status}`);
+    const failure = await response.json().catch(() => null);
+    throw new Error(failure?.error || `Dashboard API returned ${response.status}`);
   }
 
-  const payload = await response.json();
-  console.log("[dashboard] response", payload);
-  console.log("[dashboard] visibility", {
-    authenticatedRole: payload.dashboardDebug?.authenticatedRole,
-    normalizedRole: payload.dashboardDebug?.normalizedRole || payload.role,
-    widgetCount: payload.dashboardDebug?.widgetCount ?? payload.visibleWidgets?.length ?? 0,
-    visibleWidgetIds: payload.dashboardDebug?.visibleWidgetIds || payload.visibleWidgetIds || payload.visibleWidgets?.map((widget) => widget.id) || []
-  });
-
-  return payload;
+  return response.json();
 }
 
 export default function DashboardPageClient() {
   const [range, setRange] = useState("30d");
-  const [role, setRole] = useState("Enterprise Admin");
+  const [role, setRole] = useState(null);
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [liveMode, setLiveMode] = useState("polling");
+  const [liveMode, setLiveMode] = useState("connecting");
   const [preferences, setPreferences] = useState({ order: [], hidden: [] });
+  const [preferenceError, setPreferenceError] = useState("");
+  const activeRequest = useRef(null);
 
   useEffect(() => {
     setRole(sessionRole());
     try {
       const stored = JSON.parse(window.localStorage.getItem(PREF_KEY) || "null");
-      if (stored?.order || stored?.hidden) {
-        setPreferences({ order: stored.order || [], hidden: stored.hidden || [] });
-      }
+      const ids = (value) => Array.isArray(value) ? [...new Set(value.filter((id) => typeof id === "string"))] : [];
+      setPreferences({ order: ids(stored?.order), hidden: ids(stored?.hidden) });
     } catch {
       setPreferences({ order: [], hidden: [] });
     }
   }, []);
 
-  const refresh = useCallback(async ({ silent = false } = {}) => {
+  const refresh = useCallback(({ silent = false } = {}) => {
+    if (!role) return Promise.resolve();
+    if (activeRequest.current?.range === range && activeRequest.current?.role === role) {
+      return activeRequest.current.promise;
+    }
+
+    activeRequest.current?.controller.abort();
+    const request = { range, role, controller: new AbortController() };
+    const { signal } = request.controller;
+    const timeout = window.setTimeout(() => {
+      request.timedOut = true;
+      request.controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
     if (silent) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
 
-    try {
-      const payload = await loadDashboard(range, role);
-      setDashboard(payload);
-      setError("");
-    } catch (loadError) {
-      setError(loadError?.message || "Dashboard data failed to load.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    request.promise = (async () => {
+      try {
+        const payload = await loadDashboard(range, role, signal);
+        if (signal.aborted) return;
+        setDashboard(payload);
+        setError("");
+      } catch (loadError) {
+        if (activeRequest.current !== request) return;
+        if (request.timedOut) {
+          setError("The dashboard request timed out. Please try refreshing again.");
+        } else if (!signal.aborted) {
+          setError(loadError?.message || "Dashboard data failed to load.");
+        }
+      } finally {
+        window.clearTimeout(timeout);
+        if (activeRequest.current === request) {
+          setLoading(false);
+          setRefreshing(false);
+          activeRequest.current = null;
+        }
+      }
+    })();
+    activeRequest.current = request;
+    return request.promise;
   }, [range, role]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.EventSource) {
-      setLiveMode("polling");
-      refresh();
-      const interval = window.setInterval(() => refresh({ silent: true }), REFRESH_MS);
-      return () => window.clearInterval(interval);
+    if (!role) return undefined;
+
+    let disposed = false;
+    let polling = false;
+    let source;
+    let fallback;
+    let pollTimer;
+
+    async function poll() {
+      await refresh({ silent: true });
+      if (!disposed) pollTimer = window.setTimeout(poll, REFRESH_MS);
     }
 
-    let settled = false;
-    const source = new EventSource(dashboardApiPath(`/api/dashboard/stream?range=${encodeURIComponent(range)}&role=${encodeURIComponent(role)}`));
-    const fallback = window.setTimeout(() => {
-      if (settled) return;
+    function startPolling() {
+      if (disposed || polling) return;
+      polling = true;
+      source?.close();
+      window.clearTimeout(fallback);
       setLiveMode("polling");
-      refresh();
-    }, 5000);
+      void poll();
+    }
 
     setLoading(true);
-    source.addEventListener("dashboard", (event) => {
-      const payload = JSON.parse(event.data);
-      settled = true;
-      window.clearTimeout(fallback);
-      setLiveMode("sse");
-      console.log("[dashboard] stream response", payload);
-      console.log("[dashboard] visibility", {
-        authenticatedRole: payload.dashboardDebug?.authenticatedRole,
-        normalizedRole: payload.dashboardDebug?.normalizedRole || payload.role,
-        widgetCount: payload.dashboardDebug?.widgetCount ?? payload.visibleWidgets?.length ?? 0,
-        visibleWidgetIds: payload.dashboardDebug?.visibleWidgetIds || payload.visibleWidgetIds || payload.visibleWidgets?.map((widget) => widget.id) || []
+    setError("");
+    setLiveMode("connecting");
+    if (window.EventSource) {
+      source = new EventSource(dashboardApiPath(`/api/dashboard/stream?range=${encodeURIComponent(range)}&role=${encodeURIComponent(role)}`));
+      fallback = window.setTimeout(startPolling, 15000);
+      source.addEventListener("dashboard", (event) => {
+        if (disposed || polling) return;
+        try {
+          const payload = JSON.parse(event.data);
+          window.clearTimeout(fallback);
+          setLiveMode("sse");
+          setDashboard(payload);
+          setError("");
+          setLoading(false);
+          setRefreshing(false);
+        } catch {
+          startPolling();
+        }
       });
-      setDashboard(payload);
-      setError("");
-      setLoading(false);
-      setRefreshing(false);
-    });
-    source.addEventListener("error", () => {
-      source.close();
-      window.clearTimeout(fallback);
-      setLiveMode("polling");
-      refresh();
-    });
+      source.addEventListener("error", startPolling);
+    } else {
+      startPolling();
+    }
 
     return () => {
+      disposed = true;
       window.clearTimeout(fallback);
-      source.close();
+      window.clearTimeout(pollTimer);
+      source?.close();
+      activeRequest.current?.controller.abort();
+      activeRequest.current = null;
     };
   }, [range, role, refresh]);
 
-  useEffect(() => {
-    if (liveMode !== "polling") return undefined;
-
-    const interval = window.setInterval(() => refresh({ silent: true }), REFRESH_MS);
-    return () => window.clearInterval(interval);
-  }, [liveMode, refresh]);
-
   const widgets = useMemo(() => {
-    return Array.isArray(dashboard.visibleWidgets) ? dashboard.visibleWidgets : [];
-  }, [dashboard.visibleWidgets]);
+    const available = Array.isArray(dashboard.visibleWidgets) ? dashboard.visibleWidgets : [];
+    const order = new Map(preferences.order.map((id, index) => [id, index]));
+    return available
+      .filter((widget) => !preferences.hidden.includes(widget.id))
+      .sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+  }, [dashboard.visibleWidgets, preferences]);
+  const mainWidgets = widgets.filter((widget) => !utilityWidgetIds.has(widget.id));
+  const utilityWidgets = widgets.filter((widget) => utilityWidgetIds.has(widget.id));
+  const hasData = Boolean(dashboard.generatedAt);
+  const initialLoading = loading && !hasData;
+  const busy = loading || refreshing;
+  const widgetError = hasData ? "" : error;
+  const displayedRange = hasData ? dashboard.range.key : range;
+  const requestedRangeLabel = ranges.find(([key]) => key === range)?.[1] || range;
 
   function savePreferences(nextPreferences) {
     setPreferences(nextPreferences);
-    window.localStorage.setItem(PREF_KEY, JSON.stringify(nextPreferences));
+    try {
+      window.localStorage.setItem(PREF_KEY, JSON.stringify(nextPreferences));
+      setPreferenceError("");
+    } catch {
+      setPreferenceError("Widget settings could not be saved to this browser.");
+    }
   }
 
   function moveWidget(id, direction) {
-    const order = widgets.map((widget) => widget.id);
+    const order = mainWidgets.map((widget) => widget.id);
     const index = order.indexOf(id);
     const nextIndex = index + direction;
     if (index < 0 || nextIndex < 0 || nextIndex >= order.length) return;
@@ -200,15 +239,16 @@ export default function DashboardPageClient() {
   return (
     <SuiteShell
       eyebrow="Executive Dashboard"
-      title="Unified Workforce Command"
+      title="Dashboard"
       primaryHref="/reports"
       primaryLabel="Open Reports"
       actions={
         <DashboardActions
           generatedAt={dashboard.generatedAt}
-          range={range}
-          refreshing={refreshing}
+          range={displayedRange}
+          refreshing={busy}
           liveMode={liveMode}
+          error={error}
           onRefresh={() => refresh({ silent: true })}
         />
       }
@@ -229,51 +269,64 @@ export default function DashboardPageClient() {
           ))}
         </div>
         <button className="ghost-button" onClick={resetWidgets} type="button">
+          <RotateCcw size={16} aria-hidden="true" />
           Reset Widgets
         </button>
       </section>
 
-      {error ? <div className="dashboard-alert" role="alert">{error}</div> : null}
+      {error ? <div className="dashboard-alert" role="alert">{error}{hasData ? " Showing the last successful update." : ""}</div> : null}
+      {preferenceError ? <div className="dashboard-alert" role="alert">{preferenceError}</div> : null}
+      {hasData && (busy || displayedRange !== range) ? (
+        <p className="dashboard-refresh-status" role="status">
+          {busy ? `Updating ${requestedRangeLabel}... ` : ""}Showing {dashboard.range.label} data.
+        </p>
+      ) : null}
 
-      <div className="executive-dashboard-shell">
-        <div className="executive-dashboard-main" aria-busy={loading || refreshing}>
-          {widgets.map((widget, index) => (
+      <div className={`executive-dashboard-shell${utilityWidgets.length ? "" : " without-utilities"}`}>
+        <div className="executive-dashboard-main" aria-busy={busy}>
+          {initialLoading ? (
+            <div className="dashboard-loading">
+              <p role="status">Loading dashboard...</p>
+              <div className="dashboard-summary-metrics">{skeletons(4, "card")}</div>
+            </div>
+          ) : null}
+          {mainWidgets.map((widget, index) => (
             <WidgetFrame
               key={widget.id}
               widget={widget}
-              range={range}
+              range={displayedRange}
               role={role}
-              loading={loading}
-              error={error}
               canMoveUp={index > 0}
-              canMoveDown={index < widgets.length - 1}
+              canMoveDown={index < mainWidgets.length - 1}
               onMoveUp={() => moveWidget(widget.id, -1)}
               onMoveDown={() => moveWidget(widget.id, 1)}
               onHide={() => hideWidget(widget.id)}
             >
-              <WidgetRenderer id={widget.id} dashboard={dashboard} loading={loading} error={error} />
+              <WidgetRenderer id={widget.id} dashboard={dashboard} loading={initialLoading} error={widgetError} />
             </WidgetFrame>
           ))}
-          {!loading && Array.isArray(dashboard.visibleWidgets) && dashboard.visibleWidgets.length === 0 ? (
-            <p className="empty-state">No dashboard widgets are visible for this role.</p>
+          {!loading && !error && !mainWidgets.length ? (
+            <p className="empty-state">{preferences.hidden.length ? "All main widgets are hidden." : "No dashboard widgets are available for this role."}</p>
           ) : null}
         </div>
-        <DashboardUtilityPanel dashboard={dashboard} loading={loading} error={error} range={range} role={role} />
+        {utilityWidgets.length ? <DashboardUtilityPanel widgets={utilityWidgets} dashboard={dashboard} loading={initialLoading} error={widgetError} range={displayedRange} role={role} /> : null}
       </div>
     </SuiteShell>
   );
 }
 
-const DashboardActions = memo(function DashboardActions({ generatedAt, range, refreshing, liveMode, onRefresh }) {
+const DashboardActions = memo(function DashboardActions({ generatedAt, range, refreshing, liveMode, error, onRefresh }) {
   return (
     <>
       <span className="dashboard-live-stamp" aria-live="polite">
-        {liveMode === "sse" ? "Live stream" : "Polling"} | Last sync {formatUpdatedAt(generatedAt)}
+        {error ? "Update failed" : refreshing ? "Updating" : liveMode === "sse" ? "Live stream" : liveMode === "connecting" ? "Connecting" : "Polling"} | Last sync {formatUpdatedAt(generatedAt)}
       </span>
-      <a className="ghost-button" href={exportHref("kpis", "csv", range)} target="_blank" rel="noreferrer">
+      <a className="ghost-button" href={generatedAt ? exportHref("kpis", "csv", range) : undefined} aria-disabled={!generatedAt} target="_blank" rel="noreferrer">
+        <Download size={16} aria-hidden="true" />
         Export CSV
       </a>
       <button className="primary-button" disabled={refreshing} onClick={onRefresh} type="button">
+        <RefreshCw size={16} aria-hidden="true" />
         {refreshing ? "Refreshing" : "Refresh Dashboard"}
       </button>
     </>
@@ -299,9 +352,9 @@ const WidgetFrame = memo(function WidgetFrame({
           <h3 id={`dashboard-widget-${widget.id}`}>{widget.title}</h3>
         </div>
         <div className="dashboard-widget-actions" aria-label={`${widget.title} actions`}>
-          <button className="mini-button" disabled={!canMoveUp} onClick={onMoveUp} type="button">Up</button>
-          <button className="mini-button" disabled={!canMoveDown} onClick={onMoveDown} type="button">Down</button>
-          <button className="mini-button" onClick={onHide} type="button">Hide</button>
+          <button className="mini-button dashboard-icon-button" disabled={!canMoveUp} onClick={onMoveUp} type="button" aria-label={`Move ${widget.title} up`} title="Move up"><ArrowUp size={16} aria-hidden="true" /></button>
+          <button className="mini-button dashboard-icon-button" disabled={!canMoveDown} onClick={onMoveDown} type="button" aria-label={`Move ${widget.title} down`} title="Move down"><ArrowDown size={16} aria-hidden="true" /></button>
+          <button className="mini-button dashboard-icon-button" onClick={onHide} type="button" aria-label={`Hide ${widget.title}`} title="Hide widget"><EyeOff size={16} aria-hidden="true" /></button>
           <a className="mini-button" href={exportHref(widget.id, "csv", range, role)} target="_blank" rel="noreferrer">CSV</a>
           <a className="mini-button" href={exportHref(widget.id, "excel", range, role)} target="_blank" rel="noreferrer">Excel</a>
           <a className="mini-button" href={exportHref(widget.id, "pdf", range, role)} target="_blank" rel="noreferrer">PDF</a>
@@ -330,14 +383,8 @@ const WidgetRenderer = memo(function WidgetRenderer({ id, dashboard, loading, er
 
 function ExecutiveHero({ metrics = [], loading, error }) {
   return (
-    <div className="dashboard-command-hero">
-      <div>
-        <p className="eyebrow">Real-time Enterprise Command Center</p>
-        <h2>Workforce health, payroll, hiring, approvals, vendors, documents, and system signals in one place.</h2>
-      </div>
-      <div className="dashboard-hero-grid">
-        <MetricTiles items={metrics} loading={loading} error={error} />
-      </div>
+    <div className="dashboard-summary-metrics">
+      <MetricTiles items={metrics} loading={loading} error={error} />
     </div>
   );
 }
@@ -503,19 +550,17 @@ function LoanDocumentCenter({ dashboard, loading, error }) {
   );
 }
 
-const DashboardUtilityPanel = memo(function DashboardUtilityPanel({ dashboard, loading, error, range, role }) {
+const DashboardUtilityPanel = memo(function DashboardUtilityPanel({ widgets, dashboard, loading, error, range, role }) {
   return (
     <aside className="dashboard-utility-panel">
       <div className="dashboard-utility-sticky">
-        <UtilitySection title="Notifications" widget="notifications" range={range} role={role}>
-          <ListPanel items={dashboard.notifications} empty="No notifications." href="/notifications" loading={loading} />
-        </UtilitySection>
-        <UtilitySection title="System Health" widget="systemHealth" range={range} role={role}>
-          <MetricPanel items={dashboard.systemHealth?.metrics} loading={loading} error={error} />
-        </UtilitySection>
-        <UtilitySection title="Activity Timeline" widget="activity" range={range} role={role}>
-          <ActivityTimeline items={dashboard.activity} loading={loading} />
-        </UtilitySection>
+        {widgets.map((widget) => (
+          <UtilitySection key={widget.id} title={widget.title} widget={widget.id} range={range} role={role}>
+            {widget.id === "notifications" ? <ListPanel items={dashboard.notifications} empty="No notifications." href="/notifications" loading={loading} /> : null}
+            {widget.id === "systemHealth" ? <MetricPanel items={dashboard.systemHealth?.metrics} loading={loading} error={error} /> : null}
+            {widget.id === "activity" ? <ActivityTimeline items={dashboard.activity} loading={loading} /> : null}
+          </UtilitySection>
+        ))}
       </div>
     </aside>
   );
@@ -786,7 +831,8 @@ function exportHref(widget, format, range, role = sessionRole()) {
 }
 
 function formatUpdatedAt(value) {
-  const date = new Date(value || Date.now());
+  if (!value) return "pending";
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "pending";
   return date.toLocaleString("en-IN", {
     day: "2-digit",

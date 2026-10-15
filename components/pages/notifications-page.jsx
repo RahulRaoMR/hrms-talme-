@@ -1,5 +1,7 @@
 "use client";
 
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useState, useTransition } from "react";
 import {
   createNotificationAction,
@@ -31,13 +33,13 @@ export default function NotificationsPageClient({ notifications: initialNotifica
   return (
     <SuiteShell
       eyebrow="Communication Module"
-      title="Communication and Notification Center"
+      title="Notifications"
       primaryHref="/dashboard"
       primaryLabel="Back To Dashboard"
       brandEyebrow="Communication Hub"
       actions={
         <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-          Compose Message
+          <CoreActionLabel label="Compose Message" />
         </button>
       }
     >
@@ -61,7 +63,7 @@ export default function NotificationsPageClient({ notifications: initialNotifica
                 <div className="row-actions">
                   <StatusBadge tone={notification.tone}>{notification.status}</StatusBadge>
                   <button className="mini-button" onClick={() => setEditState(notification)} type="button">
-                    Edit
+                    <CoreActionLabel label="Edit" />
                   </button>
                   <button
                     className="mini-button"
@@ -76,7 +78,7 @@ export default function NotificationsPageClient({ notifications: initialNotifica
                     }
                     type="button"
                   >
-                    Send
+                    <CoreActionLabel label="Send" />
                   </button>
                   <button
                     className="mini-button danger-button"
@@ -89,7 +91,7 @@ export default function NotificationsPageClient({ notifications: initialNotifica
                     }
                     type="button"
                   >
-                    Delete
+                    <CoreActionLabel label="Delete" />
                   </button>
                 </div>
               </div>

@@ -1,0 +1,281 @@
+.workspace:has(.dashboard-toolbar) .workspace-topbar {
+  align-items: center;
+  gap: 20px;
+}
+
+.workspace:has(.dashboard-toolbar) .workspace-head {
+  flex: 1 1 240px;
+}
+
+.workspace:has(.dashboard-toolbar) .workspace-head h1 {
+  max-width: 100%;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.workspace:has(.dashboard-toolbar) .topbar-actions {
+  flex: 1 1 540px;
+  gap: 8px;
+}
+
+.workspace:has(.dashboard-toolbar) .topbar-actions > * {
+  min-height: 36px;
+  font-size: 0.82rem;
+}
+
+.workspace:has(.dashboard-toolbar) .dashboard-toolbar {
+  align-items: center;
+  flex-direction: row;
+  gap: 12px;
+}
+
+.dashboard-toolbar .filter-row {
+  display: flex;
+  flex-direction: row;
+  width: auto;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dashboard-toolbar .filter-row button {
+  min-height: 36px;
+  padding: 8px 12px;
+  width: auto;
+  border-radius: 6px;
+}
+
+.dashboard-toolbar > button {
+  width: auto;
+}
+
+.dashboard-refresh-status,
+.dashboard-loading > p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.executive-dashboard-shell.without-utilities {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.executive-dashboard-shell .dashboard-section {
+  padding: 18px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.executive-dashboard-shell .dashboard-section-head {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dashboard-section-head .eyebrow {
+  display: none;
+}
+
+.dashboard-section-head h3 {
+  font-size: 1.15rem;
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.dashboard-section .dashboard-widget-actions {
+  flex-direction: row;
+  width: auto;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dashboard-section .dashboard-widget-actions .mini-button,
+.dashboard-section-head > .mini-button {
+  width: auto;
+  border-radius: 6px;
+}
+
+.dashboard-section .dashboard-widget-actions .dashboard-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  flex: 0 0 34px;
+}
+
+.workspace:has(.dashboard-toolbar) button svg,
+.workspace:has(.dashboard-toolbar) a svg {
+  flex-shrink: 0;
+}
+
+.workspace:has(.dashboard-toolbar) button:has(> svg),
+.workspace:has(.dashboard-toolbar) a:has(> svg) {
+  gap: 6px;
+}
+
+.dashboard-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.dashboard-summary-metrics .dashboard-hero-tile {
+  min-height: 120px;
+  padding: 14px;
+  gap: 10px;
+}
+
+.executive-dashboard-shell .dashboard-hero-tile,
+.executive-dashboard-shell .dashboard-kpi-card,
+.executive-dashboard-shell .dashboard-mini-stat,
+.executive-dashboard-shell .dashboard-approval-card,
+.executive-dashboard-shell .dashboard-insight-card,
+.executive-dashboard-shell .dashboard-list a,
+.executive-dashboard-shell .dashboard-timeline a {
+  border-radius: 8px;
+}
+
+.executive-dashboard-shell .dashboard-panel-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Scroll the records without compressing their text into shorter grid tracks. */
+.executive-dashboard-shell :is(.dashboard-list, .dashboard-timeline) {
+  grid-auto-rows: max-content;
+  align-content: start;
+  max-height: 360px;
+}
+
+.executive-dashboard-shell :is(.dashboard-list, .dashboard-timeline) > a {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  align-content: start;
+  min-height: 64px;
+}
+
+.executive-dashboard-shell :is(.dashboard-list, .dashboard-timeline) > a > :is(strong, small) {
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.5;
+}
+
+.executive-dashboard-shell .dashboard-timeline .dashboard-badge {
+  justify-self: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.executive-dashboard-shell .dashboard-hero-tile strong,
+.executive-dashboard-shell .dashboard-animated-value {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.executive-dashboard-shell .dashboard-key-value {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.executive-dashboard-shell .dashboard-key-value:hover {
+  text-decoration: underline;
+}
+
+.dashboard-loading .dashboard-skeleton {
+  min-height: 120px;
+}
+
+.light-suite .dashboard-skeleton {
+  background: #dce5eb;
+}
+
+.light-suite .dashboard-skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+}
+
+.light-suite .dashboard-toolbar .filter-row button.active-chip {
+  background: #e0eee9;
+  border-color: #45816d;
+  color: #18543f;
+}
+
+.light-suite .executive-dashboard-shell .dashboard-badge.teal {
+  color: #176347;
+  background: #e4f2ea;
+  border-color: #bbdccc;
+}
+
+.light-suite .executive-dashboard-shell .dashboard-badge.gold {
+  color: #79540b;
+  background: #fff2ce;
+  border-color: #ebd69b;
+}
+
+.light-suite .dashboard-alert,
+.light-suite .dashboard-error-state {
+  color: #982c39;
+}
+
+.light-suite .dashboard-alert {
+  background: #fff2f2;
+  border-color: #e5b7bd;
+}
+
+@media (max-width: 1500px) {
+  .dashboard-summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace:has(.dashboard-toolbar) .workspace-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .workspace:has(.dashboard-toolbar) .workspace-head,
+  .workspace:has(.dashboard-toolbar) .topbar-actions {
+    flex: 0 1 auto;
+  }
+
+  .workspace:has(.dashboard-toolbar) .topbar-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .workspace:has(.dashboard-toolbar) .topbar-actions > * {
+    width: auto;
+    max-width: 100%;
+    padding: 8px 10px;
+  }
+
+  .workspace:has(.dashboard-toolbar) .workspace-head h1 {
+    font-size: 1.5rem;
+  }
+
+  .dashboard-summary-metrics .dashboard-hero-tile {
+    padding: 12px;
+    min-height: 112px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-skeleton::after {
+    animation: none;
+  }
+}

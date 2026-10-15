@@ -8,6 +8,9 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { PrismaClient } from "@prisma/client";
 import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
+import { invoiceRoutes } from "./modules/invoices/routes.js";
+import { invoiceSummarySelect } from "../lib/invoice-records.js";
+import { canonicalLoginRole, normalizeLoginRole, loginRolesMatch } from "../lib/login-roles.js";
 import {
   isMissingPunchActivityRegularizationColumn,
   punchActivityRegularizationMigrationMessage
@@ -196,37 +199,13 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     throw loginError;
   }
 
-  if (!user || !user.active || (expectedRole && canonicalLoginRole(user.role) !== canonicalLoginRole(expectedRole))) {
-    if (process.env.NODE_ENV !== "production") {
-      const fallbackUser = getFallbackLoginUser(identifier, password, expectedRole);
-
-      if (fallbackUser) {
-        await writeAuditLog(req, "LOGIN", "Auth", fallbackUser.id, `Logged in as ${fallbackUser.role}`);
-        return res.json({
-          token: createSessionToken(fallbackUser),
-          user: fallbackUser
-        });
-      }
-    }
-
+  if (!user || !user.active || !loginRolesMatch(user.role, expectedRole)) {
     return res.status(401).json({ error: "Invalid email, role, or password." });
   }
 
   const passwordMatches = await bcrypt.compare(password, user.passwordHash);
 
   if (!passwordMatches) {
-    if (process.env.NODE_ENV !== "production") {
-      const fallbackUser = getFallbackLoginUser(identifier, password, expectedRole);
-
-      if (fallbackUser) {
-        await writeAuditLog(req, "LOGIN", "Auth", fallbackUser.id, `Logged in as ${fallbackUser.role}`);
-        return res.json({
-          token: createSessionToken(fallbackUser),
-          user: fallbackUser
-        });
-      }
-    }
-
     return res.status(401).json({ error: "Invalid email, role, or password." });
   }
 
@@ -427,7 +406,7 @@ app.get("/api/vendor-portal", asyncHandler(async (_req, res) => {
   const [vendors, workers, invoices] = await Promise.all([
     prisma.vendor.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.vendorWorker.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.invoice.findMany({ orderBy: { createdAt: "desc" } })
+    prisma.invoice.findMany({ orderBy: { createdAt: "desc" }, select: invoiceSummarySelect })
   ]);
   res.json({ vendors, workers, invoices });
 }));
@@ -483,7 +462,7 @@ app.get("/api/search", asyncHandler(async (req, res) => {
         prisma.employee.findMany({ where: { OR: [{ name: contains }, { employeeId: contains }, { department: contains }] } }),
         prisma.candidate.findMany({ where: { OR: [{ name: contains }, { role: contains }, { source: contains }] } }),
         prisma.vendor.findMany({ where: { OR: [{ vendor: contains }, { category: contains }] } }),
-        prisma.invoice.findMany({ where: { OR: [{ vendor: contains }, { invoiceNo: contains }, { amount: contains }] } }),
+        prisma.invoice.findMany({ where: { OR: [{ vendor: contains }, { invoiceNo: contains }, { amount: contains }] }, select: invoiceSummarySelect }),
         prisma.documentRecord.findMany({ where: { OR: [{ owner: contains }, { docType: contains }, { module: contains }] } }),
         prisma.approvalItem.findMany({ where: { OR: [{ title: contains }, { owner: contains }, { module: contains }] } })
       ])
@@ -491,7 +470,7 @@ app.get("/api/search", asyncHandler(async (req, res) => {
         prisma.employee.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.candidate.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.vendor.findMany({ orderBy: { createdAt: "desc" } }),
-        prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.invoice.findMany({ orderBy: { createdAt: "desc" }, select: invoiceSummarySelect }),
         prisma.documentRecord.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.approvalItem.findMany({ orderBy: { createdAt: "desc" } })
       ]);
@@ -634,6 +613,8 @@ app.post("/api/uploads", asyncHandler(async (req, res) => {
   await writeAuditLog(req, "UPLOAD", getAuditEntity("uploads"), row.id, buildAuditDetail("UPLOAD", "uploads", row, row.id));
   res.status(201).json(row);
 }));
+
+app.use("/api", invoiceRoutes(prisma));
 
 app.get("/api/:resource", asyncHandler(async (req, res) => {
   const config = resourceMap[req.params.resource];
@@ -1011,38 +992,6 @@ async function writeAuditLog(req, action, entity, entityId, detail) {
   } catch (error) {
     console.error("Unable to write audit log.", error);
   }
-}
-
-function normalizeLoginRole(role) {
-  const roles = {
-    admin: "Enterprise Admin",
-    superAdmin: "Enterprise Admin",
-    administrator: "Enterprise Admin",
-    hr: "HR",
-    payrollAts: "Payroll + ATS",
-    ats: "ATS",
-    invoice: "Accounts",
-    accounts: "Accounts",
-    employeeHrms: "Employee HRMS",
-    payroll: "Payroll",
-    employee: "Employee"
-  };
-
-  return roles[role] || role || "";
-}
-
-function canonicalLoginRole(role) {
-  const normalized = String(role || "").trim().toLowerCase();
-
-  if (["admin", "administrator", "super admin", "enterprise admin"].includes(normalized)) {
-    return "Enterprise Admin";
-  }
-
-  if (["account", "accounts", "invoice", "finance"].includes(normalized)) {
-    return "Accounts";
-  }
-
-  return role || "";
 }
 
 function isDatabaseUnavailableError(error) {
@@ -1591,7 +1540,7 @@ function getFallbackLoginUser(identifier, password, expectedRole) {
     (entry) =>
       entry.email === normalizedIdentifier &&
       entry.password === password &&
-      (!expectedRole || canonicalLoginRole(entry.role) === canonicalLoginRole(expectedRole))
+      loginRolesMatch(entry.role, expectedRole)
   );
 
   if (!user) return null;

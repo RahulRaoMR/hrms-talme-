@@ -1,9 +1,12 @@
 "use client";
 
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useEffect, useMemo, useState } from "react";
 import SuiteShell from "@/components/suite-shell";
 import { apiUrl } from "@/lib/api-client";
 import { getSuiteSession } from "@/lib/auth-session";
+import { dailyUpdateUserOptions, matchesDailyUpdateUser, normalizeDailyUpdateUser } from "@/lib/daily-update-users";
 
 const dateRangeOptions = [
   { value: "today", label: "Today" },
@@ -68,6 +71,8 @@ function groupByDay(updates) {
 export default function DailyUpdatesPageClient() {
   const [session, setSession] = useState(null);
   const [updates, setUpdates] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [employeeError, setEmployeeError] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [dateRange, setDateRange] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
@@ -101,23 +106,31 @@ export default function DailyUpdatesPageClient() {
     loadUpdates();
   }, []);
 
-  const userOptions = useMemo(() => {
-    const authors = updates
-      .map((update) => ({
-        email: update.authorEmail || "",
-        name: update.authorName || "Team Member"
-      }))
-      .filter((author) => author.email);
-    const uniqueAuthors = Array.from(new Map(authors.map((author) => [author.email, author])).values());
+  async function loadEmployees() {
+    try {
+      const response = await fetch(apiUrl("/api/employees"), { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || !Array.isArray(payload)) throw new Error("Unable to load the employee list. Try refreshing.");
+      setEmployees(payload);
+      setEmployeeError("");
+    } catch {
+      setEmployeeError("Unable to load the employee list. Try refreshing.");
+    }
+  }
 
-    return [
-      { value: "all", label: "Everyone" },
-      { value: "mine", label: "Myself" },
-      ...uniqueAuthors
-        .filter((author) => author.email !== currentEmail)
-        .map((author) => ({ value: author.email, label: author.name }))
-    ];
-  }, [currentEmail, updates]);
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+
+  const userOptions = useMemo(() => {
+    return dailyUpdateUserOptions(employees, updates, currentEmail);
+  }, [currentEmail, employees, updates]);
+
+  useEffect(() => {
+    if (["all", "mine"].includes(userFilter)) return;
+    const selected = userOptions.find((option) => option.identities.includes(userFilter));
+    if (selected && selected.value !== userFilter) setUserFilter(selected.value);
+  }, [userFilter, userOptions]);
 
   const filteredUpdates = useMemo(() => {
     const today = new Date();
@@ -130,14 +143,12 @@ export default function DailyUpdatesPageClient() {
 
         if (dateRange === "today" && !isSameDay(createdAt, today)) return false;
         if (dateRange === "yesterday" && !isSameDay(createdAt, yesterday)) return false;
-        if (activeTab === "mine" && update.authorEmail !== currentEmail) return false;
-        if (activeTab === "all" && userFilter === "mine" && update.authorEmail !== currentEmail) return false;
-        if (activeTab === "all" && !["all", "mine"].includes(userFilter) && update.authorEmail !== userFilter) return false;
+        if (!matchesDailyUpdateUser(update, activeTab === "mine" ? "mine" : userFilter, userOptions)) return false;
 
         return true;
       })
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }, [activeTab, currentEmail, dateRange, updates, userFilter]);
+  }, [activeTab, dateRange, updates, userFilter, userOptions]);
 
   const groupedUpdates = groupByDay(filteredUpdates);
 
@@ -242,8 +253,8 @@ export default function DailyUpdatesPageClient() {
           <button className={activeTab === "all" ? "active" : ""} onClick={() => setActiveTab("all")} type="button">
             All Updates
           </button>
-          <button className="daily-refresh" onClick={loadUpdates} type="button" aria-label="Refresh updates">
-            Refresh
+          <button className="daily-refresh" onClick={() => { loadUpdates(); loadEmployees(); }} type="button" aria-label="Refresh updates">
+            <CoreActionLabel label="Refresh" />
           </button>
         </div>
 
@@ -278,7 +289,7 @@ export default function DailyUpdatesPageClient() {
               </label>
               <label>
                 <span>User</span>
-                <select value={userFilter} onChange={(event) => setUserFilter(event.target.value)}>
+                <select aria-label="User" value={userFilter} onChange={(event) => setUserFilter(event.target.value)}>
                   {userOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
@@ -290,6 +301,8 @@ export default function DailyUpdatesPageClient() {
             </button>
           </div>
         )}
+
+        {activeTab === "all" && employeeError ? <p role="alert">{employeeError}</p> : null}
 
         <div className="daily-feed">
           {loading ? <p className="empty-state">Loading updates...</p> : null}
@@ -303,7 +316,7 @@ export default function DailyUpdatesPageClient() {
               </div>
 
               {dayUpdates.map((update) => {
-                const mine = update.authorEmail === currentEmail;
+                const mine = normalizeDailyUpdateUser(update.authorEmail) === normalizeDailyUpdateUser(currentEmail);
 
                 return (
                   <article className={`daily-update-card ${mine ? "mine" : "team"}`} key={update.id}>
@@ -341,7 +354,7 @@ export default function DailyUpdatesPageClient() {
                           {mine ? (
                             <div className="daily-update-actions">
                               <button className="ghost-button" onClick={() => startEditing(update)} type="button">
-                                Edit
+                                <CoreActionLabel label="Edit" />
                               </button>
                               <button
                                 className="ghost-button danger"

@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import {
@@ -10,7 +14,10 @@ import {
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
 import SuiteShell from "@/components/suite-shell";
+import InvoicePdfPreview from "@/components/invoice-pdf-preview";
+import { downloadInvoiceBlob, invoiceFile, invoiceRequest } from "@/lib/invoice-client";
 import { apiUrl } from "@/lib/api-client";
+import { mergeDocumentRecords, uploadedAssetToDocument } from "@/lib/document-records";
 
 const documentSeed = {
   owner: "StaffCore India",
@@ -24,7 +31,10 @@ const documentSeed = {
 export default function DocumentsPageClient({ data }) {
   const [documents, setDocuments] = useState(data.documents);
   const [assets, setAssets] = useState(data.assets);
+  const [loadError, setLoadError] = useState(data.loadError || "");
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [previewAsset, setPreviewAsset] = useState(null);
+  const [invoicePreview, setInvoicePreview] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editState, setEditState] = useState(null);
   const [formState, setFormState] = useState(documentSeed);
@@ -36,10 +46,57 @@ export default function DocumentsPageClient({ data }) {
   const [uploading, setUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshDocuments() {
+      try {
+        const [nextDocuments, nextAssets, invoiceDocuments] = await Promise.all([
+          fetchResourceRows("/api/documents", "documents"),
+          fetchResourceRows("/api/uploads", "uploads"),
+          invoiceRequest("/api/invoice-documents").catch((error) => { if (error.status === 401 || error.status === 403) return []; throw error; })
+        ]);
+
+        if (cancelled) return;
+
+        setAssets([...invoiceDocuments, ...nextAssets]);
+        setDocuments(mergeDocumentRecords([...invoiceDocuments, ...nextDocuments], nextAssets));
+        setLoadError("");
+      } catch (error) {
+        console.error("Unable to refresh documents.", error);
+        if (!cancelled) setLoadError(error?.message || "Unable to load saved documents.");
+      }
+    }
+
+    refreshDocuments();
+    window.addEventListener("focus", refreshDocuments);
+    const timer = window.setInterval(refreshDocuments, 30000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshDocuments);
+      window.clearInterval(timer);
+    };
+  }, [refreshVersion]);
+
+  useEffect(() => () => { if (invoicePreview?.url) URL.revokeObjectURL(invoicePreview.url); }, [invoicePreview]);
+  useEffect(() => () => { if (previewAsset?.fileUrl?.startsWith("blob:")) URL.revokeObjectURL(previewAsset.fileUrl); }, [previewAsset]);
+
+  async function openInvoiceDocument(document) {
+    try {
+      const blob = await invoiceFile(document.fileUrl);
+      if (document.mimeType === "application/pdf") setInvoicePreview({ url: URL.createObjectURL(blob), fileName: document.fileName, invoiceNo: document.invoiceNo || document.docType });
+      else if (document.mimeType?.startsWith("image/")) setPreviewAsset({ ...document, fileUrl: URL.createObjectURL(blob) });
+      else downloadInvoiceBlob(blob, document.fileName);
+    } catch (error) {
+      setLoadError(error.message);
+    }
+  }
+
   return (
     <SuiteShell
       eyebrow="Document Management"
-      title="KYC, Contracts, Invoices, and Compliance Vault"
+      title="Documents"
       primaryHref="/settings"
       primaryLabel="Open Settings"
       brandEyebrow="Compliance Suite"
@@ -53,34 +110,51 @@ export default function DocumentsPageClient({ data }) {
                 const file = event.target.files?.[0];
                 if (!file) return;
                 setUploading(true);
-                const body = new FormData();
-                body.append("file", file);
-                body.append("module", uploadState.module);
-                body.append("owner", uploadState.owner);
-                body.append("label", uploadState.label);
-                const response = await fetch(apiUrl("/api/uploads"), { method: "POST", body });
-                const payload = await response.json();
-                setAssets((current) => [payload, ...current]);
-                setUploading(false);
-                event.target.value = "";
+                try {
+                  const body = new FormData();
+                  body.append("file", file);
+                  body.append("module", uploadState.module);
+                  body.append("owner", uploadState.owner);
+                  body.append("label", uploadState.label);
+                  const response = await fetch(apiUrl("/api/uploads"), { method: "POST", body });
+                  const payload = await response.json();
+
+                  if (!response.ok) {
+                    throw new Error(payload?.error || "Unable to upload file.");
+                  }
+
+                  setAssets((current) => [payload, ...current]);
+                  setDocuments((current) => mergeDocumentRecords([uploadedAssetToDocument(payload), ...current], [payload]));
+                  event.target.value = "";
+                } catch (error) {
+                  console.error("Unable to upload document.", error);
+                } finally {
+                  setUploading(false);
+                }
               }}
             />
             {uploading ? "Uploading..." : "Upload File"}
           </label>
           <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-            Add Document
+            <CoreActionLabel label="Add Document" />
           </button>
         </>
       }
     >
       <section className="page-section panel">
+        {loadError ? (
+          <div role="alert">
+            <p className="form-error">{loadError}</p>
+            <button className="mini-button" type="button" onClick={() => setRefreshVersion((value) => value + 1)}>Retry</button>
+          </div>
+        ) : null}
         <div className="panel-head">
           <div>
             <p className="eyebrow">Document Register</p>
             <h3>Expiry-aware compliance control</h3>
           </div>
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Owner</th>
@@ -101,11 +175,13 @@ export default function DocumentsPageClient({ data }) {
                 <td><StatusBadge tone={document.tone}>{document.status}</StatusBadge></td>
                 <td>
                   <div className="row-actions">
-                    <Link className="mini-button" href={`/documents/${document.id}`}>
-                      View
-                    </Link>
+                    {document.invoiceId ? <>
+                      <button className="mini-button" onClick={() => openInvoiceDocument(document)} type="button"><CoreActionLabel label="View" /></button>
+                      <Link className="mini-button" href={`/invoices/${document.invoiceId}`}>Open Invoice</Link>
+                    </> : <Link className="mini-button" href={`/documents/${document.id}`}>View</Link>}
+                    {!document.invoiceId ? <>
                     <button className="mini-button" onClick={() => setEditState(document)} type="button">
-                      Edit
+                      <CoreActionLabel label="Edit" />
                     </button>
                     <button
                       className="mini-button danger-button"
@@ -118,14 +194,15 @@ export default function DocumentsPageClient({ data }) {
                       }
                       type="button"
                     >
-                      Delete
+                      <CoreActionLabel label="Delete" />
                     </button>
+                    </> : null}
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
 
       <section className="page-section panel-grid">
@@ -190,7 +267,7 @@ export default function DocumentsPageClient({ data }) {
             />
           </label>
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Module</th>
@@ -211,7 +288,7 @@ export default function DocumentsPageClient({ data }) {
                   <td>{asset.module}</td>
                   <td>{asset.owner}</td>
                   <td>
-                    {canPreview ? (
+                    {asset.invoiceId ? <button className="document-preview-button" onClick={() => openInvoiceDocument(asset)} type="button">{asset.fileName}</button> : canPreview ? (
                       <button className="document-preview-button" onClick={() => setPreviewAsset(asset)} type="button">
                         {asset.fileName}
                       </button>
@@ -221,9 +298,11 @@ export default function DocumentsPageClient({ data }) {
                   <td>{asset.sizeLabel}</td>
                   <td>{asset.status}</td>
                   <td>
-                    {canPreview ? (
+                    {asset.invoiceId ? (
+                      <button className="mini-button" onClick={() => openInvoiceDocument(asset)} type="button">Open</button>
+                    ) : canPreview ? (
                       <button className="mini-button" onClick={() => setPreviewAsset(asset)} type="button">
-                        Preview
+                        <CoreActionLabel label="Preview" />
                       </button>
                     ) : (
                       <a className="mini-button" href={resolveAssetUrl(asset.fileUrl)} target="_blank" rel="noreferrer">
@@ -235,7 +314,7 @@ export default function DocumentsPageClient({ data }) {
               );
             })}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
 
       <EntityModal
@@ -270,8 +349,28 @@ export default function DocumentsPageClient({ data }) {
         }
       />
       <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
+      {invoicePreview ? <InvoicePdfPreview url={invoicePreview.url} invoiceNo={invoicePreview.invoiceNo} onClose={() => setInvoicePreview(null)} onDownload={() => downloadInvoiceBlob(invoicePreview.url, invoicePreview.fileName)} /> : null}
     </SuiteShell>
   );
+}
+
+function normalizeResourceRows(payload, key) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.[key])) return payload[key];
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+async function fetchResourceRows(path, key) {
+  const response = await fetch(apiUrl(path), { cache: "no-store" });
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result?.error || `${path} failed with ${response.status}`);
+  }
+
+  return normalizeResourceRows(await response.json(), key);
 }
 
 function isImageAsset(asset) {
@@ -306,7 +405,7 @@ function AssetPreviewModal({ asset, onClose }) {
             <h3>{asset.fileName}</h3>
           </div>
           <button className="ghost-button" onClick={onClose} type="button">
-            Close
+            <CoreActionLabel label="Close" />
           </button>
         </div>
         {assetUrl && !failed ? (

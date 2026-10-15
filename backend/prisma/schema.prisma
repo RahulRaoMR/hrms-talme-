@@ -158,8 +158,27 @@ model Invoice {
   tds        String?
   status     String
   tone       String
+  details    Json?
+  createdBy  String?
+  updatedBy  String?
+  documents  InvoiceDocument[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model InvoiceDocument {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  kind      String
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
 }
 
 model InvoiceParty {

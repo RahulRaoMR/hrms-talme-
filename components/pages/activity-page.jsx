@@ -1,5 +1,7 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
 import { useEffect, useMemo, useState } from "react";
 import FilterChips from "@/components/filter-chips";
 import SuiteShell from "@/components/suite-shell";
@@ -101,7 +103,7 @@ export default function ActivityPageClient() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Time</th>
@@ -127,7 +129,7 @@ export default function ActivityPageClient() {
               </tr>
             ) : null}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
     </SuiteShell>
   );

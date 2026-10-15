@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { navItems } from "@/lib/demo-data";
 import { canAccess, resolveRole } from "@/lib/permissions";
 import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
+import { ArrowUpRight, Building2, LogOut, Menu, Moon, Search, Sun, X } from "lucide-react";
+import "./core-shell.css";
+import "./core-workspace.css";
 
 export default function SuiteShell({
   eyebrow,
@@ -13,7 +16,8 @@ export default function SuiteShell({
   primaryLabel,
   children,
   actions,
-  brandEyebrow = "Enterprise Suite"
+  brandEyebrow = "Enterprise Suite",
+  compactHeader = true
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -25,7 +29,7 @@ export default function SuiteShell({
   const [accessRequests, setAccessRequests] = useState([]);
   const [accessMessage, setAccessMessage] = useState("");
   const role = resolveRole(session?.user?.role || "") || "Enterprise Admin";
-  const visibleNavItems = navItems.filter((item) => canAccess(role, item.href));
+  const activeModule = navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("talme-theme-mode");
@@ -39,8 +43,8 @@ export default function SuiteShell({
   useEffect(() => {
     if (!sessionChecked || session) return;
 
-    window.location.replace("/login");
-  }, [session, sessionChecked]);
+    window.location.replace(pathname === "/invoices" || pathname.startsWith("/invoices/") ? "/login?next=%2Finvoices" : "/login");
+  }, [pathname, session, sessionChecked]);
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -288,7 +292,7 @@ export default function SuiteShell({
   }
 
   return (
-    <div className={`app-shell ${lightMode ? "light-suite" : ""} ${navOpen ? "nav-open" : ""}`}>
+    <div className={`app-shell ${lightMode ? "light-suite" : ""} ${navOpen ? "nav-open" : ""} ${compactHeader ? "core-shell" : ""}`} data-core-module={activeModule?.href || pathname}>
       <button
         className="mobile-nav-backdrop"
         onClick={() => setNavOpen(false)}
@@ -310,7 +314,7 @@ export default function SuiteShell({
           <div className="nav-label-row">
             <div className="nav-label">Core</div>
             <button className="mobile-nav-close" onClick={() => setNavOpen(false)} type="button" aria-label="Close Core menu">
-              x
+              <X size={17} aria-hidden="true" />
             </button>
           </div>
           {navItems.map((item, index) => {
@@ -321,9 +325,10 @@ export default function SuiteShell({
             return (
             <a
               key={item.href}
-              className={`nav-link ${pathname === item.href ? "active" : ""} ${allowed ? "" : "request-access"}`}
+              className={`nav-link ${activeModule?.href === item.href ? "active" : ""} ${allowed ? "" : "request-access"}`}
               href={item.href}
               aria-disabled={!allowed}
+              aria-current={activeModule?.href === item.href ? "page" : undefined}
               title={allowed ? item.label : "Request access"}
               onClick={(event) => {
                 if (!allowed) {
@@ -349,7 +354,7 @@ export default function SuiteShell({
         </div>
       </aside>
 
-      <main className="workspace">
+      <main className={`workspace ${activeModule?.href === "/invoices" || pathname === "/vms" ? "" : "core-content"}`}>
         <header className="workspace-topbar">
           <div className="workspace-head">
             <button
@@ -359,13 +364,23 @@ export default function SuiteShell({
               aria-label="Open Core menu"
               aria-expanded={navOpen}
             >
-              <span aria-hidden="true" />
+              <Menu size={18} aria-hidden="true" />
               <strong>Core</strong>
             </button>
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
           </div>
           <div className="topbar-actions">
+            {compactHeader ? <>
+              <div className="core-header-tools">
+              <span className="core-company-name"><Building2 size={15} />Talme Technologies</span>
+              {primaryHref && canAccess(role, primaryHref) ? <a className="core-header-link" href={primaryHref}><ArrowUpRight size={16} />{primaryLabel}</a> : null}
+              {canAccess(role, "/search") ? <a className="core-header-icon" href="/search" title="Search" aria-label="Search"><Search size={17} /></a> : null}
+              <button className="core-header-icon" onClick={toggleTheme} type="button" title={lightMode ? "Switch to dark theme" : "Switch to light theme"} aria-label={lightMode ? "Switch to dark theme" : "Switch to light theme"}>{lightMode ? <Moon size={17} /> : <Sun size={17} />}</button>
+              <button className="core-header-icon" onClick={handleLogout} type="button" title="Log out" aria-label="Log out"><LogOut size={17} /></button>
+              </div>
+              {actions ? <div className="core-page-actions">{actions}</div> : null}
+            </> : <>
             <div className="search-pill">Global Search</div>
             <button
               className="ghost-button"
@@ -397,6 +412,7 @@ export default function SuiteShell({
                 {primaryLabel}
               </a>
             )}
+            </>}
           </div>
         </header>
 

@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useState, useTransition } from "react";
 import {
   createCompanySettingAction,
@@ -26,13 +30,13 @@ export default function SettingsPageClient({ settings: initialSettings }) {
   return (
     <SuiteShell
       eyebrow="Company Settings"
-      title="Departments, Holidays, Payroll Rules, and Approval Levels"
+      title="Settings"
       primaryHref="/employee-portal"
       primaryLabel="Employee Portal"
       brandEyebrow="Admin Suite"
       actions={
         <button className="ghost-button" onClick={() => setModalOpen(true)} type="button">
-          Add Setting
+          <CoreActionLabel label="Add Setting" />
         </button>
       }
     >
@@ -43,7 +47,7 @@ export default function SettingsPageClient({ settings: initialSettings }) {
             <h3>Configurable company rules</h3>
           </div>
         </div>
-        <table className="data-table">
+        <CoreTable className="data-table">
           <thead>
             <tr>
               <th>Category</th>
@@ -63,7 +67,7 @@ export default function SettingsPageClient({ settings: initialSettings }) {
                 <td>
                   <div className="row-actions">
                     <button className="mini-button" onClick={() => setEditState(setting)} type="button">
-                      Edit
+                      <CoreActionLabel label="Edit" />
                     </button>
                     <button
                       className="mini-button danger-button"
@@ -76,14 +80,14 @@ export default function SettingsPageClient({ settings: initialSettings }) {
                       }
                       type="button"
                     >
-                      Delete
+                      <CoreActionLabel label="Delete" />
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CoreTable>
       </section>
 
       <section className="page-section panel-grid">

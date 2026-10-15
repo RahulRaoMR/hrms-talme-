@@ -2,19 +2,21 @@ import { createActivityLog, createResource, getResource } from "@/lib/local-api-
 import {
   createPersistentAuditLog,
   createPersistentResource,
+  canUsePersistentDatabase,
+  canUseLocalMutationFallback,
   hasPersistentDatabase,
   isDatabaseUnavailableError,
   listPersistentResource
 } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import { onboardEmployee } from "@/lib/employee-onboarding";
+import { mergeDocumentRecords } from "@/lib/document-records";
 import { buildAuditDetail, getAuditActorFromRequest, getAuditEntity } from "@/lib/audit-format";
 
-function shouldUseLocalMutationFallback() {
-  return process.env.NODE_ENV !== "production" || process.env.ALLOW_EPHEMERAL_API_STORE === "true";
-}
-
 function missingPersistentStoreResponse() {
+  if (hasPersistentDatabase && process.env.FORCE_LOCAL_API_STORE !== "true") {
+    return Response.json({ error: "Unable to save records because the database connection failed. Please try again shortly." }, { status: 503 });
+  }
   return Response.json(
     {
       error:
@@ -88,9 +90,20 @@ export async function GET(request, context) {
     return proxiedResponse;
   }
 
-  const persistentRows = await listPersistentResource(resource);
+  let persistentRows;
+
+  try {
+    persistentRows = await listPersistentResource(resource, { fallbackOnError: false });
+  } catch (error) {
+    return persistentErrorResponse(error);
+  }
 
   if (persistentRows) {
+    if (resource === "documents") {
+      const persistentUploads = await listPersistentResource("uploads");
+      return Response.json(mergeDocumentRecords(persistentRows, persistentUploads || getResource("uploads") || []));
+    }
+
     return Response.json(persistentRows);
   }
 
@@ -100,7 +113,7 @@ export async function GET(request, context) {
     return Response.json({ error: "Unknown API resource." }, { status: 404 });
   }
 
-  return Response.json(rows);
+  return Response.json(resource === "documents" ? mergeDocumentRecords(rows, getResource("uploads") || []) : rows);
 }
 
 export async function POST(request, context) {
@@ -114,7 +127,7 @@ export async function POST(request, context) {
     return proxiedResponse;
   }
 
-  if (hasPersistentDatabase) {
+  if (canUsePersistentDatabase()) {
     payload = await request.json().catch(() => ({}));
     const persistentRow = await createPersistentResource(resource, payload).catch((error) => persistentErrorResponse(error));
 
@@ -128,7 +141,7 @@ export async function POST(request, context) {
     }
   }
 
-  if (!shouldUseLocalMutationFallback()) {
+  if (!canUseLocalMutationFallback()) {
     return missingPersistentStoreResponse();
   }
 

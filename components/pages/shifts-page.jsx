@@ -1,5 +1,7 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
 import { useEffect, useMemo, useState } from "react";
 import SuiteShell from "@/components/suite-shell";
 import StatusBadge from "@/components/status-badge";
@@ -284,7 +286,7 @@ export default function ShiftsPageClient({ data }) {
         </div>
 
         {employees.length ? (
-          <table className="data-table shift-table">
+          <CoreTable className="data-table shift-table">
             <thead>
               <tr>
                 <th>Employee</th>
@@ -341,7 +343,7 @@ export default function ShiftsPageClient({ data }) {
                 );
               })}
             </tbody>
-          </table>
+          </CoreTable>
         ) : (
           <p className="empty-state">No employees found. Add employees in HRMS first, then assign shifts here.</p>
         )}

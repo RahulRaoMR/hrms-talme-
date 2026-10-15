@@ -1,7 +1,7 @@
 import { handlePunchRequest, resolvePunchUser } from "@/lib/punch-request-handler";
 import { scopedEmployee, submitManualPunch } from "@/backend/lib/punch-regularization";
 import { createActivityLog, createResource, getResource } from "@/lib/local-api-store";
-import { createPersistentAuditLog, hasPersistentDatabase, prisma } from "@/lib/prisma-store";
+import { canUsePersistentDatabase, createPersistentAuditLog, prisma } from "@/lib/prisma-store";
 import { proxyToConfiguredApi } from "@/lib/server-api";
 import {
   isMissingPunchActivityRegularizationColumn,
@@ -83,10 +83,20 @@ export function GET(request) {
       },
       orderBy: { timestamp: "desc" }
     });
+  }, (user) => {
+    const filters = normalizeFilterParams(request);
+    const employeeId = scopedEmployee(user, filters.employeeId);
+    return sortPunchRows(filterPunchRows(getResource("punch-activity") || [], {
+      ...filters,
+      employeeId
+    }));
   });
 }
 
 export async function POST(request) {
+  const backendResponse = await proxyToConfiguredApi(request, "/api/punch-activity");
+  if (backendResponse) return backendResponse;
+
   const originalRequest = request.clone();
   const payload = await request.json().catch(() => ({}));
   const timestamp = new Date(payload.timestamp || Date.now());
@@ -130,7 +140,7 @@ export async function POST(request) {
     return Response.json({ error: error.message }, { status: error.status || 401 });
   }
 
-  if (hasPersistentDatabase) {
+  if (canUsePersistentDatabase()) {
     try {
       const latestSameDayPunch = await prisma.punchActivity.findFirst({
         where: {

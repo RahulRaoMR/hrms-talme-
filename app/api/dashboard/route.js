@@ -11,15 +11,18 @@ export async function GET(request) {
   const requestedRole = searchParams.get("role") || "";
   const authenticatedRole = getAuthenticatedRole(request) || requestedRole || "Admin";
   const normalizedRole = normalizeDashboardRole(authenticatedRole);
-  const dashboard = await getDashboardData({ range, role: normalizedRole });
+  let dashboard;
+  try {
+    dashboard = await getDashboardData({ range, role: normalizedRole });
+  } catch (error) {
+    return Response.json({
+      error: error?.status === 503 ? error.message : "Dashboard data could not be loaded. Please try again shortly."
+    }, {
+      status: error?.status === 503 ? 503 : 500,
+      headers: { "Cache-Control": "no-store" }
+    });
+  }
   const visibleWidgetIds = dashboard.visibleWidgets.map((widget) => widget.id);
-
-  console.log({
-    authenticatedRole,
-    normalizedRole,
-    widgetCount: visibleWidgetIds.length,
-    visibleWidgetIds
-  });
 
   return Response.json({
     ...dashboard,

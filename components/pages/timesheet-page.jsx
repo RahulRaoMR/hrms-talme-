@@ -1,5 +1,9 @@
 "use client";
 
+import CoreTable from "@/components/core-table";
+
+import CoreActionLabel from "@/components/core-action-label";
+
 import { useEffect, useMemo, useState } from "react";
 import Modal from "@/components/modal";
 import StatusBadge from "@/components/status-badge";
@@ -341,7 +345,7 @@ export default function TimesheetPageClient() {
               <h3>Manually add your timesheet entries for current week</h3>
             </div>
             <button className="primary-button" onClick={() => setModalOpen(true)} type="button">
-              Add Entry
+              <CoreActionLabel label="Add Entry" />
             </button>
           </div>
 
@@ -374,7 +378,7 @@ export default function TimesheetPageClient() {
 
           {weekEntries.length ? (
             <>
-              <table className="data-table timesheet-table">
+              <CoreTable className="data-table timesheet-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -397,7 +401,7 @@ export default function TimesheetPageClient() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </CoreTable>
               <div className="timesheet-actions">
                 <button className="primary-button" onClick={() => updateWeekStatus("Submitted")} type="button">
                   Submit Week
@@ -474,7 +478,7 @@ export default function TimesheetPageClient() {
                   <div className="row-actions" onClick={(event) => event.stopPropagation()}>
                     <StatusBadge tone={statusTone(submission.status)}>{submission.status}</StatusBadge>
                     <button className="mini-button" onClick={() => updateSubmissionStatus(submission, "Approved")} type="button">
-                      Approve
+                      <CoreActionLabel label="Approve" />
                     </button>
                     <button className="mini-button danger-button" onClick={() => updateSubmissionStatus(submission, "Rejected")} type="button">
                       Reject
@@ -515,7 +519,7 @@ export default function TimesheetPageClient() {
                   <strong>{selectedSubmission.adminViewedAt ? new Date(selectedSubmission.adminViewedAt).toLocaleString("en-IN") : "No"}</strong>
                 </div>
               </div>
-              <table className="data-table timesheet-table">
+              <CoreTable className="data-table timesheet-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -540,10 +544,10 @@ export default function TimesheetPageClient() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </CoreTable>
               <div className="timesheet-actions">
                 <button className="primary-button" onClick={() => updateSubmissionStatus(selectedSubmission, "Approved")} type="button">
-                  Approve
+                  <CoreActionLabel label="Approve" />
                 </button>
                 <button className="ghost-button danger-button" onClick={() => updateSubmissionStatus(selectedSubmission, "Rejected")} type="button">
                   Reject
