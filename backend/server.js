@@ -9,6 +9,7 @@ import nodemailer from "nodemailer";
 import { PrismaClient } from "@prisma/client";
 import { deleteUploadedFile, saveUploadedFile } from "./lib/storage.js";
 import { invoiceRoutes } from "./modules/invoices/routes.js";
+import { employeeMobileRoutes, validateEmployeeMobileBearer } from "./modules/employee-mobile/routes.js";
 import { invoiceSummarySelect } from "../lib/invoice-records.js";
 import { canonicalLoginRole, normalizeLoginRole, loginRolesMatch } from "../lib/login-roles.js";
 import { createEmployeeLoginAccount } from "../lib/employee-account.js";
@@ -90,6 +91,8 @@ const integerFieldsByResource = {
 app.use(cors({ origin: allowedOrigin, credentials: allowedOrigin !== "*" }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(validateEmployeeMobileBearer(prisma));
+app.use("/api/employee-mobile", employeeMobileRoutes(prisma));
 app.use("/uploads", express.static("public/uploads"));
 
 app.get("/", asyncHandler(async (_req, res) => {

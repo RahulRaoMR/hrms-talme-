@@ -5,12 +5,19 @@ import { getPayslipRecords } from "@/lib/payslip-store";
 import { getPersistentHrmsData } from "@/lib/prisma-store";
 import { fetchServerApiJson } from "@/lib/server-api";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import EmployeeMobileApp from "@/components/pages/employee-mobile-app";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmployeeAppPage({ searchParams }) {
   let data;
   const params = await searchParams;
+  // Native pages contain no employee data until the mobile session is restored
+  // and checked by the authenticated, employee-scoped API.
+  if (params?.mobile === "1" || /TalmeEmployeeApp\//.test((await headers()).get("user-agent") || "")) {
+    return <EmployeeMobileApp />;
+  }
   const requestedEmployeeId = typeof params?.employeeId === "string" ? params.employeeId : "";
 
   if (!requestedEmployeeId.trim()) {

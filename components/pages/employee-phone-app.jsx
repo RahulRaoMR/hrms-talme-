@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api-client";
 import { clearSuiteSession, getSuiteSession } from "@/lib/auth-session";
+import { employeeMobileFetch as fetch, isEmployeeMobileApp, logoutEmployeeMobileSession } from "@/lib/employee-mobile-session";
 import { Bell, CalendarDays, CalendarOff, Home, Menu, Receipt } from "lucide-react";
 import "./employee-app.css";
 
@@ -1027,6 +1028,8 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
   const attendance = data.attendanceRecords.find((record) => record.employee === employee.name) || {};
   const [activeTab, setActiveTab] = useState("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
   const [activity, setActivity] = useState([]);
   const [workSession, setWorkSession] = useState(null);
   const [currentTime, setCurrentTime] = useState(null);
@@ -2196,17 +2199,25 @@ export default function EmployeePhoneApp({ data, employeeId: sessionEmployeeId }
               <button type="button">Check Update</button>
               <button
                 className="logout"
-                onClick={() => {
-                  clearSuiteSession();
-                  window.sessionStorage.removeItem(employeeSessionStorageKey);
-                  window.localStorage.removeItem(employeeSessionStorageKey);
-                  router.replace("/employee-app/login");
-                  router.refresh();
+                disabled={loggingOut}
+                onClick={async () => {
+                  setLoggingOut(true);
+                  setLogoutError("");
+                  try {
+                    if (isEmployeeMobileApp()) await logoutEmployeeMobileSession();
+                    clearSuiteSession();
+                    window.sessionStorage.removeItem(employeeSessionStorageKey);
+                    window.localStorage.removeItem(employeeSessionStorageKey);
+                    router.replace("/employee-app/login");
+                    router.refresh();
+                  } catch { setLogoutError("Unable to finish signing out. Please retry."); }
+                  finally { setLoggingOut(false); }
                 }}
                 type="button"
               >
                 {t("logout")} <em>v 2.0.9</em>
               </button>
+              {logoutError ? <p role="alert">{logoutError}</p> : null}
             </div>
           </aside>
         )}

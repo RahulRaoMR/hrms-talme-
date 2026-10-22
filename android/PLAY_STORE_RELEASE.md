@@ -2,13 +2,20 @@
 
 This Android project is a Capacitor wrapper for the employee app:
 
-`https://hrms-talme.vercel.app/employee-app/login`
+`https://hrms.talme.in/employee-app/login`
 
 ## App details
 
 - App name: `Talme HRMS`
 - Package name: `in.talme.hrms.employee`
+- Persistent-login release: `1.0.5` (`versionCode 6`)
 - Release bundle: `app/build/outputs/bundle/release/app-release.aab`
+
+The employee stay-signed-in feature requires this native update as well as the
+matching frontend/backend deployment and employee-session database migration.
+Older packages keep their existing login flow because they do not contain the
+Android Keystore session plugin. Admin and HR browser login remain unchanged.
+See [persistent login implementation and verification](../docs/employee-mobile-persistent-login.md).
 
 ## Local signing files
 

@@ -2,8 +2,9 @@
   "appId": "in.talme.hrms.employee",
   "appName": "Talme HRMS",
   "webDir": "public",
+  "appendUserAgent": "TalmeEmployeeApp/1.0.5",
   "server": {
-    "url": "https://hrms-talme.vercel.app/employee-app/login",
+    "url": "https://hrms.talme.in/employee-app/login",
     "cleartext": false,
     "androidScheme": "https"
   },

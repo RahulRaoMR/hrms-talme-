@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { saveSuiteSession } from "@/lib/auth-session";
 import { signInEmployee } from "@/lib/employee-login";
+import { isEmployeeMobileApp, beginEmployeeMobileSession, restoreEmployeeMobileSession } from "@/lib/employee-mobile-session";
+import EmployeeSessionLoading from "@/components/employee-session-loading";
 import PasswordResetForm from "@/components/password-reset-form";
 import { ArrowLeft, Eye, EyeOff, LogIn } from "lucide-react";
 import "./employee-app.css";
@@ -20,6 +22,27 @@ export default function EmployeeAppLogin() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionError, setSessionError] = useState("");
+  const [sessionRetry, setSessionRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setSessionError("");
+        if (isEmployeeMobileApp()) {
+          const session = await restoreEmployeeMobileSession();
+          if (!active) return;
+          if (session) { router.replace("/employee-app?mobile=1"); return; }
+        }
+        if (active) setCheckingSession(false);
+      } catch {
+        if (active) setSessionError("Unable to connect. Your session is saved. Check your connection and retry.");
+      }
+    })();
+    return () => { active = false; };
+  }, [router, sessionRetry]);
 
   useEffect(() => {
     window.history.pushState({ employeeLogin: true }, "", window.location.href);
@@ -56,13 +79,19 @@ export default function EmployeeAppLogin() {
         throw new Error("Password is required.");
       }
 
-      const response = await signInEmployee(employeeId, formState.password);
+      const response = await signInEmployee(employeeId, formState.password, { sameOrigin: isEmployeeMobileApp() });
       const payload = await response.json().catch(() => ({
         error: "Login service is not available. Check the backend API URL and try again."
       }));
 
       if (!response.ok) {
         throw new Error(payload?.error || "Invalid employee ID or password.");
+      }
+
+      if (isEmployeeMobileApp()) {
+        await beginEmployeeMobileSession(payload.token);
+        router.replace("/employee-app?mobile=1");
+        return;
       }
 
       const loginEmployeeId = payload?.user?.employeeId || employeeId;
@@ -83,6 +112,8 @@ export default function EmployeeAppLogin() {
       setSubmitting(false);
     }
   }
+
+  if (checkingSession) return <EmployeeSessionLoading error={sessionError} onRetry={() => setSessionRetry((value) => value + 1)} />;
 
   return (
     <main className="employee-login-shell core-employee-login">
