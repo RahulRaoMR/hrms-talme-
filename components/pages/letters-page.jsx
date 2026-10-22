@@ -7,7 +7,7 @@ const leavePolicy =
   "Employees are entitled to a maximum of one and a half (1.5) days of leave per month, subject to proper written approval from Talme. Unused leave cannot be carried forward to subsequent months and any unused paid leave cannot be claimed or cashed in.";
 
 const initialOfferLetter = {
-  candidateName: "Shehnaz Alam",
+  candidateName: "",
   jobRole: "HR Executive",
   companyName: "Talme Technologies Pvt Ltd",
   offerDate: "19 May 2026",
@@ -55,21 +55,21 @@ const fields = [
  ["saturdayShiftTiming", "Saturday Timing"],
   ];
 
-const experienceLetterBody =
-  "This is to certify that Mr.Chandan Y C was employed with Talme Technologies Private Ltd in the role of Design Engineer from 15th MAY 2024 to 13th March 2026.\n\n" +
+function experienceLetterBody(employeeName) {
+  return `This is to certify that Mr.${employeeName.trim() || "Employee Name"} was employed with Talme Technologies Private Ltd in the role of Design Engineer from 15th MAY 2024 to 13th March 2026.\n\n` +
   "Through out the tenure He demonstrated exceptional dedication and commitment to his role, consistently delivering high-quality work and fulfilling all assigned responsibilities with sincerity and professionalism.\n\n" +
   "His performance has been commendable, and He has proven to be an asset to our organisation. We are confident that his skills, passion, and determination will enable him to succeed in all his future endeavours. We extend our best wishes to him for continued success in his career and personal growth.";
+}
 
 const initialExperienceLetter = {
-  employeeName: "Chandan Y C",
+  employeeName: "",
   designation: "Design Engineer",
   companyName: "Talme Technologies Pvt Ltd",
   issueDate: "21/04/2026",
   startDate: "15th MAY 2024",
   endDate: "13th March 2026",
-  signatoryName: "Saidarshan M.V",
-  signatoryTitle: "Director of Talme Technologies",
-  body: experienceLetterBody
+  signatoryTitle: "",
+  body: experienceLetterBody("")
 };
 
 const relievingLetterBody =
@@ -81,26 +81,26 @@ const relievingLetterBody =
   "Thank you once again for your contribution to Talme Technologies Pvt Ltd. We value the time you spent with us and wish you all the best for your future endeavours.";
 
 const initialRelievingLetter = {
-  employeeName: "Chandan Y C",
+  employeeName: "",
   designation: "HR Executive",
   companyName: "Talme Technologies Pvt Ltd",
   issueDate: "21/04/2026",
   startDate: "01 April 2024",
   endDate: "13th March 2026",
   relievingDate: "13th March 2026",
-  signatoryName: "SaiDarshan M.V",
-  signatoryTitle: "Director of Talme Technologies",
+  signatoryTitle: "",
   body: relievingLetterBody
 };
 
 const initialNdaLetter = {
-  employeeName: "Shehnaz Alam",
-  companyName: "Talme Technologies Pvt Ltd",
-  companyAddress: "Level 14, Concorde Towers, UB City, Bengaluru, Karnataka, India",
+  employeeName: "",
+  companyName: "Talme Technologies Private Limited",
+  companyAddress: "Level 14, Concorde Towers, UB City, No.24 Vittal Mallya Road, Bangalore, Karnataka, 560001, India. Centre Name - UB City 2",
   employeeAddress: "Bengaluru, Karnataka",
   agreementDate: "22 May 2026",
-  signatoryName: "Authorized Signatory",
-  signatoryTitle: "HR Manager",
+  startDate: "05 April 2026",
+  acceptancePlace: "Bengaluru",
+  signatoryTitle: "",
   body: ""
 };
 
@@ -110,7 +110,6 @@ const letterTypes = [
     title: "Offer Letter",
     eyebrow: "Offer",
     endpoint: "/api/pdf/offer-letter",
-    template: "/templates/talme-offer-letter-template.pdf",
     initial: initialOfferLetter,
     button: "Generate Offer Letter",
     fields: [
@@ -138,7 +137,6 @@ const letterTypes = [
     title: "Experience Letter",
     eyebrow: "Experience",
     endpoint: "/api/pdf/hr-letter",
-    template: "/templates/talme-experience-letter-template.pdf",
     initial: initialExperienceLetter,
     button: "Generate Experience Letter",
     fields: [
@@ -148,7 +146,6 @@ const letterTypes = [
       ["issueDate", "Letter Date"],
       ["startDate", "Start Date"],
       ["endDate", "End Date"],
-      ["signatoryName", "Signatory Name"],
       ["signatoryTitle", "Signatory Title"],
       ["body", "Custom Body", "textarea"]
     ]
@@ -158,7 +155,6 @@ const letterTypes = [
     title: "Relieving Letter",
     eyebrow: "Relieving",
     endpoint: "/api/pdf/hr-letter",
-    template: "/templates/talme-relieving-letter-template.pdf",
     initial: initialRelievingLetter,
     button: "Generate Relieving Letter",
     fields: [
@@ -169,7 +165,6 @@ const letterTypes = [
       ["startDate", "Start Date"],
       ["endDate", "End Date"],
       ["relievingDate", "Relieving Date"],
-      ["signatoryName", "Signatory Name"],
       ["signatoryTitle", "Signatory Title"],
       ["body", "Custom Body", "textarea"]
     ]
@@ -179,7 +174,6 @@ const letterTypes = [
     title: "NDA Letter",
     eyebrow: "NDA",
     endpoint: "/api/pdf/hr-letter",
-    template: "/templates/talme-nda-letter-template.pdf",
     initial: initialNdaLetter,
     button: "Generate NDA Letter",
     fields: [
@@ -188,9 +182,10 @@ const letterTypes = [
       ["companyAddress", "Company Address", "textarea"],
       ["employeeAddress", "Employee Address", "textarea"],
       ["agreementDate", "Agreement Date"],
-      ["signatoryName", "Signatory Name"],
+      ["startDate", "Employment Effective Date"],
+      ["acceptancePlace", "Acceptance Place"],
       ["signatoryTitle", "Signatory Title"],
-      ["body", "Confidentiality Text", "textarea"]
+      ["body", "Additional Confidentiality Terms (Optional)", "textarea"]
     ]
   }
  
@@ -229,6 +224,9 @@ export default function LettersPageClient() {
   function updateField(field, value) {
     setLetters((current) => {
       const nextLetter = { ...current[activeType], [field]: value };
+      if (activeType === "experience" && field === "employeeName" && current.experience.body === experienceLetterBody(current.experience.employeeName)) {
+        nextLetter.body = experienceLetterBody(value);
+      }
       if (activeType === "offer" && field === "ctc") {
         const ctc = amountFrom(value);
         nextLetter.monthlySalary = ctc ? `Rs. ${formatAmount(ctc / 12)}` : "";
@@ -316,7 +314,10 @@ export default function LettersPageClient() {
               <button
                 key={type.id}
                 className={activeType === type.id ? "active" : ""}
-                onClick={() => setActiveType(type.id)}
+                onClick={() => {
+                  if (activeType !== type.id) setPreviewUrl("");
+                  setActiveType(type.id);
+                }}
                 type="button"
               >
                 <span>{type.eyebrow}</span>
@@ -340,7 +341,7 @@ export default function LettersPageClient() {
                   <input
                     value={letter[field] || ""}
                     onChange={(event) => updateField(field, event.target.value)}
-                    placeholder={label}
+                    placeholder={field === "candidateName" ? "Enter candidate name" : field === "employeeName" ? "Enter employee name" : field === "signatoryTitle" ? "Enter signatory title" : label}
                   />
                 )}
               </label>
@@ -362,7 +363,7 @@ export default function LettersPageClient() {
             <div className="pdf-preview-frame">
               <iframe
                 title={`Live ${selected.title} preview`}
-                src={`${previewUrl || selected.template}#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit`}
+                src={`${previewUrl || "about:blank"}#toolbar=0&navpanes=0&scrollbar=0&zoom=page-fit`}
                 scrolling="no"
               />
             </div>

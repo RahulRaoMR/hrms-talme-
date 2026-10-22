@@ -11,7 +11,7 @@ export function invoiceRoutes(prisma) {
       await action(req, res, user);
     } catch (error) {
       if (error.code === "P2002") return res.status(409).json({ error: "This invoice number already exists." });
-      if (["P2021", "P2022"].includes(error.code)) return res.status(503).json({ error: "The invoice database needs the shared invoice documents migration." });
+      if (["P2021", "P2022"].includes(error.code)) return res.status(503).json({ error: "The invoice database needs the latest invoice migrations." });
       next(error);
     }
   };

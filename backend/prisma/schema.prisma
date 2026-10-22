@@ -156,6 +156,13 @@ model Invoice {
   attendance String
   amount     String
   tds        String?
+  mspApplicable Boolean @default(false)
+  mspType       String?
+  mspRate       Decimal? @db.Decimal(7, 4)
+  mspAmount     Decimal  @default(0) @db.Decimal(18, 2)
+  mspChannel    String?  @db.VarChar(200)
+  mspTreatment  String   @default("FEE")
+  mspTax        String   @default("NONE")
   status     String
   tone       String
   details    Json?

@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { drawNdaLetter } from "@/lib/nda-letter";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,11 @@ function centered(page, font, text, y, options = {}) {
   drawText(page, font, text, (page.getWidth() - width) / 2, y, { ...options, size });
 }
 
+function drawLetterFooter(page, font) {
+  centered(page, font, "Level 14, Concorde Towers, UB City, No.24 Vittal Mallya Road, Bangalore, Karnataka, 560001, India. Centre Name - UB City", 54, { size: 8.2 });
+  centered(page, font, "Email: hr@talme.in          Phone: +91 94818 38000 | +91 97318 38000          Website: www.talme.in", 41, { size: 8.2 });
+}
+
 function buildExperienceBody(data) {
   return [
     `This is to certify that Mr.${data.employeeName} was employed with Talme Technologies Private Ltd in the role of ${data.designation} from ${data.startDate} to ${data.endDate}.`,
@@ -150,8 +156,7 @@ async function drawRelievingLetter(pdfDoc, fonts, data) {
   drawText(page, sansBold, `For ${data.companyName}`, 36, signatureTopY, { size: 10.4 });
   drawText(page, sansBold, data.signatoryTitle, 36, signatureTopY - 66, { size: 10.4 });
 
-  drawText(page, sans, "Level 14, Concorde Towers, UB City, No.24 Vittal Mallya Road, Bangalore, Karnataka, 560001, India. Centre Name - UB City", 58, 43, { size: 5.7 });
-  drawText(page, sans, "Email: hr@talme.in          Phone: +91 94818 38000 | +91 97318 38000          Website: www.talme.in", 150, 35, { size: 5.7 });
+  drawLetterFooter(page, sans);
 }
 
 async function drawExperienceLetter(pdfDoc, fonts, data) {
@@ -182,59 +187,22 @@ async function drawExperienceLetter(pdfDoc, fonts, data) {
   });
 
   drawText(page, sansBold, `For ${data.companyName}`, 44, 298, { size: 9.1 });
-  drawText(page, sansBold, data.signatoryName, 44, 264, { size: 9.1 });
-  drawText(page, sansBold, "Digitally signed by", 132, 270, { size: 3.4 });
-  drawText(page, sansBold, "Saidarshan M.V", 132, 266, { size: 3.4 });
-  drawText(page, sansBold, "Date: 2026.04.21", 132, 262, { size: 3.4 });
-  drawText(page, sansBold, "10:17:54 +05'30'", 132, 258, { size: 3.4 });
   drawText(page, sansBold, data.signatoryTitle, 44, 232, { size: 9.1 });
 
-  drawText(page, sans, "Level 14, Concorde Towers, UB City, No.24 Vittal Mallya Road, Bangalore, Karnataka, 560001, India. Centre Name - UB City", 68, 43, { size: 5.1 });
-  drawText(page, sans, "Email: hr@talme.in          Phone: +91 94818 38000 | +91 97318 38000          Website: www.talme.in", 166, 35, { size: 5.1 });
+  drawLetterFooter(page, sans);
 }
 
-function drawNda(pdfDoc, fonts, data) {
-  const { regular, bold } = fonts;
-  const pages = pdfDoc.getPages();
-  const first = pages[0];
-  cover(first, 36, 86, first.getWidth() - 72, 622);
-  centered(first, bold, "NON-DISCLOSURE AGREEMENT", 690, { size: 13 });
-  let y = 650;
-  y = drawWrapped(
-    first,
-    regular,
-    `This Non-Disclosure Agreement ("Agreement") is made on ${data.agreementDate} between ${data.companyName}, having its office at ${data.companyAddress}, and ${data.employeeName}, residing at ${data.employeeAddress}.`,
-    54,
-    y,
-    { size: 9.7, maxWidth: 504, lineHeight: 12.8 }
-  );
-  y -= 8;
-  y = drawWrapped(
-    first,
-    regular,
-    data.body ||
-      "The receiving party agrees to keep confidential all business, customer, technical, operational, financial, and employment-related information disclosed by the company. Such confidential information shall not be copied, shared, published, or used for any purpose other than the work assigned by the company, except with prior written approval.",
-    54,
-    y,
-    { size: 9.7, maxWidth: 504, lineHeight: 12.8 }
-  );
-  y -= 8;
-  drawWrapped(
-    first,
-    regular,
-    "This obligation shall continue during and after the association with the company. Any breach of this Agreement may result in disciplinary action and legal remedies available to the company.",
-    54,
-    y,
-    { size: 9.7, maxWidth: 504, lineHeight: 12.8 }
-  );
-
-  const last = pages[pages.length - 1];
-  cover(last, 36, 88, last.getWidth() - 72, 190);
-  drawText(last, regular, `Employee Name: ${data.employeeName}`, 54, 230, { size: 10 });
-  drawText(last, regular, `Date: ${data.agreementDate}`, 54, 206, { size: 10 });
-  drawText(last, regular, `For ${data.companyName}`, 360, 230, { size: 10 });
-  drawText(last, bold, data.signatoryName, 360, 168, { size: 10 });
-  drawText(last, regular, data.signatoryTitle, 360, 151, { size: 10 });
+async function drawNda(pdfDoc, fonts, data) {
+  const logoBytes = await fs.readFile(path.join(process.cwd(), "public", "talme-logo-pdf.png")).catch(() => null);
+  const logo = logoBytes ? await pdfDoc.embedPng(logoBytes) : null;
+  drawNdaLetter(pdfDoc, { regular: fonts.sans, bold: fonts.sansBold }, data, (page) => {
+    const width = page.getWidth();
+    const height = page.getHeight();
+    fill(page, 4, height - 27, width - 8, 22, TALME_BLUE);
+    fill(page, 4, 8, width - 8, 24, TALME_BLUE);
+    if (logo) page.drawImage(logo, { x: width - 112, y: height - 97, width: 50, height: 50 });
+    drawLetterFooter(page, fonts.sans);
+  });
 }
 
 export async function POST(request) {
@@ -254,17 +222,18 @@ export async function POST(request) {
     employeeAddress: clean(body.employeeAddress) || "Employee Address",
     issueDate: clean(body.issueDate) || "02 June 2026",
     agreementDate: clean(body.agreementDate) || clean(body.issueDate) || "02 June 2026",
+    acceptancePlace: clean(body.acceptancePlace),
     startDate: clean(body.startDate) || "Start Date",
     endDate: clean(body.endDate) || "End Date",
     relievingDate: clean(body.relievingDate) || clean(body.endDate) || "13th March 2026",
     body: clean(body.body),
     signatoryName: clean(body.signatoryName) || "Authorized Signatory",
-    signatoryTitle: clean(body.signatoryTitle) || "HR Manager"
+    signatoryTitle: clean(body.signatoryTitle)
   };
 
-  const pdfDoc = ["experience", "relieving"].includes(type)
-    ? await PDFDocument.create()
-    : await PDFDocument.load(await fs.readFile(path.join(process.cwd(), "public", "templates", template)));
+  // NDA content is drawn in full, rather than covering the reference PDF with
+  // a summary (which hid clauses and retained the reference employee underneath).
+  const pdfDoc = await PDFDocument.create();
   if (["experience", "relieving"].includes(type)) {
     pdfDoc.addPage([595.5, 842.2499787]);
   }
@@ -274,7 +243,7 @@ export async function POST(request) {
   const sansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   if (type === "nda") {
-    drawNda(pdfDoc, { regular, bold }, data);
+    await drawNda(pdfDoc, { sans, sansBold }, data);
   } else if (type === "relieving") {
     await drawRelievingLetter(pdfDoc, { sans, sansBold }, data);
   } else if (type === "experience") {

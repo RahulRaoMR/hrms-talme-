@@ -7,7 +7,7 @@ import SuiteShell from "@/components/suite-shell";
 import InvoicePdfPreview from "@/components/invoice-pdf-preview";
 import { apiUrl } from "@/lib/api-client";
 import { ArrowLeft, Download, Eye, FileText, Paperclip, Plus, Save, Trash2, X } from "lucide-react";
-import { amountInWords, calculateInvoice, defaultInvoiceBranchId, getInvoiceCompany, invoiceBranches, invoiceValidation, meghaInvoiceParty, money } from "@/lib/invoice-model";
+import { amountInWords, calculateInvoice, defaultInvoiceBranchId, defaultInvoiceMsp, getInvoiceCompany, invoiceBranches, invoiceMspLabel, invoiceTaxOptions, invoiceValidation, meghaInvoiceParty, money } from "@/lib/invoice-model";
 import "./vms-invoice.css";
 import { confirmSavedInvoice, downloadInvoiceBlob, invoiceAttachment, invoiceFile, invoiceRequest } from "@/lib/invoice-client";
 
@@ -18,24 +18,6 @@ const initialRows = [
 ];
 
 const unitOptions = ["NONE", "BAGS (BAG)", "BOTTLES (BTL)", "BOX (BOX)", "BUNDLES (BDL)", "DOZENS (DZN)", "GRAMMES (GM)", "KILOGRAMS (KG)", "LITRE (LTR)", "MONTH (MTH)", "PIECES (PCS)"];
-
-const invoiceTaxOptions = [
-  "NONE",
-  "GST@0%",
-  "GST@3%",
-  "GST@5%",
-  "GST@12%",
-  "GST@18%",
-  "GST@28%",
-  "CGST+SGST@5%",
-  "CGST+SGST@12%",
-  "CGST+SGST@18%",
-  "CGST+SGST@28%",
-  "IGST@5%",
-  "IGST@12%",
-  "IGST@18%",
-  "IGST@28%"
-];
 
 const invoiceTdsOptions = [
   "NONE (0%)",
@@ -307,6 +289,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
     shipping: "Siddha Space site office"
   });
   const [invoice, setInvoice] = useState({
+    ...defaultInvoiceMsp,
     branchId: defaultInvoiceBranchId,
     mode: "Credit",
     invoiceNo: "98352651136",
@@ -685,6 +668,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
       shipping: ""
     });
     setInvoice({
+      ...defaultInvoiceMsp,
       branchId: defaultInvoiceBranchId,
       mode: "Credit",
       invoiceNo: String(Date.now()).slice(-6),
@@ -716,6 +700,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
     setParty(transaction.partyData);
     setShowShippingAddress(Boolean(transaction.partyData.shipping));
     setInvoice({
+      ...defaultInvoiceMsp,
       branchId: defaultInvoiceBranchId,
       received: false,
       receivedAmount: "",
@@ -740,7 +725,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
     setActiveVersion(transaction.updatedAt || "");
     setAttachments((transaction.documents || []).filter((document) => document.kind !== "Invoice PDF"));
     setParty({ ...snapshot.party, billing: "", shipping: "" });
-    setInvoice({ branchId: defaultInvoiceBranchId, ...snapshot.invoice, invoiceNo: transaction.invoiceNo, invoiceDate: /^\d{4}-\d{2}-\d{2}$/.test(snapshot.invoice.invoiceDate) ? snapshot.invoice.invoiceDate : new Date().toISOString().slice(0, 10) });
+    setInvoice({ ...defaultInvoiceMsp, branchId: defaultInvoiceBranchId, ...snapshot.invoice, invoiceNo: transaction.invoiceNo, invoiceDate: /^\d{4}-\d{2}-\d{2}$/.test(snapshot.invoice.invoiceDate) ? snapshot.invoice.invoiceDate : new Date().toISOString().slice(0, 10) });
     setRows(snapshot.rows);
     setShowShippingAddress(false);
     setMessage("");
@@ -845,6 +830,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
     setShowShippingAddress(false);
     setParty({ ...meghaInvoiceParty });
     setInvoice({
+      ...defaultInvoiceMsp,
       branchId: defaultInvoiceBranchId,
       mode: "Credit", invoiceNo: "053TTPL2627", invoiceDate: "2026-10-06",
       poNo: "", poDate: "", state: "Karnataka", copies: "Original", tax: "GST@18%",
@@ -1358,7 +1344,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
                       </tr>;
                     })}
                   </tbody>
-                  <tfoot><tr><td colSpan={7}>Taxable value</td><td className="invoice-number">{money(totals.tax)}</td><td className="invoice-number">{money(totals.subtotal)}</td></tr></tfoot>
+                  <tfoot><tr><td colSpan={7}>{invoice.mspApplicable ? "Service / item total" : "Taxable value"}</td><td className="invoice-number">{money(totals.serviceTax)}</td><td className="invoice-number">{money(totals.subtotal)}</td></tr></tfoot>
                 </table>
               </div>
               <div className="invoice-editor-add">
@@ -1367,6 +1353,29 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
 
               <div className="invoice-editor-bottom">
                 <section className="invoice-payment-section">
+                  <div className="invoice-msp-section">
+                    <h4>MSP Deduction</h4>
+                    <label><span>MSP Applicable?</span><select aria-label="MSP Applicable?" value={invoice.mspApplicable ? "yes" : "no"}
+                      onChange={(event) => setInvoice((current) => ({ ...current, mspApplicable: event.target.value === "yes" }))}>
+                      <option value="no">No</option><option value="yes">Yes</option>
+                    </select></label>
+                    {invoice.mspApplicable ? <>
+                      <div className="invoice-field-pair">
+                        <label><span>MSP Type</span><select aria-label="MSP Type" value={invoice.mspType || "PERCENTAGE"}
+                          onChange={(event) => setInvoice((current) => ({ ...current, mspType: event.target.value, mspAmount: String(totals.mspAmount) }))}>
+                          <option value="PERCENTAGE">Percentage</option><option value="FIXED">Fixed Amount</option>
+                        </select></label>
+                        {invoice.mspType !== "FIXED" ? <label><span>MSP Rate (%)</span><input aria-label="MSP Rate (%)" type="number" min="0" max="100" step="0.0001" value={invoice.mspRate}
+                          onChange={(event) => setInvoice((current) => ({ ...current, mspRate: event.target.value }))} /></label> : null}
+                        <label><span>MSP deduction (INR)</span><input aria-label="MSP Amount (INR)" inputMode="decimal" readOnly={invoice.mspType !== "FIXED"}
+                          value={invoice.mspType === "FIXED" ? invoice.mspAmount : `(-${money(totals.mspAmount)})`}
+                          onChange={(event) => setInvoice((current) => ({ ...current, mspAmount: event.target.value }))} /></label>
+                      </div>
+                      <label><span>MSP Channel / Platform (optional)</span><input aria-label="MSP Channel / Platform" maxLength={200} value={invoice.mspChannel}
+                        onChange={(event) => setInvoice((current) => ({ ...current, mspChannel: event.target.value }))} /></label>
+                      <p className="invoice-msp-note">MSP is deducted from the service / item total before GST. Enter a positive rate or fixed amount; it appears as a negative deduction.</p>
+                    </> : null}
+                  </div>
                   <h4>Payment &amp; Other Details</h4>
                   <div className="invoice-field-pair">
                     <label><span>Payment method</span><select aria-label="Payment method" value={invoice.mode} onChange={(event) => setInvoice((current) => ({ ...current, mode: event.target.value }))}>
@@ -1397,7 +1406,11 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
                 </section>
                 <section className="invoice-editor-totals" aria-label="Invoice totals">
                   <h4>Invoice Summary</h4>
-                  <div><span>Taxable value</span><strong>{money(totals.subtotal)}</strong></div>
+                  <div><span>{invoice.mspApplicable ? "Service / item total" : "Taxable value"}</span><strong>{money(totals.subtotal)}</strong></div>
+                  {invoice.mspApplicable ? <>
+                    <div><span>{invoiceMspLabel(invoice)}</span><strong>(-{money(totals.mspAmount)})</strong></div>
+                    <div><span>Taxable value after MSP</span><strong>{money(totals.amountBeforeTax)}</strong></div>
+                  </> : null}
                   {totals.cgst > 0 ? <><div><span>CGST</span><strong>{money(totals.cgst)}</strong></div><div><span>SGST</span><strong>{money(totals.sgst)}</strong></div></> : null}
                   {totals.igst > 0 ? <div><span>IGST</span><strong>{money(totals.igst)}</strong></div> : null}
                   <div><label className="invoice-check"><input type="checkbox" checked={invoice.roundOff !== false}
@@ -1408,7 +1421,7 @@ export default function VmsPageClient({ initialInvoiceId = "" }) {
                     onChange={(event) => setInvoice((current) => ({ ...current, tds: event.target.value }))}>
                     {invoiceTdsOptions.map((option) => <option key={option}>{option}</option>)}
                   </select><strong>{money(totals.tds)}</strong></div>
-                  {totals.tds > 0 ? <div><span>Net payable</span><strong>{money(totals.payable)}</strong></div> : null}
+                  {totals.tds > 0 || invoice.mspApplicable ? <div><span>Net payable</span><strong>{money(totals.payable)}</strong></div> : null}
                   <div><label className="invoice-check"><input type="checkbox" checked={Boolean(invoice.received)}
                     onChange={(event) => setInvoice((current) => ({ ...current, received: event.target.checked, receivedAmount: event.target.checked ? String(totals.payable) : "" }))} />Payment received</label>
                     {invoice.received ? <input aria-label="Received amount" inputMode="decimal" value={invoice.receivedAmount || ""}
